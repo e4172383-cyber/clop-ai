@@ -122,6 +122,7 @@ function compactChat(chat) {
 function mainKb(u) {
   const m = modelOf(u);
   const offer = offerState(u);
+  const showOffer = offer && (!offer.claimed || offer.active);
   const effortLabel = m.supportsEffort === false ? 'не нужно' : effortOf(u, m).short;
   return {
     inline_keyboard: [
@@ -129,7 +130,7 @@ function mainKb(u) {
       [{ text: `🤖 Модель: ${m.heavy ? '⚠️ ' : ''}${m.short}`, callback_data: 'model' }, { text: `🧠 Мышление: ${effortLabel}`, callback_data: 'effort' }],
       ...(m.provider === 'gpt' ? [[{ text: `⚡ Быстро: ${u.fast ? 'ВКЛ' : 'ВЫКЛ'} · расход ×1,2`, callback_data: 'fast_toggle' }]] : []),
       [{ text: '📊 Лимиты', callback_data: 'usage' }, { text: '💎 Тарифы', callback_data: 'plans' }],
-      ...(offer ? [[{ text: offer.claimed ? '🎁 Предложение подключено' : '🎁 Получить 50 млн токенов', callback_data: 'offer_claim' }]] : []),
+      ...(showOffer ? [[{ text: offer.claimed ? '🎁 Бонус GPT активен' : '🎁 Получить 50 млн токенов', callback_data: 'offer_claim' }]] : []),
       [{ text: '🖼 Сгенерировать (бета)', callback_data: 'imagegen' }],
       [{ text: '🌐 Чат на сайте (бета)', url: 'https://clop-ai.onrender.com/chat' }],
       [{ text: `💻 Скачать Clop Code · v${DESKTOP_RELEASE.version}`, callback_data: 'app_download' }],
@@ -185,11 +186,24 @@ function chatsKb(u) {
 function usageText(u) {
   const plan = planOf(u);
   const all = checkAllLimits(u);
+  const offer = offerState(u);
   const lines = [
     `📊 *Использование*`,
     `Тариф: ${plan.emoji} *${plan.title}*${plan.key !== 'free' && u.proUntil ? ` (до ${dt(u.proUntil)})` : ''}`,
     '',
   ];
+  if (offer?.claimed && Date.now() < offer.until) {
+    const used = Math.max(0, Math.round(offer.used || 0));
+    const total = Math.max(1, Math.round(offer.tokens || 0));
+    const left = Math.max(0, total - used);
+    const percent = Math.min(100, Math.round((used / total) * 100));
+    lines.push('🎁 *Бонусные GPT-токены*');
+    lines.push(`Всего: *${total.toLocaleString('ru-RU')}*`);
+    lines.push(`Использовано: *${used.toLocaleString('ru-RU')}* · ${percent}%`);
+    lines.push(`Осталось: *${left.toLocaleString('ru-RU')}*`);
+    lines.push(`Доступны до *${dt(offer.until)} по Киеву*`);
+    lines.push('');
+  }
   // Все доступные модели сейчас работают из единого GPT-пула. Этот же пул
   // используют сайт и личный API.
   for (const provKey of ['gpt', 'kimi']) {
