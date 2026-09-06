@@ -383,7 +383,10 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
     // Лёгкий пинг для само-разогрева на Render (без пароля, без AI) — просто
     // подтверждает, что процесс жив, ничего не считает и не трогает store
     if (url.pathname === '/health') {
-      res.writeHead(200, { 'content-type': 'text/plain' });
+      res.writeHead(200, {
+        'content-type': 'text/plain',
+        'x-clop-revision': String(process.env.RENDER_GIT_COMMIT || 'local').slice(0, 40),
+      });
       return res.end('ok');
     }
 
