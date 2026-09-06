@@ -99,9 +99,11 @@ const DESKTOP_DOWNLOADS = new Set([
   'Clop-Code-Setup-2.0.8.exe',
   'Clop-Code-Setup-2.0.9.exe',
   'Clop-Code-Setup-2.0.10.exe',
+  'Clop-Code-Setup-2.0.11.exe',
   'Clop-Code-2.0.6-linux-x64.tar.xz',
   'Clop-Code-2.0.9-linux-x64.tar.xz',
   'Clop-Code-2.0.10-linux-x64.tar.xz',
+  'Clop-Code-2.0.11-linux-x64.tar.xz',
   'Clop-AI-Mobile-1.0.0.apk',
   'Clop-AI-Mobile-1.0.1.apk',
   'Clop-AI-Mobile-1.0.2.apk',
@@ -404,10 +406,10 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
     if (url.pathname === '/releases.json' && req.method === 'GET') {
       return sendJson(res, 200, {
         desktop: {
-          version: '2.0.10',
-          url: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-Setup-2.0.10.exe`,
-          windowsUrl: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-Setup-2.0.10.exe`,
-          linuxUrl: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-2.0.10-linux-x64.tar.xz`,
+          version: '2.0.11',
+          url: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-Setup-2.0.11.exe`,
+          windowsUrl: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-Setup-2.0.11.exe`,
+          linuxUrl: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-2.0.11-linux-x64.tar.xz`,
         },
         android: { version: '1.0.4', url: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-AI-Mobile-1.0.4.apk` },
       });

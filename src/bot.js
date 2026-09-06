@@ -13,10 +13,10 @@ import { createImageJob, imageJobRecoveryAction, prepareImageJobRetry } from './
 import { addOfferUsage, claimOffer, offerActiveFor, offerState } from './limited-offer.js';
 
 const DESKTOP_RELEASE = Object.freeze({
-  version: '2.0.10',
-  released: '06.09.2026',
-  windows: 'Clop-Code-Setup-2.0.10.exe',
-  linux: 'Clop-Code-2.0.10-linux-x64.tar.xz',
+  version: '2.0.11',
+  released: '07.09.2026',
+  windows: 'Clop-Code-Setup-2.0.11.exe',
+  linux: 'Clop-Code-2.0.11-linux-x64.tar.xz',
   androidVersion: '1.0.4',
   android: 'Clop-AI-Mobile-1.0.4.apk',
 });
