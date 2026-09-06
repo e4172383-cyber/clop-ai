@@ -158,12 +158,13 @@ export const MODELS = {
     cli: 'gpt-5.6-sol',
     title: 'GPT 5.6 Соль',
     short: 'Соль',
-    desc: 'Топовая GPT-модель — только на тарифах Max',
-    plans: ['max', 'max20', 'coderplus'],
+    desc: 'Топовая GPT-модель — доступна всем, расход лимита ×1.5',
+    plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'],
     recommended: false,
     supportsEffort: false,
     heavy: true,
-    heavyNote: 'Топовая модель — расходует лимит заметно быстрее остальных',
+    heavyNote: 'Расход лимита ×1.5',
+    limitMultiplier: 1.5,
     contextWindow: 400_000,
   },
 };
@@ -214,6 +215,18 @@ export const MODEL_PROMO = {
 export const initializeModelPromo = async () => MODEL_PROMO;
 export const modelPromoActive = () => false;
 export const modelInPromo = () => false;
+
+// Получить бонус можно только в течение часа после запуска предложения.
+// У каждого нажавшего свой час использования, даже если он забрал бонус
+// ближе к концу общей выдачи.
+export const LIMITED_OFFER = Object.freeze({
+  id: 'gpt-50m-hour-20260906',
+  title: '50 млн токенов на GPT 5.6 Sol и GPT-6 Astra',
+  models: ['gpt-sol', 'gpt-astra'],
+  tokens: 50_000_000,
+  claimUntil: 1788723649075,
+  durationMs: HOUR,
+});
 
 export const PLANS = {
   free: {

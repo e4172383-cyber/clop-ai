@@ -243,6 +243,17 @@ export function transferAccount(from, to) {
   if (from.model) to.model = from.model;
   if (from.effort) to.effort = from.effort;
 
+  // Активное ограниченное предложение следует за аккаунтом вместе с чатами.
+  // Если оно есть у обоих аккаунтов, сохраняем запись с более поздним сроком
+  // и не обнуляем уже потраченный бонус.
+  const fromOffer = from.limitedOffer;
+  const toOffer = to.limitedOffer;
+  if (fromOffer && (!toOffer || Number(fromOffer.until || 0) > Number(toOffer.until || 0))) {
+    to.limitedOffer = { ...fromOffer };
+  } else if (fromOffer && toOffer && fromOffer.id === toOffer.id) {
+    to.limitedOffer.used = Math.max(Number(toOffer.used || 0), Number(fromOffer.used || 0));
+  }
+
   const итог = {
     chats: чаты.length,
     usage: from.usage.length,
@@ -260,6 +271,7 @@ export function transferAccount(from, to) {
   from.activeChatId = null;
   from.plan = 'free';
   from.proUntil = 0;
+  delete from.limitedOffer;
 
   saveSoon();
   return итог;

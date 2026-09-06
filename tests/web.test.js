@@ -33,11 +33,12 @@ try {
     import('../src/webchat.js'),
     import('../src/config.js'),
     import('../src/desktop.js'),
+    import('../src/limited-offer.js'),
   ]);
 } finally {
   globalThis.setInterval = realSetInterval;
 }
-const [web, store, webchat, config, desktop] = modules;
+const [web, store, webchat, config, desktop, limitedOffer] = modules;
 
 let server;
 let baseUrl;
@@ -129,7 +130,7 @@ test('serves the public desktop release page and resumable installers without da
   assert.match(html, /Android 8/);
   assert.match(html, /Clop-Code-Setup-2\.0\.8\.exe/);
   assert.match(html, /Clop-Code-2\.0\.6-linux-x64\.tar\.xz/);
-  assert.match(html, /Clop-AI-Mobile-1\.0\.1\.apk/);
+  assert.match(html, /Clop-AI-Mobile-1\.0\.2\.apk/);
   assert.doesNotMatch(html, /\d[\d ]{3,}\s*токен/iu);
 
   const partial = await fetch(baseUrl + '/downloads/Clop-Code-Setup-2.0.8.exe', {
@@ -141,7 +142,7 @@ test('serves the public desktop release page and resumable installers without da
   assert.match(partial.headers.get('content-disposition'), /Clop-Code-Setup-2\.0\.8\.exe/);
   assert.equal((await partial.arrayBuffer()).byteLength, 32);
 
-  const apk = await fetch(baseUrl + '/downloads/Clop-AI-Mobile-1.0.1.apk', {
+  const apk = await fetch(baseUrl + '/downloads/Clop-AI-Mobile-1.0.2.apk', {
     headers: { range: 'bytes=0-3' },
   });
   assert.equal(apk.status, 206);
@@ -194,6 +195,44 @@ test('/desk/me exposes only percentage token-limit state', async () => {
       );
     }
   }
+});
+
+test('the limited offer unlocks Astra, keeps its usage outside plan limits, and Sol is free with a visible multiplier', async () => {
+  user.limitedOffer = {
+    id: config.LIMITED_OFFER.id,
+    claimedAt: Date.now(),
+    until: Date.now() + 60_000,
+    used: 0,
+  };
+  user.model = 'gpt-astra';
+
+  const profile = await authed('/chat/api/me');
+  assert.equal(profile.status, 200);
+  const body = await profile.json();
+  assert.equal(body.models.find((model) => model.key === 'gpt-astra').available, true);
+  assert.equal(body.models.find((model) => model.key === 'gpt-sol').available, true);
+  assert.equal(body.models.find((model) => model.key === 'gpt-sol').limitMultiplier, 1.5);
+  assert.equal(body.limitedOffer.active, true);
+
+  modelResults.push(okResult({ tokens: { input: 11, output: 7, total: 18, billable: 18, cacheWrite: 0, cacheRead: 0 } }));
+  const answer = await authed('/chat/api/message', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ text: 'Проверка бонуса', model: 'gpt-astra' }),
+  });
+  assert.equal(answer.status, 200);
+  assert.equal(user.limitedOffer.used, 18);
+  assert.equal(user.usage.at(-1).offerBonus, true);
+  assert.equal((await answer.json()).limits.gpt.short.percent, 0);
+});
+
+test('offer claim and expiry are calculated from server time', () => {
+  const sample = {};
+  const beforeClose = config.LIMITED_OFFER.claimUntil - 1000;
+  const claimed = limitedOffer.claimOffer(sample, beforeClose);
+  assert.equal(claimed.active, true);
+  assert.equal(claimed.until, beforeClose + config.LIMITED_OFFER.durationMs);
+  assert.equal(limitedOffer.offerState({}, config.LIMITED_OFFER.claimUntil), null);
 });
 
 test('/desk/voice tracks the weekly session on the authenticated account', async () => {
@@ -252,21 +291,23 @@ test('/chat/api/chat returns the selected chat model with effective effort and f
   assert.equal(body.fast, true);
 });
 
-test('/chat/api/me and /chat fall back from a model unavailable on the current plan', async () => {
+test('/chat/api/me and /chat keep GPT 5.6 Sol available on the free plan', async () => {
   const chat = store.newChat(user, 'Старая платная модель');
   chat.model = 'gpt-sol';
 
   const meResponse = await authed('/chat/api/me?chatId=' + encodeURIComponent(chat.id));
   assert.equal(meResponse.status, 200);
   const me = await meResponse.json();
-  assert.equal(me.models.find((model) => model.key === 'gpt-sol').available, false);
-  assert.equal(me.currentModel, 'gpt-luna');
-  assert.equal(me.chats.find((item) => item.id === chat.id).model, 'gpt-luna');
+  const sol = me.models.find((model) => model.key === 'gpt-sol');
+  assert.equal(sol.available, true);
+  assert.equal(sol.limitMultiplier, 1.5);
+  assert.equal(me.currentModel, 'gpt-sol');
+  assert.equal(me.chats.find((item) => item.id === chat.id).model, 'gpt-sol');
 
   const chatResponse = await authed('/chat/api/chat?id=' + encodeURIComponent(chat.id));
   assert.equal(chatResponse.status, 200);
   const body = await chatResponse.json();
-  assert.equal(body.model, 'gpt-luna');
+  assert.equal(body.model, 'gpt-sol');
 });
 
 test('/chat/api/message names the Kimi provider when its limit is exhausted', async () => {

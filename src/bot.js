@@ -9,14 +9,15 @@ import { generateImage } from './image.js';
 import { BILLING_VERSION } from './token-accounting.js';
 import { wantsGeneratedImage } from './image-intent.js';
 import { createImageJob, imageJobRecoveryAction, prepareImageJobRetry } from './image-job.js';
+import { addOfferUsage, claimOffer, offerActiveFor, offerState } from './limited-offer.js';
 
 const DESKTOP_RELEASE = Object.freeze({
   version: '2.0.8',
   released: '06.09.2026',
   windows: 'Clop-Code-Setup-2.0.8.exe',
   linux: 'Clop-Code-2.0.6-linux-x64.tar.xz',
-  androidVersion: '1.0.1',
-  android: 'Clop-AI-Mobile-1.0.1.apk',
+  androidVersion: '1.0.2',
+  android: 'Clop-AI-Mobile-1.0.2.apk',
 });
 
 // Единая точка входа: Claude-модели идут через Claude CLI, GPT-модели — через
@@ -86,8 +87,13 @@ export function modelPlans(m) {
   return availablePlans(m, Object.keys(PLANS), MODEL_PROMO);
 }
 
+export function modelAvailableTo(u, m) {
+  return Boolean(m && (modelPlans(m).includes(planOf(u).key) || offerActiveFor(u, m.key)));
+}
+
 export function modelOf(u) {
-  return selectModel(MODELS, u.model, planOf(u).key, DEFAULT_MODEL, Object.keys(PLANS), MODEL_PROMO);
+  const selected = MODELS[u.model] || MODELS[DEFAULT_MODEL];
+  return modelAvailableTo(u, selected) ? selected : MODELS[DEFAULT_MODEL];
 }
 
 // Заполненность контекстного окна МОДЕЛИ (не лимита тарифа) для этого чата
@@ -110,6 +116,7 @@ function compactChat(chat) {
 
 function mainKb(u) {
   const m = modelOf(u);
+  const offer = offerState(u);
   const effortLabel = m.supportsEffort === false ? 'не нужно' : effortOf(u, m).short;
   return {
     inline_keyboard: [
@@ -117,6 +124,7 @@ function mainKb(u) {
       [{ text: `🤖 Модель: ${m.heavy ? '⚠️ ' : ''}${m.short}`, callback_data: 'model' }, { text: `🧠 Мышление: ${effortLabel}`, callback_data: 'effort' }],
       ...(m.provider === 'gpt' ? [[{ text: `⚡ Быстро: ${u.fast ? 'ВКЛ' : 'ВЫКЛ'} · расход ×1,2`, callback_data: 'fast_toggle' }]] : []),
       [{ text: '📊 Лимиты', callback_data: 'usage' }, { text: '💎 Тарифы', callback_data: 'plans' }],
+      ...(offer ? [[{ text: offer.claimed ? '🎁 Предложение подключено' : '🎁 Получить 50 млн токенов', callback_data: 'offer_claim' }]] : []),
       [{ text: '🖼 Сгенерировать (бета)', callback_data: 'imagegen' }],
       [{ text: '🌐 Чат на сайте (бета)', url: 'https://clop-ai.onrender.com/chat' }],
       [{ text: `💻 Скачать Clop Code · v${DESKTOP_RELEASE.version}`, callback_data: 'app_download' }],
@@ -131,7 +139,7 @@ const backKb = (extra = []) => ({ inline_keyboard: [...extra, [{ text: '⬅️ �
 function modelKb(u) {
   const plan = planOf(u);
   const rows = Object.values(MODELS).map((m) => {
-    const locked = !modelPlans(m).includes(plan.key);
+    const locked = !modelAvailableTo(u, m);
     const active = modelOf(u).key === m.key;
     const label = `${active ? '✅ ' : locked ? '🔒 ' : m.heavy ? '⚠️ ' : '▫️ '}${m.title}${m.recommended ? ' ⭐' : ''}`;
     return [{ text: label, callback_data: locked ? 'need_plan:' + m.key : 'model_set:' + m.key }];
@@ -369,7 +377,7 @@ function appDownloadText() {
     'Один Telegram-аккаунт, общие модели, подписка и лимиты с ботом и сайтом.', '',
     '🪟 *Windows 10/11 x64* — установщик EXE.',
     '🐧 *Linux x64* — архив tar.xz. Распакуйте его и запустите файл `clop-code`.', '',
-    `📱 *Android 8+* — APK версии ${DESKTOP_RELEASE.androidVersion}: чат, голос, камера, демонстрация экрана и плавающая кнопка.`, '',
+    `📱 *Android 8+* — APK версии ${DESKTOP_RELEASE.androidVersion}: быстрый чат, файлы, камера, демонстрация экрана и плавающая кнопка.`, '',
     'В Linux доступны чат, файлы и терминал. Управление экраном и мышью пока поддерживается только в Windows.',
   ].join('\n');
 }
@@ -551,7 +559,8 @@ async function handleAsk(u, chatId, text, images = null) {
   // Haiku 4.5 — насовсем бесплатна и без лимитов, единственное исключение.
   // Проверяем лимит только пула провайдера этой модели — у Claude и GPT
   // счётчики раздельные.
-  if (!model.unlimited) {
+  const usingOffer = offerActiveFor(u, model.key);
+  if (!model.unlimited && !usingOffer) {
     const { blocked } = checkLimits(u, model.provider);
     if (blocked) {
       const plan = planOf(u);
@@ -667,15 +676,16 @@ async function handleAsk(u, chatId, text, images = null) {
     store.pushMessage(chat, 'assistant', res.text, { tokens: res.tokens.total, model: model.key, effort: effort.key });
     // В быстром режиме GPT списывает на 20% больше. total/costUsd остаются
     // фактическими, а повышающий коэффициент применяется только к лимиту.
+    const offerBonus = addOfferUsage(u, model.key, res.tokens.billable);
     const billableForLimit = Math.round(res.tokens.billable * (model.limitMultiplier ?? 1) * (fast ? 1.2 : 1));
     store.addUsage(u, {
       ts: Date.now(), chatId: chat.id, model: model.key, effort: effort.key, plan: planOf(u).key,
       input: res.tokens.input, output: res.tokens.output,
       cacheWrite: res.tokens.cacheWrite, cacheRead: res.tokens.cacheRead,
       total: res.tokens.total, billable: billableForLimit, costUsd: res.costUsd, durationMs: res.durationMs,
-      billingVersion: BILLING_VERSION,
+      billingVersion: BILLING_VERSION, offerBonus,
     });
-    const after = checkLimits(u, model.provider).states;
+    const after = offerBonus ? [] : checkLimits(u, model.provider).states;
     const warn = after.find((s) => s.percent >= 85);
     let footer = warn ? `\n\n_${PROVIDERS[model.provider].title} · ${warn.title}: использовано ${warn.percent}%_` : '';
     // Предупреждение о тяжёлой модели — один раз на чат, не спамим на каждый ответ
@@ -876,7 +886,7 @@ function modelText(u) {
   const lines = ['🤖 *Выбор модели*', ''];
   for (const m of Object.values(MODELS)) {
     const plans = modelPlans(m);
-    const locked = !plans.includes(plan.key);
+    const locked = !modelAvailableTo(u, m);
     lines.push(`${m.key === modelOf(u).key ? '✅' : locked ? '🔒' : '▫️'} *${m.title}*${m.recommended ? ' — ⭐ рекомендуется' : ''}`);
     lines.push(`_${m.desc}_`);
     lines.push(`Доступна: ${plans.map((p) => PLANS[p].title).join(', ')}`);
@@ -950,6 +960,15 @@ async function onCallback(u, q) {
     if (u.pending) { u.pending = null; store.saveSoon(); }
     await tg.answerCallback(q.id);
     return void await edit(startText(u), mainKb(u));
+  }
+  if (data === 'offer_claim') {
+    const offer = claimOffer(u);
+    if (!offer) return void await tg.answerCallback(q.id, 'Предложение уже завершилось', true);
+    await store.save();
+    await tg.answerCallback(q.id, offer.active ? '🎁 50 млн токенов подключены на 1 час' : 'Предложение уже использовано', true);
+    return void await edit(offer.active
+      ? `🎁 *Предложение подключено*\n\n50 млн токенов для GPT 5.6 Sol и GPT-6 Astra доступны до ${dt(offer.until)}.`
+      : 'Предложение уже завершилось.', mainKb(u));
   }
   if (data === 'usage') { await tg.answerCallback(q.id); return void await edit(usageText(u), backKb()); }
   if (data === 'app_download') { await tg.answerCallback(q.id); return void await edit(appDownloadText(), appDownloadKb()); }
@@ -1040,7 +1059,7 @@ async function onCallback(u, q) {
     const key = data.split(':')[1];
     const m = MODELS[key];
     if (!m) return void await tg.answerCallback(q.id, 'Модель не найдена');
-    if (!modelPlans(m).includes(planOf(u).key)) return void await tg.answerCallback(q.id, '🔒 Модель недоступна на вашем тарифе', true);
+    if (!modelAvailableTo(u, m)) return void await tg.answerCallback(q.id, '🔒 Модель недоступна на вашем тарифе', true);
     u.model = key;
     store.saveSoon();
     await tg.answerCallback(q.id, m.heavy ? `⚠️ Выбрана ${m.short} — ${m.heavyNote}` : `Выбрана ${m.short}`, Boolean(m.heavy));

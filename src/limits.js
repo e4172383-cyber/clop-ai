@@ -43,6 +43,7 @@ function countableUsage(u, windowMs, provider, now) {
   return u.usage.filter((e) => {
     if (e.ts < from) return false;
     if (UNLIMITED_MODELS.has(e.model)) return false;
+    if (e.offerBonus === true) return false;
     return (MODELS[e.model]?.provider) === provider;
   });
 }

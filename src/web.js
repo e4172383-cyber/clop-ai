@@ -29,7 +29,8 @@ import { extractOffice } from './docs.js';
 const MAX_MESSAGE_BYTES = 26_000_000;
 import { planOf, checkAllLimits, checkLimits, effortOf, allowedEffortOptions, imageLimitState, humanLeft } from './limits.js';
 import { getSiteKey } from './sitekey.js';
-import { askModel, modelOf, modelPlans } from './bot.js';
+import { askModel, modelAvailableTo, modelOf, modelPlans } from './bot.js';
+import { addOfferUsage, claimOffer, offerActiveFor, offerState } from './limited-offer.js';
 import { getBotUsername } from './botinfo.js';
 import { createCode, peekClaimed, consumeCode } from './weblogin.js';
 import { setSessionCookie, sessionUserId } from './webchat.js';
@@ -99,6 +100,7 @@ const DESKTOP_DOWNLOADS = new Set([
   'Clop-Code-2.0.6-linux-x64.tar.xz',
   'Clop-AI-Mobile-1.0.0.apk',
   'Clop-AI-Mobile-1.0.1.apk',
+  'Clop-AI-Mobile-1.0.2.apk',
 ]);
 
 function serveDesktopFile(req, res, name, { download = false } = {}) {
@@ -216,7 +218,7 @@ function assistantTranscript(displayText, files, truncatedFile = null) {
 
 function availableModelOf(u, requestedKey) {
   const candidate = MODELS[requestedKey];
-  return candidate && modelPlans(candidate).includes(planOf(u).key) ? candidate : modelOf(u);
+  return modelAvailableTo(u, candidate) ? candidate : modelOf(u);
 }
 
 // Общий секрет с clop-cloud-api (та же переменная, что бот шлёт наружу в
@@ -396,7 +398,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
     if (url.pathname === '/releases.json' && req.method === 'GET') {
       return sendJson(res, 200, {
         desktop: { version: '2.0.8', url: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-Setup-2.0.8.exe` },
-        android: { version: '1.0.1', url: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-AI-Mobile-1.0.1.apk` },
+        android: { version: '1.0.2', url: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-AI-Mobile-1.0.2.apk` },
       });
     }
 
@@ -636,9 +638,10 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
               title: m.title,
               provider: m.provider,
               description: m.desc || '',
-              available: modelPlans(m).includes(plan.key),
+              available: modelAvailableTo(u, m),
               plans: modelPlans(m),
               supportsEffort: m.supportsEffort !== false,
+              limitMultiplier: m.limitMultiplier || 1,
             })),
             model: modelOf(u).key,
             limits,
@@ -651,6 +654,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
             effort: effortOf(u, modelOf(u)).key,
             fast: u.fast === true,
             voice: voiceLimitState(u, plan.key),
+            limitedOffer: offerState(u),
           });
         }).catch(() => sendJson(res, 500, { ok: false }));
         return;
@@ -666,6 +670,17 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
         return;
       }
 
+      if (url.pathname === '/desk/offer/claim' && req.method === 'POST') {
+        authed().then(async (u) => {
+          if (!u) return sendJson(res, 401, { ok: false, error: 'нужен вход' });
+          const offer = claimOffer(u);
+          if (!offer) return sendJson(res, 410, { ok: false, error: 'Предложение завершилось.' });
+          await store.save({ strict: true });
+          return sendJson(res, 200, { ok: true, limitedOffer: offer });
+        }).catch((e) => sendJson(res, 500, { ok: false, error: String(e.message || e) }));
+        return;
+      }
+
       if (url.pathname === '/desk/profile' && req.method === 'POST') {
         readJsonBody(req, 20_000).then(async (body) => {
           const u = await authed();
@@ -674,7 +689,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           if (body.model) {
             const chosen = MODELS[String(body.model)];
             if (!chosen) return sendJson(res, 400, { ok: false, error: 'Неизвестная модель.' });
-            if (!modelPlans(chosen).includes(plan.key)) return sendJson(res, 403, { ok: false, error: 'Модель недоступна на этом тарифе.' });
+            if (!modelAvailableTo(u, chosen)) return sendJson(res, 403, { ok: false, error: 'Модель недоступна на этом тарифе.' });
             u.model = chosen.key;
           }
           const model = modelOf(u);
@@ -750,8 +765,9 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           if (desktopBusy.has(busyKey)) return sendJson(res, 409, { ok: false, error: 'Уже выполняется другой запрос этого аккаунта.' });
           const plan = planOf(u);
           const wanted = body.model && MODELS[body.model] ? body.model : modelOf(u).key;
-          const model = modelPlans(MODELS[wanted]).includes(plan.key) ? MODELS[wanted] : modelOf(u);
-          if (!model.unlimited) {
+          const model = modelAvailableTo(u, MODELS[wanted]) ? MODELS[wanted] : modelOf(u);
+          const usingOffer = offerActiveFor(u, model.key);
+          if (!model.unlimited && !usingOffer) {
             const { blocked } = checkLimits(u, model.provider);
             if (blocked) return sendJson(res, 429, { ok: false, error: 'Лимит тарифа исчерпан — смотрите /usage в боте.' });
           }
@@ -836,13 +852,14 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
               const measuredBillable = Number.isFinite(r.tokens.billable)
                 ? r.tokens.billable
                 : (Number(r.tokens.input || 0) + Number(r.tokens.output || 0) || Number(r.tokens.total || 0));
+              const offerBonus = addOfferUsage(u, model.key, measuredBillable);
               store.addUsage(u, {
                 ts: Date.now(), chatId: chat.id, model: model.key, effort: effortKey, plan: plan.key,
                 input: r.tokens.input, output: r.tokens.output,
                 cacheWrite: r.tokens.cacheWrite, cacheRead: r.tokens.cacheRead,
                 total: r.tokens.total,
                 billable: Math.round(measuredBillable * (model.limitMultiplier ?? 1) * (fast ? 1.2 : 1)),
-                billingVersion: BILLING_VERSION,
+                billingVersion: BILLING_VERSION, offerBonus,
                 costUsd: r.costUsd, durationMs: r.durationMs, source: 'desktop',
               });
             }
@@ -1013,8 +1030,9 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           recommended: m.recommended === true,
           heavy: m.heavy === true,
           heavyNote: m.heavyNote || '',
+          limitMultiplier: m.limitMultiplier || 1,
           plans: modelPlans(m),
-          available: modelPlans(m).includes(plan.key),
+          available: modelAvailableTo(u, m),
           supportsEffort: m.supportsEffort !== false,
         }));
         // Доступные уровни силы мышления по каждой модели — с учётом тарифа
@@ -1036,6 +1054,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           modelPromo: modelPromoActive()
             ? { title: MODEL_PROMO.title, until: MODEL_PROMO.until, models: MODEL_PROMO.models }
             : null,
+          limitedOffer: offerState(u),
           models,
           chats: store.liveChats(u).map((item) => chatSummary(u, item)),
           messages: chat.messages.map(publicChatMessage),
@@ -1124,7 +1143,8 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           effortOptions: allowedEffortOptions(u, model),
           models: Object.values(MODELS).map((m) => ({
             key: m.key, title: m.title, provider: m.provider,
-            available: modelPlans(m).includes(plan.key),
+            available: modelAvailableTo(u, m),
+            limitMultiplier: m.limitMultiplier || 1,
             supportsEffort: m.supportsEffort !== false,
           })),
           effortOptionsByModel: Object.fromEntries(
@@ -1133,6 +1153,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           limits: publicLimits(u),
           images: { used: img.used, limit: img.limit, left: img.left },
           chatsCount: store.liveChats(u).length,
+          limitedOffer: offerState(u),
         });
       });
       return;
@@ -1150,7 +1171,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
         if (body.model) {
           const m = MODELS[String(body.model)];
           if (!m) return sendJson(res, 400, { ok: false, error: 'Неизвестная модель.' });
-          if (!modelPlans(m).includes(plan.key)) {
+          if (!modelAvailableTo(u, m)) {
             return sendJson(res, 403, { ok: false, error: `${m.title} недоступна на тарифе ${plan.title}.` });
           }
           u.model = m.key;
@@ -1167,6 +1188,19 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
         const m = modelOf(u);
         return sendJson(res, 200, { ok: true, model: m.key, effort: effortOf(u, m).key, fast: u.fast === true });
       }).catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
+      return;
+    }
+
+    if (url.pathname === '/chat/api/offer/claim' && req.method === 'POST') {
+      (reloadEachRequest ? store.load() : Promise.resolve()).then(async () => {
+        const userId = sessionUserId(req);
+        const u = userId && store.findUser(userId);
+        if (!u) return sendJson(res, 401, { ok: false, error: 'not logged in' });
+        const offer = claimOffer(u);
+        if (!offer) return sendJson(res, 410, { ok: false, error: 'Предложение завершилось.' });
+        await store.save({ strict: true });
+        return sendJson(res, 200, { ok: true, limitedOffer: offer });
+      }).catch((e) => sendJson(res, 500, { ok: false, error: String(e.message || e) }));
       return;
     }
 
@@ -1315,7 +1349,8 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
         const requestedKey = body.model && MODELS[body.model] ? body.model : modelOf(u).key;
         const model = availableModelOf(u, requestedKey);
 
-        if (!model.unlimited) {
+        const usingOffer = offerActiveFor(u, model.key);
+        if (!model.unlimited && !usingOffer) {
           const { blocked } = checkLimits(u, model.provider);
           if (blocked) {
             return sendJson(res, 429, {
@@ -1389,6 +1424,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
             : (Number(tokens.input || 0) + Number(tokens.output || 0) || Number(tokens.total || 0));
           const billableForLimit = Math.round(measuredBillable * (model.limitMultiplier ?? 1) * (fast ? 1.2 : 1));
           if (!model.unlimited) {
+            const offerBonus = addOfferUsage(u, model.key, measuredBillable);
             store.addUsage(u, {
               ts: Date.now(), chatId: chat.id, model: model.key, effort: effortKey, plan: plan.key,
               input: tokens.input || 0, output: tokens.output || 0,
@@ -1396,6 +1432,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
               total: tokens.total || 0, billable: billableForLimit, costUsd: r.costUsd, durationMs: r.durationMs,
               billingVersion: BILLING_VERSION,
               source: 'site-chat',
+              offerBonus,
             });
           }
           await store.save();
