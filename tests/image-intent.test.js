@@ -8,6 +8,8 @@ test('detects explicit image generation requests in an ordinary chat', () => {
     'Пожалуйста, нарисуй мне логотип Clop',
     'Можешь сгенерировать фотографию ночного Киева?',
     'сделай аватар для телеграма',
+    'сгенерируй фута девушку в красивом фэнтези стиле',
+    'нарисуй кота в рыцарских доспехах',
     'Generate an image of a friendly robot',
     'Please create a logo for my project',
   ]) assert.equal(wantsGeneratedImage(text), true, text);
@@ -24,4 +26,3 @@ test('keeps projects, image analysis and ordinary mentions in the normal AI chat
     'Create a website with product images',
   ]) assert.equal(wantsGeneratedImage(text), false, text);
 });
-

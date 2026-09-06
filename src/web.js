@@ -37,6 +37,7 @@ import { extractFiles, filesForJson } from './files.js';
 import { buildZip } from './zip.js';
 import { listApiKeys, createApiKey, deleteApiKey, proxyApiRequest, cloudEnabled } from './cloud.js';
 import * as chatArtifacts from './chatartifacts.js';
+import { voiceLimitState, startVoiceSession, chargeVoiceHeartbeat, stopVoiceSession } from './voice-limits.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(__dirname, 'public');
@@ -95,6 +96,7 @@ function attachmentDisposition(name) {
 const DESKTOP_DOWNLOADS = new Set([
   'Clop-Code-Setup-2.0.6.exe',
   'Clop-Code-2.0.6-linux-x64.tar.xz',
+  'Clop-AI-Mobile-1.0.0.apk',
 ]);
 
 function serveDesktopFile(req, res, name, { download = false } = {}) {
@@ -640,6 +642,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
               : null,
             effort: effortOf(u, modelOf(u)).key,
             fast: u.fast === true,
+            voice: voiceLimitState(u, plan.key),
           });
         }).catch(() => sendJson(res, 500, { ok: false }));
         return;
@@ -681,6 +684,43 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
             effort: effortOf(u, modelOf(u)).key,
             fast: u.fast === true,
           });
+        }).catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
+        return;
+      }
+
+      if (url.pathname === '/desk/voice/start' && req.method === 'POST') {
+        authed().then(async (u) => {
+          if (!u) return sendJson(res, 401, { ok: false, error: 'нужен вход' });
+          const plan = planOf(u);
+          const id = crypto.randomUUID();
+          const session = startVoiceSession(u, plan.key, id);
+          if (!session) return sendJson(res, 429, { ok: false, error: 'Недельный лимит голосового ассистента исчерпан.', voice: voiceLimitState(u, plan.key) });
+          await store.save({ strict: true });
+          return sendJson(res, 200, { ok: true, sessionId: id, voice: voiceLimitState(u, plan.key) });
+        }).catch((e) => sendJson(res, 500, { ok: false, error: String(e.message || e) }));
+        return;
+      }
+
+      if (url.pathname === '/desk/voice/heartbeat' && req.method === 'POST') {
+        readJsonBody(req, 10_000).then(async (body) => {
+          const u = await authed();
+          if (!u) return sendJson(res, 401, { ok: false, error: 'нужен вход' });
+          const state = chargeVoiceHeartbeat(u, planOf(u).key, body.sessionId);
+          if (!state) return sendJson(res, 409, { ok: false, error: 'Голосовая сессия не найдена.' });
+          if (state.ended) delete u.voiceSessionId;
+          await store.save({ strict: true });
+          return sendJson(res, 200, { ok: true, voice: state });
+        }).catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
+        return;
+      }
+
+      if (url.pathname === '/desk/voice/stop' && req.method === 'POST') {
+        readJsonBody(req, 10_000).then(async (body) => {
+          const u = await authed();
+          if (!u) return sendJson(res, 401, { ok: false, error: 'нужен вход' });
+          const state = stopVoiceSession(u, planOf(u).key, body.sessionId);
+          await store.save({ strict: true });
+          return sendJson(res, 200, { ok: true, voice: state });
         }).catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
         return;
       }

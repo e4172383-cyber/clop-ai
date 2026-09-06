@@ -126,9 +126,10 @@ test('serves the public desktop release page and resumable installers without da
   assert.equal(page.status, 200);
   assert.match(page.headers.get('content-type'), /^text\/html/);
   const html = await page.text();
-  assert.match(html, /Clop Code 2\.0\.6/);
+  assert.match(html, /Android 8/);
   assert.match(html, /Clop-Code-Setup-2\.0\.6\.exe/);
   assert.match(html, /Clop-Code-2\.0\.6-linux-x64\.tar\.xz/);
+  assert.match(html, /Clop-AI-Mobile-1\.0\.0\.apk/);
   assert.doesNotMatch(html, /\d[\d ]{3,}\s*токен/iu);
 
   const partial = await fetch(baseUrl + '/downloads/Clop-Code-Setup-2.0.6.exe', {
@@ -139,6 +140,12 @@ test('serves the public desktop release page and resumable installers without da
   assert.match(partial.headers.get('content-range'), /^bytes 0-31\/\d+$/);
   assert.match(partial.headers.get('content-disposition'), /Clop-Code-Setup-2\.0\.6\.exe/);
   assert.equal((await partial.arrayBuffer()).byteLength, 32);
+
+  const apk = await fetch(baseUrl + '/downloads/Clop-AI-Mobile-1.0.0.apk', {
+    headers: { range: 'bytes=0-3' },
+  });
+  assert.equal(apk.status, 206);
+  assert.equal(Buffer.from(await apk.arrayBuffer()).toString('hex'), '504b0304');
 
   const missing = await fetch(baseUrl + '/downloads/private.env');
   assert.equal(missing.status, 404);
@@ -187,6 +194,31 @@ test('/desk/me exposes only percentage token-limit state', async () => {
       );
     }
   }
+});
+
+test('/desk/voice tracks the weekly session on the authenticated account', async () => {
+  const deviceId = 'voice-device-test';
+  desktop.addDevice(user, deviceId, 'Test Android');
+  const token = desktop.signToken(user.id, deviceId);
+  const headers = { authorization: 'Bearer ' + token, 'content-type': 'application/json' };
+
+  const started = await fetch(baseUrl + '/desk/voice/start', { method: 'POST', headers, body: '{}' });
+  assert.equal(started.status, 200);
+  const startBody = await started.json();
+  assert.equal(startBody.voice.limitSeconds, 9000);
+  assert.match(startBody.sessionId, /^[0-9a-f-]{36}$/);
+
+  const heartbeat = await fetch(baseUrl + '/desk/voice/heartbeat', {
+    method: 'POST', headers, body: JSON.stringify({ sessionId: startBody.sessionId }),
+  });
+  assert.equal(heartbeat.status, 200);
+  assert.equal((await heartbeat.json()).ok, true);
+
+  const stopped = await fetch(baseUrl + '/desk/voice/stop', {
+    method: 'POST', headers, body: JSON.stringify({ sessionId: startBody.sessionId }),
+  });
+  assert.equal(stopped.status, 200);
+  assert.equal(user.voiceSessionId, undefined);
 });
 
 test('/api/stats never returns quota sizes, even to the admin dashboard', async () => {

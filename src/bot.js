@@ -15,6 +15,8 @@ const DESKTOP_RELEASE = Object.freeze({
   released: '06.09.2026',
   windows: 'Clop-Code-Setup-2.0.6.exe',
   linux: 'Clop-Code-2.0.6-linux-x64.tar.xz',
+  androidVersion: '1.0.0',
+  android: 'Clop-AI-Mobile-1.0.0.apk',
 });
 
 // Единая точка входа: Claude-модели идут через Claude CLI, GPT-модели — через
@@ -361,12 +363,13 @@ function helpKb() {
 
 function appDownloadText() {
   return [
-    '💻 *Clop Code для компьютера*', '',
+    '💻 *Приложения Clop*', '',
     `Актуальная версия: *${DESKTOP_RELEASE.version}*`,
     `Выпуск: ${DESKTOP_RELEASE.released}`, '',
     'Один Telegram-аккаунт, общие модели, подписка и лимиты с ботом и сайтом.', '',
     '🪟 *Windows 10/11 x64* — установщик EXE.',
     '🐧 *Linux x64* — архив tar.xz. Распакуйте его и запустите файл `clop-code`.', '',
+    `📱 *Android 8+* — APK версии ${DESKTOP_RELEASE.androidVersion}: чат, голос, камера, демонстрация экрана и плавающая кнопка.`, '',
     'В Linux доступны чат, файлы и терминал. Управление экраном и мышью пока поддерживается только в Windows.',
   ].join('\n');
 }
@@ -376,6 +379,7 @@ function appDownloadKb() {
   return backKb([
     [{ text: '🪟 Скачать для Windows', url: `${root}/${DESKTOP_RELEASE.windows}` }],
     [{ text: '🐧 Скачать для Linux x64', url: `${root}/${DESKTOP_RELEASE.linux}` }],
+    [{ text: '📱 Скачать APK для Android', url: `${root}/${DESKTOP_RELEASE.android}` }],
     [{ text: '🌐 Версия и инструкция', url: `${PUBLIC_URL}/download` }],
   ]);
 }
