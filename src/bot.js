@@ -24,7 +24,7 @@ const DESKTOP_RELEASE = Object.freeze({
 // Codex CLI. Возвращаемая форма одинаковая для обоих (ok/text/tokens/...).
 // Отказ входа у провайдера ни при чём для пользователя: он видел бы чужую
 // английскую ошибку про токен и не понял бы, что делать
-const AUTH_BROKEN = /revoked|refresh|unauthorized|401|not logged in|log in again/i;
+const AUTH_BROKEN = /revoked|refresh|unauthorized|401|not logged in|log in again|re-login|no credential configured|authorization grant is invalid|invalid_grant/i;
 
 export async function askModel({ chat, model, effortKey, prompt, onDelta, images, fast = false, signal }) {
   if (model?.runtime === 'kimi') {

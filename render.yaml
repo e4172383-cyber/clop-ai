@@ -12,6 +12,8 @@ services:
         sync: false
       - key: CODEX_AUTH_JSON_B64
         sync: false
+      - key: KIMI_AUTH_B64
+        sync: false
       - key: WEB_HOST
         value: 0.0.0.0
       - key: WEB_PASSWORD
