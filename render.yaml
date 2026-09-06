@@ -1,0 +1,34 @@
+services:
+  - type: web
+    name: clop-ai-bot
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm install -g @anthropic-ai/claude-code @openai/codex
+    startCommand: npm start
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: CLAUDE_CODE_OAUTH_TOKEN
+        sync: false
+      - key: CODEX_AUTH_JSON_B64
+        sync: false
+      - key: WEB_HOST
+        value: 0.0.0.0
+      - key: WEB_PASSWORD
+        sync: false
+      - key: ADMIN_IDS
+        sync: false
+      - key: UPSTASH_REDIS_REST_URL
+        sync: false
+      - key: UPSTASH_REDIS_REST_TOKEN
+        sync: false
+      - key: CLOUD_API_URL
+        value: https://clop-cloud-api-2.onrender.com
+      - key: CLOUD_INTERNAL_SECRET
+        sync: false
+      - key: TOKEN_LIMITS_JSON
+        sync: false
+      - key: SELF_URL
+        value: https://clop-ai.onrender.com
+      - key: WEB_SESSION_SECRET
+        sync: false

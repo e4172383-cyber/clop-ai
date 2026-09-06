@@ -1,0 +1,1022 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f2eee8">
+<title>Clop ai — панель управления</title>
+<style>
+  :root{
+    --bg:#f2eee8;
+    --bg-deep:#e8e1d8;
+    --paper:rgba(255,253,249,.79);
+    --paper-solid:#fffdf9;
+    --paper-soft:rgba(255,255,255,.52);
+    --panel:var(--paper);
+    --panel2:var(--paper-solid);
+    --ink:#26231f;
+    --text:var(--ink);
+    --muted:#766f67;
+    --muted-2:#9a9288;
+    --accent:#d56f4b;
+    --accent-deep:#ac4f31;
+    --accent-soft:rgba(213,111,75,.12);
+    --accent-line:rgba(213,111,75,.27);
+    --blue:#4779a7;
+    --accent2:var(--blue);
+    --ok:#397b5a;
+    --warn:#c27832;
+    --bad:#bd4a43;
+    --line:rgba(81,69,57,.13);
+    --line-strong:rgba(81,69,57,.2);
+    --shadow-sm:0 1px 2px rgba(57,47,37,.05),0 10px 28px rgba(57,47,37,.065);
+    --shadow-lg:0 30px 90px rgba(57,47,37,.2),0 3px 12px rgba(57,47,37,.09);
+    --radius-sm:11px;
+    --radius-md:17px;
+    --radius-lg:25px;
+    color-scheme:light;
+    font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  }
+
+  *,*::before,*::after{box-sizing:border-box}
+  html{scroll-behavior:smooth;background:var(--bg)}
+  body{
+    min-width:320px;
+    min-height:100vh;
+    min-height:100dvh;
+    margin:0;
+    color:var(--ink);
+    background:
+      radial-gradient(circle at 7% 4%,rgba(229,147,105,.26),transparent 28rem),
+      radial-gradient(circle at 94% 11%,rgba(115,154,184,.2),transparent 31rem),
+      radial-gradient(circle at 74% 94%,rgba(184,128,157,.14),transparent 34rem),
+      linear-gradient(145deg,#f8f4ee 0%,var(--bg) 48%,#ebe5dc 100%);
+    background-attachment:fixed;
+    text-rendering:optimizeLegibility;
+    -webkit-font-smoothing:antialiased;
+  }
+  body::before{
+    content:"";
+    position:fixed;
+    inset:0;
+    z-index:-1;
+    pointer-events:none;
+    opacity:.038;
+    mix-blend-mode:multiply;
+    background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.88' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E");
+  }
+  button,select,textarea,input{font:inherit}
+  button,select{min-height:40px}
+  button{cursor:pointer}
+  a{color:inherit}
+  :focus-visible{outline:3px solid rgba(213,111,75,.28);outline-offset:3px}
+  ::selection{color:var(--ink);background:rgba(213,111,75,.24)}
+
+  .page-shell{
+    width:min(100%,1660px);
+    margin:0 auto;
+    padding:clamp(12px,2vw,30px);
+  }
+  .glass-panel,
+  .panel,
+  .card{
+    background:var(--paper);
+    border:1px solid rgba(255,255,255,.72);
+    box-shadow:var(--shadow-sm),inset 0 1px 0 rgba(255,255,255,.88);
+    backdrop-filter:blur(28px) saturate(135%);
+    -webkit-backdrop-filter:blur(28px) saturate(135%);
+  }
+
+  .app-header{
+    position:sticky;
+    top:12px;
+    z-index:20;
+    display:grid;
+    grid-template-columns:auto minmax(280px,1fr) auto;
+    grid-template-areas:"brand nav status";
+    align-items:center;
+    gap:18px;
+    min-height:80px;
+    margin-bottom:22px;
+    padding:13px 15px;
+    border-radius:var(--radius-lg);
+  }
+  .brand{grid-area:brand;display:flex;align-items:center;gap:12px;min-width:0}
+  .brand-mark{
+    width:46px;
+    height:46px;
+    flex:none;
+    display:grid;
+    place-items:center;
+    border-radius:15px;
+    color:#fff;
+    background:linear-gradient(145deg,#df805c,#b94f30);
+    box-shadow:0 11px 25px rgba(169,74,45,.22),inset 0 1px 0 rgba(255,255,255,.36);
+    font:700 22px/1 Georgia,"Times New Roman",serif;
+  }
+  .brand-copy{min-width:0}
+  .brand-copy .eyebrow{
+    display:block;
+    margin-bottom:3px;
+    color:var(--accent-deep);
+    font-size:10px;
+    font-weight:800;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+  }
+  h1{
+    margin:0;
+    color:var(--ink);
+    font:500 22px/1.05 Georgia,"Times New Roman",serif;
+    letter-spacing:-.025em;
+    white-space:nowrap;
+  }
+
+  .quick-nav{
+    grid-area:nav;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:4px;
+    min-width:0;
+    scrollbar-width:none;
+  }
+  .quick-nav::-webkit-scrollbar{display:none}
+  .quick-nav a{
+    min-height:38px;
+    display:inline-flex;
+    align-items:center;
+    padding:0 13px;
+    border:1px solid transparent;
+    border-radius:11px;
+    color:var(--muted);
+    text-decoration:none;
+    font-size:13px;
+    font-weight:650;
+    white-space:nowrap;
+    transition:color .16s ease,background .16s ease,border-color .16s ease,transform .16s ease;
+  }
+  .quick-nav a:hover{
+    color:var(--ink);
+    background:rgba(255,255,255,.52);
+    border-color:var(--line);
+    transform:translateY(-1px);
+  }
+  .system-state{
+    grid-area:status;
+    min-height:44px;
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:0 13px;
+    border:1px solid var(--line);
+    border-radius:14px;
+    background:rgba(255,255,255,.46);
+  }
+  .dot{
+    width:9px;
+    height:9px;
+    flex:none;
+    border-radius:50%;
+    background:var(--ok);
+    box-shadow:0 0 0 5px rgba(57,123,90,.1);
+  }
+  .state-copy{display:flex;flex-direction:column;min-width:0}
+  .state-copy b{font-size:12px;line-height:1.2}
+  #upd{white-space:nowrap}
+
+  .dashboard{display:grid;gap:18px}
+  .overview{scroll-margin-top:116px}
+  .section-heading{
+    display:flex;
+    align-items:flex-end;
+    justify-content:space-between;
+    gap:18px;
+    margin:0 2px 12px;
+  }
+  .section-heading.compact{align-items:center;margin:0 0 18px}
+  .section-heading > div{min-width:0}
+  .section-kicker{
+    display:block;
+    margin-bottom:5px;
+    color:var(--accent-deep);
+    font-size:10px;
+    font-weight:800;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+  }
+  .section-heading h2{
+    margin:0;
+    color:var(--ink);
+    font:500 clamp(23px,2.5vw,32px)/1.08 Georgia,"Times New Roman",serif;
+    letter-spacing:-.025em;
+  }
+  .section-heading.compact h2{font-size:clamp(20px,2vw,25px)}
+  .section-heading p{
+    max-width:560px;
+    margin:6px 0 0;
+    color:var(--muted);
+    font-size:13px;
+    line-height:1.5;
+  }
+  .muted{color:var(--muted);font-size:13px}
+  .section-count{
+    min-height:34px;
+    display:inline-flex;
+    align-items:center;
+    padding:0 11px;
+    border:1px solid var(--line);
+    border-radius:999px;
+    background:rgba(255,255,255,.47);
+    white-space:nowrap;
+  }
+
+  .grid{display:grid;gap:13px}
+  .cards{grid-template-columns:repeat(6,minmax(0,1fr))}
+  .card{
+    position:relative;
+    min-height:132px;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+    padding:18px;
+    border-radius:var(--radius-md);
+    transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease;
+  }
+  .card::before{
+    content:"";
+    position:absolute;
+    top:0;
+    left:18px;
+    width:32px;
+    height:3px;
+    border-radius:0 0 4px 4px;
+    background:var(--accent);
+  }
+  .card:nth-child(2)::before{background:var(--warn)}
+  .card:nth-child(3)::before{background:var(--blue)}
+  .card:nth-child(4)::before{background:#7b6ca8}
+  .card:nth-child(5)::before{background:var(--ok)}
+  .card:nth-child(6)::before{background:var(--bad)}
+  .card:hover{transform:translateY(-2px);border-color:var(--accent-line);box-shadow:0 16px 38px rgba(57,47,37,.09),inset 0 1px 0 #fff}
+  .card .k{color:var(--muted);font-size:13px;font-weight:650;line-height:1.35}
+  .card .v{
+    margin-top:auto;
+    padding-top:17px;
+    color:var(--ink);
+    font:600 clamp(27px,2.25vw,36px)/1 Georgia,"Times New Roman",serif;
+    letter-spacing:-.025em;
+    font-variant-numeric:tabular-nums;
+  }
+  .card .s{margin-top:8px;color:var(--muted);font-size:12px;line-height:1.4}
+
+  .two{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(300px,.8fr);gap:18px}
+  .two.activity-row{grid-template-columns:minmax(0,1.45fr) minmax(320px,.55fr)}
+  .panel{
+    min-width:0;
+    margin:0;
+    padding:clamp(17px,2vw,24px);
+    border-radius:var(--radius-lg);
+    scroll-margin-top:116px;
+  }
+  .panel-note{
+    display:flex;
+    align-items:center;
+    gap:7px;
+    color:var(--muted-2);
+    font-size:12px;
+    white-space:nowrap;
+  }
+  .panel-note::before{
+    content:"";
+    width:6px;
+    height:6px;
+    border-radius:50%;
+    background:var(--accent);
+  }
+
+  .chart-scroll{overflow-x:auto;overscroll-behavior-inline:contain;padding:3px 1px 0}
+  .chart{
+    min-width:520px;
+    height:172px;
+    display:flex;
+    align-items:flex-end;
+    gap:7px;
+    padding:18px 10px 0;
+    border:1px solid rgba(81,69,57,.09);
+    border-radius:15px;
+    background:
+      repeating-linear-gradient(to bottom,transparent 0,transparent 43px,rgba(81,69,57,.07) 44px),
+      rgba(255,255,255,.34);
+  }
+  .chart .col{
+    height:100%;
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    justify-content:flex-end;
+    align-items:center;
+    gap:8px;
+    min-width:24px;
+  }
+  .chart .b{
+    width:min(100%,42px);
+    min-height:3px;
+    border-radius:7px 7px 3px 3px;
+    background:linear-gradient(180deg,#e28a68 0%,var(--accent) 55%,#ad5033 100%);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 5px 12px rgba(172,79,49,.13);
+    transition:height .32s ease,filter .18s ease,transform .18s ease;
+  }
+  .chart .col:hover .b{filter:saturate(1.12) brightness(1.04);transform:translateY(-2px)}
+  .chart .l{min-height:18px;color:var(--muted);font-size:10px;white-space:nowrap}
+
+  .table-scroll{
+    width:100%;
+    overflow:auto;
+    overscroll-behavior:contain;
+    border:1px solid rgba(81,69,57,.1);
+    border-radius:15px;
+    background:rgba(255,255,255,.3);
+    scrollbar-color:rgba(118,111,103,.45) transparent;
+    scrollbar-width:thin;
+  }
+  .table-scroll::-webkit-scrollbar{width:9px;height:9px}
+  .table-scroll::-webkit-scrollbar-thumb{border:2px solid transparent;border-radius:999px;background:rgba(118,111,103,.42);background-clip:padding-box}
+  table{width:100%;border-collapse:separate;border-spacing:0;color:var(--ink);font-size:13px}
+  th{
+    position:sticky;
+    top:0;
+    z-index:2;
+    padding:11px 13px;
+    border-bottom:1px solid var(--line-strong);
+    color:var(--muted);
+    background:rgba(251,248,243,.96);
+    font-size:11px;
+    font-weight:750;
+    letter-spacing:.055em;
+    text-align:left;
+    text-transform:uppercase;
+    white-space:nowrap;
+  }
+  td{
+    padding:12px 13px;
+    border-bottom:1px solid rgba(81,69,57,.09);
+    vertical-align:middle;
+    line-height:1.45;
+  }
+  tr:last-child td{border-bottom:none}
+  tbody tr{transition:background .14s ease}
+  tbody tr:hover{background:rgba(213,111,75,.055)}
+  #models{min-width:460px}
+  #recent{min-width:720px}
+  #pays{min-width:460px}
+  #users{min-width:1540px}
+  #users tbody tr{cursor:pointer}
+  #users th:first-child,#users td:first-child{position:sticky;left:0;z-index:1;background:#fcfaf6;box-shadow:1px 0 0 var(--line)}
+  #users th:first-child{z-index:3;background:#f9f5ef}
+  #users tbody tr:hover td:first-child{background:#fbf3eb}
+
+  .tag{
+    display:inline-flex;
+    align-items:center;
+    min-height:24px;
+    padding:2px 8px;
+    border:1px solid var(--line);
+    border-radius:999px;
+    color:var(--muted);
+    background:rgba(255,255,255,.46);
+    font-size:10px;
+    font-weight:800;
+    letter-spacing:.035em;
+    line-height:1;
+    text-transform:uppercase;
+    white-space:nowrap;
+  }
+  .tag.go{border-color:rgba(57,123,90,.22);color:var(--ok);background:rgba(57,123,90,.09)}
+  .tag.pro,.tag.answered{border-color:var(--accent-line);color:var(--accent-deep);background:var(--accent-soft)}
+  .tag.max{border-color:rgba(71,121,167,.22);color:var(--blue);background:rgba(71,121,167,.09)}
+  .tag.max20{border-color:rgba(194,120,50,.24);color:#9c5f27;background:rgba(194,120,50,.1)}
+  .tag.free,.tag.closed{color:var(--muted);background:rgba(118,111,103,.08)}
+  .tag.open{border-color:rgba(57,123,90,.22);color:var(--ok);background:rgba(57,123,90,.09)}
+  .tag.ban{border-color:rgba(189,74,67,.25);color:var(--bad);background:rgba(189,74,67,.09)}
+  .tag.mute{border-color:rgba(194,120,50,.24);color:#9c5f27;background:rgba(194,120,50,.09)}
+
+  .row{display:flex;align-items:center}
+  .bar{position:relative;width:108px;height:8px;overflow:hidden;border-radius:999px;background:rgba(81,69,57,.11)}
+  .bar i{position:absolute;inset:0;width:0;border-radius:inherit;background:linear-gradient(90deg,#4e956e,var(--ok));transition:width .3s ease}
+  .bar.warn i{background:linear-gradient(90deg,#d99c55,var(--warn))}
+  .bar.bad i{background:linear-gradient(90deg,#d76b63,var(--bad))}
+  .pct{min-width:36px;margin-left:8px;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+  .empty{padding:14px;color:var(--muted);font-size:13px;line-height:1.55}
+  code{padding:2px 6px;border:1px solid var(--line);border-radius:6px;background:rgba(81,69,57,.055);font-size:12px}
+
+  /* Поддержка: карточки сохраняют длинную переписку читаемой. */
+  #tickets{display:grid;gap:10px}
+  .tk{
+    overflow:hidden;
+    padding:0;
+    border:1px solid var(--line);
+    border-radius:16px;
+    background:rgba(255,255,255,.42);
+    transition:border-color .18s ease,box-shadow .18s ease,opacity .18s ease;
+  }
+  .tk:hover{border-color:rgba(81,69,57,.2)}
+  .tk.on{border-color:var(--accent-line);box-shadow:0 12px 30px rgba(81,56,39,.07)}
+  .tk.closed{opacity:.64}
+  .tk-head{
+    position:relative;
+    min-height:62px;
+    display:flex;
+    align-items:center;
+    gap:9px;
+    flex-wrap:wrap;
+    padding:13px 46px 13px 15px;
+    cursor:pointer;
+    user-select:none;
+  }
+  .tk-head::after{
+    content:"⌄";
+    position:absolute;
+    top:50%;
+    right:15px;
+    width:25px;
+    height:25px;
+    display:grid;
+    place-items:center;
+    border:1px solid var(--line);
+    border-radius:8px;
+    color:var(--muted);
+    background:rgba(255,255,255,.48);
+    transform:translateY(-50%);
+    transition:transform .18s ease,color .18s ease;
+  }
+  .tk.on .tk-head::after{color:var(--accent-deep);transform:translateY(-50%) rotate(180deg)}
+  .tk-head b{font-size:14px;line-height:1.4}
+  .tk-body{display:none;padding:16px;border-top:1px solid var(--line);background:rgba(255,253,249,.46)}
+  .tk.on .tk-body{display:block;animation:ticketOpen .18s ease both}
+  @keyframes ticketOpen{from{opacity:0;transform:translateY(-4px)}}
+  .tk-msg{
+    max-width:min(82%,760px);
+    margin:0 0 9px;
+    padding:10px 12px;
+    border:1px solid rgba(81,69,57,.08);
+    border-radius:13px 13px 13px 4px;
+    background:rgba(71,121,167,.065);
+    font-size:13px;
+    line-height:1.55;
+    white-space:pre-wrap;
+  }
+  .tk-msg.admin{margin-left:auto;border-color:var(--accent-line);border-radius:13px 13px 4px 13px;background:var(--accent-soft)}
+  .tk-msg .who{display:block;margin-bottom:4px;color:var(--muted);font-size:10px;font-weight:750;letter-spacing:.04em;text-transform:uppercase}
+  .tk-act{display:flex;align-items:stretch;gap:9px;flex-wrap:wrap;margin-top:15px;padding-top:15px;border-top:1px solid var(--line)}
+  .tk-act textarea{
+    flex:1;
+    min-width:260px;
+    min-height:78px;
+    resize:vertical;
+    padding:11px 12px;
+    border:1px solid var(--line-strong);
+    border-radius:12px;
+    color:var(--ink);
+    background:rgba(255,255,255,.66);
+    line-height:1.5;
+  }
+  .tk-act textarea::placeholder{color:var(--muted-2)}
+  .tk-act button,.tk-act select,.tk-act input,.tk-sub button,.tk-sub select,.tk-sub input{
+    padding:8px 12px;
+    border:1px solid var(--line-strong);
+    border-radius:11px;
+    color:var(--ink);
+    background:rgba(255,255,255,.64);
+    transition:transform .15s ease,background .15s ease,border-color .15s ease,box-shadow .15s ease;
+  }
+  .tk-act button:hover,.tk-sub button:hover{transform:translateY(-1px);border-color:var(--accent-line);background:#fff}
+  .tk-act button.go,.tk-sub button.go{border-color:#af5134;color:#fff;background:linear-gradient(180deg,#db7956,#bf5938);box-shadow:0 7px 16px rgba(172,79,49,.16)}
+  .tk-act button.warn,.tk-sub button.warn{border-color:rgba(194,120,50,.28);color:#87501f;background:rgba(194,120,50,.11)}
+  .tk-act button.bad,.tk-sub button.bad{border-color:rgba(189,74,67,.27);color:#9f3732;background:rgba(189,74,67,.1)}
+  .tk-act input,.tk-sub input{width:76px;cursor:text}
+  .tk-sub{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    flex-wrap:wrap;
+    margin-top:9px;
+    padding:10px 12px;
+    border:1px solid rgba(81,69,57,.09);
+    border-radius:12px;
+    color:var(--muted);
+    background:rgba(81,69,57,.035);
+    font-size:12px;
+  }
+
+  .overlay{
+    position:fixed;
+    inset:0;
+    z-index:50;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    padding:clamp(12px,3vw,32px);
+    background:rgba(53,45,38,.44);
+    backdrop-filter:blur(13px) saturate(110%);
+    -webkit-backdrop-filter:blur(13px) saturate(110%);
+  }
+  .overlay.open{display:flex;animation:overlayIn .18s ease both}
+  @keyframes overlayIn{from{opacity:0}}
+  .modal{
+    width:min(100%,1040px);
+    height:min(760px,92dvh);
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+    border:1px solid rgba(255,255,255,.86);
+    border-radius:28px;
+    background:rgba(255,253,249,.94);
+    box-shadow:var(--shadow-lg),inset 0 1px 0 #fff;
+    animation:modalIn .22s cubic-bezier(.2,.8,.2,1) both;
+  }
+  @keyframes modalIn{from{opacity:0;transform:translateY(10px) scale(.985)}}
+  .modal-head{min-height:72px;display:flex;align-items:center;gap:12px;padding:12px 15px 12px 22px;border-bottom:1px solid var(--line)}
+  .modal-heading{min-width:0;flex:1}
+  .modal-heading span{display:block;margin-bottom:3px;color:var(--accent-deep);font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
+  .modal-head h3{overflow:hidden;margin:0;color:var(--ink);font:500 20px/1.2 Georgia,"Times New Roman",serif;text-overflow:ellipsis;white-space:nowrap}
+  .modal-head button.x{
+    width:42px;
+    height:42px;
+    display:grid;
+    place-items:center;
+    flex:none;
+    padding:0;
+    border:1px solid var(--line);
+    border-radius:13px;
+    color:var(--muted);
+    background:rgba(255,255,255,.56);
+    font-size:20px;
+    line-height:1;
+    transition:color .15s ease,background .15s ease,transform .15s ease;
+  }
+  .modal-head button.x:hover{color:var(--ink);background:#fff;transform:rotate(4deg)}
+  .modal-body{min-height:0;flex:1;display:flex;overflow:hidden}
+  .chat-list{width:300px;flex-shrink:0;overflow-y:auto;padding:10px;border-right:1px solid var(--line);background:rgba(81,69,57,.025)}
+  .chat-item{margin-bottom:5px;padding:11px 12px;border:1px solid transparent;border-radius:12px;cursor:default;font-size:13px;transition:background .15s ease,border-color .15s ease}
+  .chat-item:hover{border-color:var(--line);background:rgba(255,255,255,.6)}
+  .chat-item.active{border-color:var(--accent-line);background:var(--accent-soft)}
+  .chat-item .t{overflow:hidden;color:var(--ink);font-weight:700;text-overflow:ellipsis;white-space:nowrap}
+  .chat-item .t.del{text-decoration:line-through;color:var(--muted)}
+  .chat-item .m{margin-top:5px;color:var(--muted);font-size:11px;line-height:1.45}
+  .del-badge{display:inline-flex;margin-left:5px;padding:2px 6px;border-radius:999px;color:var(--bad);background:rgba(189,74,67,.1);font-size:9px}
+  .messages{min-width:0;flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:12px;padding:22px}
+  .messages > .empty{max-width:520px;margin:auto;padding:22px;border:1px solid var(--line);border-radius:16px;background:rgba(255,255,255,.54);text-align:center}
+  .msg{max-width:80%;padding:10px 13px;border-radius:13px;font-size:13px;line-height:1.5;white-space:pre-wrap;word-break:break-word}
+  .msg.user{align-self:flex-end;color:#fff;background:var(--accent);border-bottom-right-radius:4px}
+  .msg.assistant{align-self:flex-start;background:rgba(81,69,57,.07);border-bottom-left-radius:4px}
+  .msg .meta{margin-top:5px;font-size:10px;opacity:.65}
+
+  @media(max-width:1260px){
+    .cards{grid-template-columns:repeat(3,minmax(0,1fr))}
+    .app-header{grid-template-columns:auto 1fr auto;grid-template-areas:"brand nav status"}
+  }
+  @media(max-width:980px){
+    .app-header{grid-template-columns:1fr auto;grid-template-areas:"brand status" "nav nav";gap:10px}
+    .quick-nav{justify-content:flex-start;overflow-x:auto;padding-top:2px;border-top:1px solid rgba(81,69,57,.08)}
+    .quick-nav a{min-height:36px}
+    .two,.two.activity-row{grid-template-columns:1fr}
+  }
+  @media(max-width:680px){
+    .page-shell{padding:8px}
+    .app-header{top:6px;margin-bottom:16px;padding:11px;border-radius:19px}
+    .brand-mark{width:40px;height:40px;border-radius:13px;font-size:19px}
+    .brand-copy .eyebrow{font-size:9px}
+    h1{font-size:20px}
+    .system-state{min-height:40px;padding:0 10px}
+    .state-copy b{display:none}
+    #upd{max-width:122px;overflow:hidden;text-overflow:ellipsis;font-size:11px}
+    .quick-nav{gap:2px}
+    .quick-nav a{padding:0 10px;font-size:12px}
+    .dashboard{gap:12px}
+    .cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+    .card{min-height:116px;padding:14px}
+    .card::before{left:14px}
+    .card .k{font-size:12px}
+    .card .v{padding-top:13px;font-size:25px}
+    .card .s{font-size:11px}
+    .panel{padding:15px;border-radius:19px;scroll-margin-top:142px}
+    .section-heading{align-items:flex-start;flex-direction:column;gap:8px}
+    .section-heading.compact{margin-bottom:14px}
+    .section-heading h2{font-size:24px}
+    .section-heading.compact h2{font-size:21px}
+    .panel-note{display:none}
+    .chart{height:166px}
+    th{padding:10px 11px}
+    td{padding:11px}
+    .tk-head{padding:12px 42px 12px 12px}
+    .tk-head > .muted:last-of-type{width:100%;margin-left:0!important}
+    .tk-body{padding:12px}
+    .tk-msg{max-width:94%}
+    .tk-act textarea{min-width:100%;width:100%}
+    .tk-act button{flex:1}
+    .overlay{align-items:flex-end;padding:0}
+    .modal{width:100%;height:min(92dvh,760px);border-width:1px 0 0;border-radius:24px 24px 0 0}
+    .modal-head{min-height:64px;padding:10px 10px 10px 16px}
+    .modal-head h3{font-size:18px}
+    .modal-body{flex-direction:column}
+    .chat-list{width:100%;max-height:210px;flex:none;border-right:0;border-bottom:1px solid var(--line)}
+    .messages{padding:14px}
+  }
+  @media(max-width:390px){
+    .cards{grid-template-columns:1fr 1fr}
+    .card{min-height:110px;padding:12px}
+    .card .v{font-size:23px}
+    .card .s{line-height:1.3}
+    .system-state{padding:0 9px}
+    #upd{max-width:88px}
+  }
+  @media(prefers-reduced-motion:reduce){
+    *,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+  }
+</style>
+</head>
+<body>
+<div class="page-shell">
+  <header class="app-header glass-panel">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">C</span>
+      <div class="brand-copy">
+        <span class="eyebrow">Управление сервисом</span>
+        <h1>Clop ai</h1>
+      </div>
+    </div>
+
+    <nav class="quick-nav" aria-label="Разделы панели">
+      <a href="#overview">Обзор</a>
+      <a href="#support">Поддержка</a>
+      <a href="#users-section">Пользователи</a>
+      <a href="#activity">Активность</a>
+    </nav>
+
+    <div class="system-state" aria-label="Состояние данных">
+      <span class="dot" aria-hidden="true"></span>
+      <span class="state-copy">
+        <b>Сервис на связи</b>
+        <span class="muted" id="upd" aria-live="polite">загрузка…</span>
+      </span>
+    </div>
+  </header>
+
+  <main class="dashboard">
+    <section class="overview" id="overview" aria-labelledby="overview-title">
+      <div class="section-heading">
+        <div>
+          <span class="section-kicker">Сводка</span>
+          <h2 id="overview-title">Состояние сегодня</h2>
+          <p>Пользователи, нагрузка и качество ответов в одном экране.</p>
+        </div>
+        <span class="panel-note">данные обновляются автоматически</span>
+      </div>
+      <div class="grid cards" id="cards"></div>
+    </section>
+
+    <div class="two">
+      <section class="panel" aria-labelledby="usage-title">
+        <div class="section-heading compact">
+          <div>
+            <span class="section-kicker">Нагрузка</span>
+            <h2 id="usage-title">Токены по дням</h2>
+            <p>Последние 14 дней</p>
+          </div>
+        </div>
+        <div class="chart-scroll">
+          <div class="chart" id="chart"></div>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="models-title">
+        <div class="section-heading compact">
+          <div>
+            <span class="section-kicker">Распределение</span>
+            <h2 id="models-title">Модели</h2>
+            <p>Запросы и расход токенов</p>
+          </div>
+        </div>
+        <div class="table-scroll" tabindex="0" role="region" aria-label="Статистика моделей">
+          <table id="models"></table>
+        </div>
+      </section>
+    </div>
+
+    <section class="panel" id="support" aria-labelledby="support-title">
+      <div class="section-heading compact">
+        <div>
+          <span class="section-kicker">Очередь оператора</span>
+          <h2 id="support-title">Поддержка</h2>
+          <p>Ответы, тарифы и ограничения пользователей</p>
+        </div>
+        <span class="section-count muted" id="tcount" aria-live="polite"></span>
+      </div>
+      <div id="tickets"></div>
+    </section>
+
+    <section class="panel" id="users-section" aria-labelledby="users-title">
+      <div class="section-heading compact">
+        <div>
+          <span class="section-kicker">Аудитория</span>
+          <h2 id="users-title">Пользователи</h2>
+          <p>Нажмите на строку, чтобы открыть метаданные чатов.</p>
+        </div>
+        <span class="panel-note">таблицу можно прокручивать по горизонтали</span>
+      </div>
+      <div class="table-scroll" tabindex="0" role="region" aria-label="Пользователи и лимиты">
+        <table id="users"></table>
+      </div>
+    </section>
+
+    <div class="two activity-row" id="activity">
+      <section class="panel" aria-labelledby="recent-title">
+        <div class="section-heading compact">
+          <div>
+            <span class="section-kicker">Поток</span>
+            <h2 id="recent-title">Последние запросы</h2>
+            <p>Модели, токены и время ответа</p>
+          </div>
+        </div>
+        <div class="table-scroll" tabindex="0" role="region" aria-label="Последние запросы">
+          <table id="recent"></table>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="payments-title">
+        <div class="section-heading compact">
+          <div>
+            <span class="section-kicker">Доход</span>
+            <h2 id="payments-title">Платежи <span aria-hidden="true">⭐️</span></h2>
+            <p>Последние покупки тарифов</p>
+          </div>
+        </div>
+        <div class="table-scroll" tabindex="0" role="region" aria-label="Последние платежи">
+          <table id="pays"></table>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<div class="overlay" id="overlay" role="dialog" aria-modal="true" aria-labelledby="modalTitle" onclick="if(event.target===this)closeUser()">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-heading">
+        <span>Карточка пользователя</span>
+        <h3 id="modalTitle">Пользователь</h3>
+      </div>
+      <button class="x" type="button" aria-label="Закрыть карточку пользователя" onclick="closeUser()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="chat-list" id="chatList"></div>
+      <div class="messages" id="messages"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const nf = new Intl.NumberFormat('ru-RU');
+const time = ts => new Date(ts).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+const cls = p => p >= 90 ? 'bad' : p >= 60 ? 'warn' : '';
+const barHtml = (p) => `<div class="row"><div class="bar ${cls(p)}"><i style="width:${Math.min(100,p)}%"></i></div><span class="pct">${p}%</span></div>`;
+
+function card(k, v, s) {
+  return `<div class="card"><div class="k">${k}</div><div class="v">${v}</div>${s?`<div class="s">${s}</div>`:''}</div>`;
+}
+
+async function tick() {
+  loadTickets();
+  let d;
+  try { d = await (await fetch('/api/stats')).json(); }
+  catch { document.getElementById('upd').textContent = 'нет связи с сервером'; return; }
+
+  document.getElementById('upd').textContent = 'обновлено ' + new Date(d.now).toLocaleTimeString('ru-RU');
+
+  const t = d.totals;
+  document.getElementById('cards').innerHTML = [
+    card('Пользователи', nf.format(t.users), `активны за сутки: ${t.activeToday}`),
+    card('Платящие', Object.values(t.byPlan).reduce((a,b)=>a+b,0), Object.entries(t.byPlan).map(([k,v])=>`${k}:${v}`).join(' · ') + ` · ${nf.format(t.starsTotal)} ⭐️`),
+    card('Запросы за сутки', nf.format(t.requestsToday), `всего: ${nf.format(t.requestsTotal)}`),
+    card('Токены за сутки', nf.format(t.tokensToday), `за неделю: ${nf.format(t.tokensWeek)}`),
+    card('Токены всего', nf.format(t.tokensTotal), `≈ $${t.costUsd.toFixed(2)}`),
+    card('Ошибки', nf.format(t.errors), 'неуспешных ответов'),
+  ].join('');
+
+  const max = Math.max(1, ...d.days.map(x => x.tokens));
+  document.getElementById('chart').innerHTML = d.days.map(x =>
+    `<div class="col" title="${escapeHtml(x.label)}: ${nf.format(x.tokens)} токенов, ${x.requests} запр.">
+       <div class="b" style="height:${Math.round((x.tokens / max) * 118)}px"></div>
+       <div class="l">${escapeHtml(x.label)}</div>
+     </div>`).join('');
+
+  document.getElementById('models').innerHTML =
+    '<tr><th>Модель</th><th>Запросы</th><th>Токены</th></tr>' +
+    d.models.map(m => `<tr><td>${escapeHtml(m.title)}</td><td>${nf.format(m.requests)}</td><td>${nf.format(m.tokens)}</td></tr>`).join('');
+
+  document.getElementById('users').innerHTML =
+    '<tr><th>Пользователь</th><th>Тариф</th><th>Модель</th><th>Claude 5ч</th><th>Claude нед.</th><th>GPT 5ч</th><th>GPT нед.</th><th>Kimi 5ч</th><th>Kimi нед.</th><th>Чаты</th><th>Запросы</th><th>Токены</th><th>Активность</th></tr>' +
+    (d.users.length ? d.users.map(u => {
+      const safeId = String(u.id).replace(/[^A-Za-z0-9_-]/g, '');
+      return `
+      <tr onclick="openUser('${safeId}')">
+        <td><b>${escapeHtml(u.name)}</b> <span class="muted">${escapeHtml(u.username||('id '+u.id))}</span></td>
+        <td><span class="tag ${escapeHtml(u.plan)}">${escapeHtml(u.plan.toUpperCase())}</span>${u.plan!=='free'&&u.proUntil?`<div class="muted">до ${time(u.proUntil)}</div>`:''}</td>
+        <td>${escapeHtml(u.model)}</td>
+        <td>${barHtml(u.claude.short.percent)}</td>
+        <td>${barHtml(u.claude.long.percent)}</td>
+        <td>${barHtml(u.gpt.short.percent)}</td>
+        <td>${barHtml(u.gpt.long.percent)}</td>
+        <td>${barHtml(u.kimi.short.percent)}</td>
+        <td>${barHtml(u.kimi.long.percent)}</td>
+        <td>${u.chats}${u.deletedChats?` <span class="muted">(+${u.deletedChats} удал.)</span>`:''} <span class="muted">/ ${u.messages} сообщ.</span></td>
+        <td>${nf.format(u.requests)}${u.errors?` <span class="muted">(${u.errors} ош.)</span>`:''}</td>
+        <td>${nf.format(u.tokens)}</td>
+        <td class="muted">${time(u.lastSeen)}</td>
+      </tr>`;
+    }).join('') : '<tr><td colspan="13" class="empty">Пока нет пользователей — напишите боту в Telegram.</td></tr>');
+
+  document.getElementById('recent').innerHTML =
+    '<tr><th>Время</th><th>Пользователь</th><th>Модель</th><th>Токены (в лимит)</th><th>Время ответа</th></tr>' +
+    (d.recent.length ? d.recent.map(e => `
+      <tr><td class="muted">${time(e.ts)}</td><td>${escapeHtml(e.userName)}</td><td>${escapeHtml(e.model)}</td>
+      <td><b>${nf.format(e.total)}</b> <span class="muted">(${nf.format(e.input)}→${nf.format(e.output)}, кэш ${nf.format(e.cacheRead||0)})</span></td>
+      <td class="muted">${(e.durationMs/1000).toFixed(1)} с</td></tr>`).join('')
+      : '<tr><td colspan="5" class="empty">Запросов ещё не было.</td></tr>');
+
+  document.getElementById('pays').innerHTML =
+    '<tr><th>Время</th><th>Пользователь</th><th>Звёзды</th></tr>' +
+    (d.payments.length ? d.payments.map(p => `<tr><td class="muted">${time(p.ts)}</td><td>${escapeHtml(p.userName)}</td><td>${p.stars} ⭐️</td></tr>`).join('')
+      : '<tr><td colspan="3" class="empty">Платежей пока нет.</td></tr>');
+}
+
+let currentUser = null;
+let currentChatId = null;
+
+/* Поддержка. Заявки приходят от агента, который сам не смог помочь; здесь
+   оператор отвечает, выдаёт подписку, закрывает заявку или ограничивает
+   доступ. Всё это меняет чужой доступ, поэтому раздел живёт за паролем. */
+let ticketsData = { tickets: [], plans: [] };
+let openTicket = null;
+
+async function loadTickets() {
+  try { ticketsData = await (await fetch('/api/tickets')).json(); } catch { return; }
+  renderTickets();
+}
+
+function renderTickets() {
+  const list = ticketsData.tickets || [];
+  const live = list.filter(t => t.status !== 'closed').length;
+  document.getElementById('tcount').textContent = live ? `— ${live} в работе` : '— всё закрыто';
+  document.getElementById('tickets').innerHTML = list.length
+    ? list.map(renderTicket).join('')
+    : '<div class="muted">Заявок пока нет.</div>';
+}
+
+function renderTicket(t) {
+  const st = t.status === 'closed' ? 'closed' : t.status === 'answered' ? 'answered' : 'open';
+  const stName = { open: 'в работе', answered: 'отвечено', closed: 'закрыта' }[st];
+  const plans = (ticketsData.plans || []).filter(p => p.key !== 'free')
+    .map(p => `<option value="${p.key}">${escapeHtml(p.title)}</option>`).join('');
+  return `
+  <div class="tk ${st === 'closed' ? 'closed' : ''} ${openTicket === t.id ? 'on' : ''}" id="tk${t.id}">
+    <div class="tk-head" onclick="toggleTicket(${t.id})">
+      <b>№${t.id} — ${escapeHtml(t.subject)}</b>
+      <span class="tag ${st}">${stName}</span>
+      <span class="muted">${escapeHtml(t.name)}${t.username ? ' @' + escapeHtml(t.username) : ''} · ${escapeHtml(t.plan)}</span>
+      ${t.banned ? '<span class="tag ban">бан</span>' : ''}
+      ${t.muted ? '<span class="tag mute">мут</span>' : ''}
+      <span class="muted" style="margin-left:auto">${time(t.updated)}</span>
+    </div>
+    <div class="tk-body">
+      ${t.messages.map(m => `<div class="tk-msg ${m.who}"><span class="who">${m.who === 'admin' ? 'оператор' : 'пользователь'} · ${time(m.ts)}</span>${escapeHtml(m.text)}</div>`).join('')}
+      <div class="tk-act">
+        <textarea id="rep${t.id}" placeholder="Ответ пользователю — придёт ему в бота"></textarea>
+        <button class="go" onclick="replyTicket(${t.id})">Ответить</button>
+        <button onclick="closeTicket(${t.id})">Закрыть заявку</button>
+      </div>
+      <div class="tk-sub">
+        Выдать тариф: <select id="pl${t.id}">${plans}</select>
+        <input id="dy${t.id}" type="number" value="30" min="1" max="400" title="дней">
+        <button class="go" onclick="grant(${t.id})">Выдать</button>
+      </div>
+      <div class="tk-sub">
+        Ограничить: <input id="mn${t.id}" type="number" value="60" min="1" title="минут"> мин
+        <button class="warn" onclick="restrict(${t.id},'mute')">Мут (только модели)</button>
+        <button class="bad" onclick="restrict(${t.id},'ban')">Бан (весь сервис)</button>
+        <button onclick="restrict(${t.id},'mute',true)">Снять мут</button>
+        <button onclick="restrict(${t.id},'ban',true)">Снять бан</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function toggleTicket(id) {
+  openTicket = openTicket === id ? null : id;
+  renderTickets();
+}
+
+const ticketById = (id) => (ticketsData.tickets || []).find(t => t.id === id);
+
+async function post(url, body) {
+  const r = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  return r.json().catch(() => ({ ok: false, error: 'сервер не ответил' }));
+}
+
+async function replyTicket(id) {
+  const el = document.getElementById('rep' + id);
+  const text = el.value.trim();
+  if (!text) return;
+  el.disabled = true;
+  const r = await post('/api/ticket/reply', { id, text });
+  el.disabled = false;
+  if (!r.ok) return alert('Не отправилось: ' + (r.error || ''));
+  el.value = '';
+  await loadTickets();
+}
+
+async function closeTicket(id) {
+  if (!confirm('Закрыть заявку №' + id + '?')) return;
+  const r = await post('/api/ticket/close', { id });
+  if (!r.ok) return alert('Не вышло: ' + (r.error || ''));
+  await loadTickets();
+}
+
+async function grant(id) {
+  const t = ticketById(id);
+  const plan = document.getElementById('pl' + id).value;
+  const days = Number(document.getElementById('dy' + id).value) || 30;
+  if (!confirm(`Выдать «${plan}» на ${days} дн. пользователю ${t.name}?`)) return;
+  const r = await post('/api/user/grant', { userId: t.userId, plan, days });
+  alert(r.ok ? `Выдано: ${r.plan} на ${r.days} дн.` : 'Не вышло: ' + (r.error || ''));
+  await loadTickets();
+}
+
+async function restrict(id, kind, release) {
+  const t = ticketById(id);
+  const minutes = Number(document.getElementById('mn' + id).value) || 60;
+  const word = kind === 'ban' ? 'бан' : 'мут';
+  if (!confirm(release ? `Снять ${word} с ${t.name}?` : `Выдать ${word} на ${minutes} мин пользователю ${t.name}?`)) return;
+  const r = await post('/api/user/restrict', { userId: t.userId, kind, minutes, release: Boolean(release), reason: 'решение оператора' });
+  if (!r.ok) alert('Не вышло: ' + (r.error || ''));
+  await loadTickets();
+}
+
+async function openUser(id) {
+  const overlay = document.getElementById('overlay');
+  overlay.classList.add('open');
+  document.getElementById('modalTitle').textContent = 'Загрузка…';
+  document.getElementById('chatList').innerHTML = '';
+  document.getElementById('messages').innerHTML = '';
+  try {
+    const r = await fetch('/api/user?id=' + encodeURIComponent(id));
+    if (!r.ok) throw new Error('не найден');
+    currentUser = await r.json();
+    currentChatId = currentUser.chats[0]?.id || null;
+    renderUser();
+  } catch (e) {
+    document.getElementById('modalTitle').textContent = 'Ошибка загрузки';
+  }
+}
+
+function closeUser() {
+  document.getElementById('overlay').classList.remove('open');
+  currentUser = null;
+  currentChatId = null;
+}
+
+function renderUser() {
+  const u = currentUser;
+  document.getElementById('modalTitle').textContent =
+    `${u.name} ${u.username||''} · ${u.plan.toUpperCase()} · ${u.model}`;
+
+  // Приватность: заголовки чатов и текст переписки на сайте не показываются
+  // вообще (сервер их и не присылает) — только метаданные.
+  document.getElementById('chatList').innerHTML = u.chats.length
+    ? u.chats.map(c => `
+      <div class="chat-item ${c.deleted?'del':''}">
+        <div class="t">Чат · ${escapeHtml(c.model)}</div>
+        <div class="m">${c.messagesCount} сообщ. · ${time(c.updatedAt)}${c.deleted?`<span class="del-badge">удалён ${time(c.deletedAt)}</span>`:''}</div>
+      </div>`).join('')
+    : '<div class="empty" style="padding:14px">Чатов нет.</div>';
+
+  renderMessages();
+}
+
+function renderMessages() {
+  const el = document.getElementById('messages');
+  el.innerHTML = '<div class="empty">🔒 Просмотр переписки пользователей на сайте отключён — доступны только счётчики и метаданные.</div>';
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeUser(); });
+
+tick();
+setInterval(tick, 5000);
+</script>
+</body>
+</html>

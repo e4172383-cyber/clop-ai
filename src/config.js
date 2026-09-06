@@ -1,0 +1,389 @@
+import path from 'node:path';
+import fs from 'node:fs';
+import os from 'node:os';
+import { fileURLToPath } from 'node:url';
+import { parseTokenLimits } from './token-limits.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+export const ROOT = path.join(__dirname, '..');
+export const DATA_DIR = process.env.CLOP_DATA_DIR || path.join(ROOT, 'data');
+export const SANDBOX_DIR = path.join(DATA_DIR, 'sandbox');
+
+loadDotEnv(path.join(ROOT, '.env'));
+
+function loadDotEnv(file) {
+  try {
+    for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
+      const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
+      if (!m) continue;
+      let v = m[2].trim();
+      if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1);
+      if (!process.env[m[1]]) process.env[m[1]] = v;
+    }
+  } catch {}
+}
+
+export const BOT_NAME = 'Clop ai';
+export const WEB_PORT = Number(process.env.PORT || process.env.WEB_PORT || 8787);
+export const WEB_HOST = process.env.WEB_HOST || '127.0.0.1';
+export const ADMIN_IDS = String(process.env.ADMIN_IDS || '').split(',').map((s) => s.trim()).filter(Boolean);
+
+// Акция: всем — Pro бесплатно до этого момента (включая новых пользователей,
+// зашедших в бота, пока акция идёт)
+export const PROMO_PRO_UNTIL = new Date(2026, 7, 29, 1, 0, 0).getTime(); // 29.08.2026 01:00
+
+// Акция: Opus 5 временно открыт и для бесплатного тарифа (лимиты при этом
+// расходуются как обычно — скидки на токены акция не даёт)
+export const OPUS_FREE_PROMO_UNTIL = new Date(2026, 7, 29, 18, 0, 0).getTime(); // 29.08.2026 18:00
+
+export const MINUTE = 60_000;
+export const HOUR = 60 * MINUTE;
+export const DAY = 24 * HOUR;
+
+// Скользящие окна лимитов
+export const WINDOWS = {
+  short: { key: 'short', title: '5 часов', shortTitle: '5ч', ms: 5 * HOUR },
+  long: { key: 'long', title: '7 дней', shortTitle: 'неделя', ms: 7 * DAY },
+};
+
+// У каждого движка — отдельный пул лимитов (свой счётчик на 5ч и на неделю).
+// Бот, сайт и личный API совместно списывают один и тот же пул пользователя.
+// Модель списывает только против пула
+// своего provider (см. MODELS[key].provider ниже и usedIn в limits.js).
+export const PROVIDERS = {
+  claude: { key: 'claude', title: 'Claude', emoji: '🟣' },
+  gpt: { key: 'gpt', title: 'GPT', emoji: '🟢' },
+  kimi: { key: 'kimi', title: 'Kimi', emoji: '🌙' },
+};
+
+export const MODELS = {
+  'kimi-k2-6': {
+    key: 'kimi-k2-6', provider: 'kimi', runtime: 'kimi',
+    cli: 'kimi-code/kimi-for-coding', kimiEffort: 'off',
+    title: 'Kimi K2.6', short: 'Kimi K2.6',
+    desc: 'Kimi без силы мышления — доступна всем',
+    plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'],
+    recommended: false, supportsEffort: false, contextWindow: 262_144,
+  },
+  'kimi-k2-7-code': {
+    key: 'kimi-k2-7-code', provider: 'kimi', runtime: 'kimi',
+    cli: 'kimi-code/kimi-for-coding', kimiEffort: 'on',
+    title: 'Kimi K2.7 Code', short: 'Kimi 2.7 Code',
+    desc: 'Кодовая Kimi с мышлением — от тарифа GO',
+    plans: ['go', 'pro', 'max', 'max20', 'coderplus'],
+    recommended: false, supportsEffort: false, contextWindow: 262_144,
+  },
+  'kimi-k3': {
+    key: 'kimi-k3', provider: 'kimi', runtime: 'kimi',
+    cli: 'kimi-code/k3', kimiEffort: 'high',
+    title: 'Kimi K3', short: 'Kimi K3',
+    desc: 'Флагманская Kimi — от тарифа GO',
+    plans: ['go', 'pro', 'max', 'max20', 'coderplus'],
+    recommended: false, supportsEffort: false, contextWindow: 1_048_576,
+  },
+  'kimi-k3-swarm': {
+    key: 'kimi-k3-swarm', provider: 'kimi', runtime: 'kimi',
+    cli: 'kimi-code/k3', kimiEffort: 'max',
+    title: 'Kimi K3 Swarm', short: 'K3 Swarm',
+    desc: 'Kimi K3 с максимальным мышлением — от тарифа Pro',
+    plans: ['pro', 'max', 'max20', 'coderplus'],
+    recommended: false, supportsEffort: false, heavy: true,
+    heavyNote: 'Максимальное мышление расходует лимит заметно быстрее',
+    contextWindow: 1_048_576,
+  },
+  'gpt-astra': {
+    key: 'gpt-astra', provider: 'gpt', cli: 'gpt-6-astra',
+    title: 'GPT-6 Astra', short: 'Astra 6',
+    effortOptions: ['low', 'medium', 'high'],
+    desc: 'Новое поколение GPT — доступна на тарифе GO и выше',
+    plans: ['go', 'pro', 'max', 'max20', 'coderplus'],
+    recommended: true, supportsEffort: true,
+  },
+  // --- GPT (OpenAI, через Codex CLI на квоте ChatGPT-подписки) ---
+  'gpt-5-4-mini': {
+    key: 'gpt-5-4-mini', provider: 'gpt', cli: 'gpt-5.4-mini',
+    title: 'GPT 5.4 Mini', short: '5.4 Mini',
+    desc: 'Быстрая компактная GPT-модель — доступна всем',
+    plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'],
+    recommended: true, supportsEffort: true,
+    effortOptions: ['low', 'medium', 'high'], contextWindow: 400_000,
+  },
+  'gpt-5-5': {
+    key: 'gpt-5-5', provider: 'gpt', cli: 'gpt-5.5',
+    title: 'GPT 5.5', short: 'GPT 5.5',
+    desc: 'Мощная универсальная GPT-модель — от тарифа GO',
+    plans: ['go', 'pro', 'max', 'max20', 'coderplus'],
+    recommended: false, supportsEffort: true,
+    effortOptions: ['low', 'medium', 'high'], contextWindow: 400_000,
+  },
+  'gpt-luna': {
+    key: 'gpt-luna',
+    provider: 'gpt',
+    cli: 'gpt-5.6-luna',
+    title: 'GPT 5.6 Луна',
+    short: 'Луна',
+    desc: 'Быстрая GPT-модель, доступна всем — от бесплатного тарифа',
+    plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'],
+    recommended: false,
+    supportsEffort: false,
+    contextWindow: 400_000,
+  },
+  'gpt-spark': {
+    key: 'gpt-spark',
+    provider: 'gpt',
+    cli: 'gpt-5.3-codex-spark',
+    title: 'Codex 5.3 Спарк',
+    short: 'Спарк',
+    desc: 'GPT-модель для кода, доступна всем — от бесплатного тарифа',
+    plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'],
+    recommended: false,
+    supportsEffort: false,
+    contextWindow: 400_000,
+  },
+  'gpt-terra': {
+    key: 'gpt-terra',
+    provider: 'gpt',
+    cli: 'gpt-5.6-terra',
+    title: 'GPT 5.6 Терра',
+    short: 'Терра',
+    desc: 'Более мощная GPT-модель — от тарифа Pro',
+    plans: ['pro', 'max', 'max20', 'coderplus'],
+    recommended: false,
+    supportsEffort: false,
+    contextWindow: 400_000,
+  },
+  'gpt-sol': {
+    key: 'gpt-sol',
+    provider: 'gpt',
+    cli: 'gpt-5.6-sol',
+    title: 'GPT 5.6 Соль',
+    short: 'Соль',
+    desc: 'Топовая GPT-модель — только на тарифах Max',
+    plans: ['max', 'max20', 'coderplus'],
+    recommended: false,
+    supportsEffort: false,
+    heavy: true,
+    heavyNote: 'Топовая модель — расходует лимит заметно быстрее остальных',
+    contextWindow: 400_000,
+  },
+};
+export const DEFAULT_MODEL = 'gpt-luna';
+
+// Сила мышления (output_config.effort у модели). "Ультра/max" не выдаётся
+// ни на одном тарифе — сознательно не включаем её сюда вообще.
+export const EFFORTS = {
+  low: { key: 'low', title: 'Low', short: 'Low', desc: 'Быстрые и короткие ответы, минимум раздумий — для простых вопросов' },
+  medium: { key: 'medium', title: 'Medium', short: 'Medium', desc: 'Баланс скорости и качества' },
+  high: { key: 'high', title: 'High', short: 'High', desc: 'Думает основательнее — для сложных вопросов и задач' },
+  xhigh: { key: 'xhigh', title: 'Extra High', short: 'X-High', desc: 'Самый тщательный разбор, дольше отвечает и больше расходует лимит' },
+};
+export const DEFAULT_EFFORT = 'low';
+
+// Точные квоты хранятся только в приватной переменной окружения.
+// Строгая проверка не позволяет запустить сервис с неполной матрицей.
+const TOKEN_LIMIT_PLAN_KEYS = ['free', 'go', 'pro', 'max', 'max20', 'coderplus'];
+const TOKEN_LIMITS = parseTokenLimits(process.env.TOKEN_LIMITS_JSON, {
+  plans: TOKEN_LIMIT_PLAN_KEYS,
+  providers: Object.keys(PROVIDERS),
+  windows: Object.keys(WINDOWS),
+});
+
+function limitsFor(planKey) {
+  const plan = TOKEN_LIMITS[planKey];
+  return Object.fromEntries(Object.entries(plan).map(([provider, limits]) => [
+    provider,
+    { ...limits },
+  ]));
+}
+// --- Акция: тариф GO бесплатно всем до 1 сентября 2026, 15:00 МСК ---
+// Одна точка правды — её читает planOf(), поэтому акция сама доходит и до
+// бота, и до сайта, и до облачного API: тариф нигде больше не вычисляется.
+export const FREE_GO_PLAN = 'go';
+export const FREE_GO_UNTIL = Date.UTC(2026, 8, 1, 12, 0, 0); // 15:00 МСК = 12:00 UTC
+export const freeGoActive = () => Date.now() < FREE_GO_UNTIL;
+
+// Публичный адрес сервиса — из него собираются ссылки на изданные сайты
+export const PUBLIC_URL = (process.env.PUBLIC_URL || 'https://clop-ai.onrender.com').replace(/\/+$/, '');
+
+export const MODEL_PROMO = {
+  models: ['gpt-astra'],
+  from: 0,
+  until: 0,
+  title: 'GPT-6 Astra доступна от тарифа GO',
+};
+export const initializeModelPromo = async () => MODEL_PROMO;
+export const modelPromoActive = () => false;
+export const modelInPromo = () => false;
+
+export const PLANS = {
+  free: {
+    key: 'free',
+    title: 'Бесплатный',
+    emoji: '🆓',
+    stars: 0,
+    days: 0,
+    limits: limitsFor('free'),
+    // на бесплатном тарифе доступен выбор между Low, Medium и High
+    effort: { locked: false, fixed: null, options: ['low', 'medium', 'high'] },
+    perks: ['GPT Луна и Спарк', 'Kimi K2.6 без мышления', 'Сколько угодно чатов', 'История переписки'],
+  },
+  go: {
+    key: 'go',
+    title: 'GO',
+    emoji: '⚡',
+    stars: 299,
+    days: 30,
+    limits: limitsFor('go'),
+    effort: { locked: false, fixed: null, options: ['low', 'medium', 'high', 'xhigh'] },
+    perks: [
+      'GPT-модели по тарифу, включая GPT-6 Astra',
+      'Kimi K2.7 Code и K3',
+      'Заметно больше лимита за 5 часов и в неделю, чем на бесплатном',
+      'Выбор силы мышления',
+      'Приоритетная обработка запросов',
+    ],
+  },
+  pro: {
+    key: 'pro',
+    title: 'Pro',
+    emoji: '💎',
+    stars: 499,
+    days: 30,
+    limits: limitsFor('pro'),
+    // выбор силы мышления, кроме "ультра" — она недоступна ни на одном тарифе
+    effort: { locked: false, fixed: null, options: ['low', 'medium', 'high', 'xhigh'] },
+    perks: [
+      'GPT-модели по тарифу, включая GPT-6 Astra',
+      'Все Kimi, включая K3 Swarm',
+      'Значительно больше лимита за 5 часов',
+      'Значительно больше недельного лимита',
+      'Выбор силы мышления',
+      'Приоритетная обработка запросов',
+    ],
+  },
+  max: {
+    key: 'max',
+    title: 'Max 5x',
+    emoji: '🚀',
+    stars: 1499,
+    days: 30,
+    limits: limitsFor('max'),
+    effort: { locked: false, fixed: null, options: ['low', 'medium', 'high', 'xhigh'] },
+    perks: [
+      'GPT-модели по тарифу, включая GPT-6 Astra',
+      'Все Kimi, включая K3 Swarm',
+      'Увеличенные лимиты для длительных задач',
+      'Выбор силы мышления',
+      'Максимальный приоритет обработки запросов',
+    ],
+  },
+  max20: {
+    key: 'max20',
+    title: 'Max 20x',
+    emoji: '👑',
+    stars: 3999,
+    days: 30,
+    limits: limitsFor('max20'),
+    effort: { locked: false, fixed: null, options: ['low', 'medium', 'high', 'xhigh'] },
+    perks: [
+      'GPT-модели по тарифу, включая GPT-6 Astra',
+      'Все Kimi, включая K3 Swarm',
+      'Увеличенные лимиты для длительных задач',
+      'Выбор силы мышления',
+      'Высший приоритет обработки запросов',
+    ],
+  },
+  coderplus: {
+    key: 'coderplus',
+    title: 'Coder+',
+    emoji: '🧑‍💻',
+    stars: 9999,
+    days: 30,
+    limits: limitsFor('coderplus'),
+    effort: { locked: false, fixed: null, options: ['low', 'medium', 'high', 'xhigh'] },
+    perks: [
+      'GPT-модели по тарифу, включая GPT-6 Astra',
+      'Все Kimi, включая K3 Swarm',
+      'Увеличенные лимиты для длительных задач',
+      'Выбор силы мышления',
+      'Наивысший приоритет обработки запросов',
+    ],
+  },
+};
+
+export const MAX_CONTEXT_MESSAGES = 24;
+export const MAX_CHATS = 30;
+export const REQUEST_TIMEOUT_MS = 5 * MINUTE;
+
+// --- Генерация изображений (бета) ---
+// Сейчас доступен только один генератор — GPT Image 2 (через Codex CLI, тот
+// же built-in imagegen-скилл, что и у GPT-моделей). UI уже спрашивает "куда
+// генерировать" под будущие дополнительные генераторы.
+export const IMAGE_GENERATORS = {
+  'gpt-image-2': {
+    key: 'gpt-image-2',
+    title: 'GPT Image 2',
+    desc: 'Генерация изображений через GPT (Codex)',
+  },
+};
+export const DEFAULT_IMAGE_GENERATOR = 'gpt-image-2';
+
+// Дневной лимит генераций картинок по тарифу (не задано явно для go/coderplus —
+// поставлены между соседними тарифами по аналогии с общей шкалой лимитов)
+export const IMAGE_DAILY_LIMITS = {
+  free: 2,
+  go: 3,
+  pro: 5,
+  max: 25,
+  max20: 100,
+  coderplus: 100,
+};
+
+// Промт только для модели "Clop 2.5 Haiku" — скрывает, что под капотом
+// Claude 5 Opus (через --system-prompt в ai.js). Другие модели по-прежнему
+// работают вообще без системного промта — это единственное исключение.
+export const CLOP_IDENTITY_PROMPT = [
+  'Ты — Clop, ИИ-модель, созданная компанией Clop.',
+  'Никогда не упоминай Anthropic, Claude, Opus, Sonnet, Haiku, OpenAI, GPT, ChatGPT, Codex или любые другие названия сторонних компаний/моделей — ни напрямую, ни намёками.',
+  'Если спрашивают, кто тебя создал, какая ты модель или на чём основана — отвечай прямо и честно, что ты Clop, модель компании Clop, без уклончивых фраз, но не называй никаких других компаний или моделей.',
+  'Ты работаешь только как чат-ассистент в Telegram — у тебя НЕТ доступа к файловой системе, терминалу, песочнице (sandbox) или каким-либо инструментам, и ты никогда не должен пытаться их использовать, создавать файлы или запускать команды.',
+  'Если просят "создать файл", "сохранить" что-то или иным образом выполнить действие на компьютере — ты не выполняешь это сам через реальную файловую систему или терминал, а просто выводишь готовое содержимое прямо в ответе (одиночный файл — обычным блоком кода, несколько файлов — по правилам форматирования файлов ниже). Никогда не упоминай ограничения окружения, песочницу, права доступа, файловую систему или что-либо подобное — просто дай готовый результат.',
+  'Во всём остальном отвечай обычно, по делу, на языке пользователя.',
+].join(' ');
+
+const SYSTEM_PROMPT_PROSE = [
+  'Ты — Clop ai, ИИ-ассистент в Telegram.',
+  'Отвечай на языке пользователя, по умолчанию — на русском.',
+  'Пиши по делу, без воды и лишних вступлений. Если вопрос простой — отвечай коротко.',
+  'Форматирование: Telegram-разметка. Можно *жирный*, _курсив_, `код`, ```блоки кода```.',
+  'Нельзя: заголовки решёткой (#), таблицы, вложенные списки, HTML.',
+  'Списки — обычные строки с «•» или «1.».',
+  'Не упоминай своё окружение, инструменты, файлы или терминал — ты просто чат-ассистент.',
+  'Не выполняй никаких действий на компьютере, только отвечай текстом.',
+  'Если спрашивают, какая ты модель или на чём основан бот — отвечай прямо и честно, без уклончивых фраз вроде «не могу раскрыть версию»: называй настоящее имя модели, которое тебе передано ниже.',
+].join(' ');
+
+export const FILES_INSTRUCTION = `Если просят сайт, приложение, скрипт из нескольких файлов или любой проект из 2+ файлов — не выводи код обычными блоками. Заверни каждый файл в маркеры ровно такого вида, каждый маркер на отдельной строке:
+%%%FILE относительный/путь/файл.ext%%%
+(содержимое файла целиком, как есть, без \`\`\` вокруг)
+%%%ENDFILE%%%
+Несколько файлов идут подряд, каждый в своих маркерах. До и после — краткое (3-6 строк) описание обычным текстом на русском: что это, как запустить/открыть. Кода вне маркеров быть не должно — иначе он продублируется в чат помимо архива. Если файл один и небольшой (например, просто фрагмент или ответ на "покажи код функции X") — маркеры не нужны, обычный \`\`\`код\`\`\` блок.
+Важно: у ответа есть предел длины. Пиши компактно — без длинных комментариев и пояснений внутри кода, минимально достаточную рабочую версию. Лучше меньше файлов, но каждый обязательно дописан и закрыт %%%ENDFILE%%%, чем большой проект, обрезанный на середине файла. Если задача явно большая — сократи фичи, но не обрывай файл.`;
+
+export const SITE_INSTRUCTION = `Если просят сайт или страницу — отдавай его файлами в маркерах %%%FILE%%%, точка входа обязательно index.html, пути внутри только относительные. Сервер сам опубликует такой сайт и пришлёт постоянную ссылку — не выдумывай ссылку сам и не обещай хостинг на стороне. Если сайт совсем маленький, можно обойтись одним блоком кода с целым HTML-документом. Страница открывается в песочнице браузера: localStorage, sessionStorage и cookie там недоступны — храни состояние в обычных переменных.`;
+
+export const SYSTEM_PROMPT = `${SYSTEM_PROMPT_PROSE}\n\n${FILES_INSTRUCTION}`;
+
+export function claudeBin() {
+  if (process.env.CLAUDE_BIN) return process.env.CLAUDE_BIN;
+  const candidates = process.platform === 'win32'
+    ? [path.join(os.homedir(), '.local', 'bin', 'claude.exe'), path.join(os.homedir(), '.local', 'bin', 'claude.cmd')]
+    : [path.join(os.homedir(), '.local', 'bin', 'claude')];
+  for (const c of candidates) { if (fs.existsSync(c)) return c; }
+  return process.platform === 'win32' ? 'claude.exe' : 'claude';
+}
+
+export function ensureDirs() {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.mkdirSync(SANDBOX_DIR, { recursive: true });
+}

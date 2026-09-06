@@ -1,0 +1,22 @@
+{
+  "name": "clop-ai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Clop ai - Telegram AI bot (Claude 5) + local usage dashboard",
+  "type": "module",
+  "main": "index.js",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "bot": "node index.js --no-web",
+    "web": "node index.js --no-bot",
+    "relay": "node relay/agent.mjs",
+    "test": "node --test tests/*.test.js"
+  },
+  "dependencies": {
+    "@moonshot-ai/kimi-code": "^0.41.0",
+    "@upstash/redis": "^1.38.3"
+  }
+}

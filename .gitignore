@@ -1,0 +1,8 @@
+node_modules/
+.kimi-main-login/
+data/
+.env
+bot.log
+site/config.php
+relay/local.json
+.tmp/

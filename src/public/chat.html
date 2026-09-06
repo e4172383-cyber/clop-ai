@@ -1,0 +1,2683 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clop ai — чат</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#f2eee8">
+<meta name="mobile-web-app-capable" content="yes">
+<!-- iOS ставит приложение только по своим тегам, manifest он игнорирует -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Clop ai">
+<link rel="apple-touch-icon" href="/icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+<style>
+  :root{
+    --bg:#080b12;
+    --text:#eef3fa;
+    --muted:#93a2b8;
+    --accent:#e58a63;
+    --accent2:#7aa2f7;
+    --bad:#ff7b72;
+    --ok:#3fb950;
+
+    /* Стекло: полупрозрачная заливка + внутренняя световая кромка сверху,
+       как блик на краю толстого стекла */
+    --glass:rgba(255,255,255,.055);
+    --glass-strong:rgba(255,255,255,.085);
+    --glass-line:rgba(255,255,255,.11);
+    --glass-glow:inset 0 1px 0 rgba(255,255,255,.16), inset 0 -1px 0 rgba(255,255,255,.03);
+    --blur:blur(24px) saturate(170%);
+
+    font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    background:var(--bg);color:var(--text);
+    display:flex;flex-direction:column;overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--accent2)}
+  button{font-family:inherit;cursor:pointer}
+
+  /* --- Живой фон: медленно дрейфующие цветные пятна под стеклом --- */
+  .bg{position:fixed;inset:0;z-index:-2;overflow:hidden;background:
+    radial-gradient(120% 90% at 50% 0%, #121a2b 0%, #080b12 60%)}
+  .blob{position:absolute;border-radius:50%;filter:blur(90px);opacity:.5;will-change:transform}
+  .blob.a{width:52vw;height:52vw;background:#d9775788;top:-14vw;left:-8vw;animation:drift1 26s ease-in-out infinite}
+  .blob.b{width:46vw;height:46vw;background:#5b7fe088;bottom:-16vw;right:-10vw;animation:drift2 32s ease-in-out infinite}
+  .blob.c{width:38vw;height:38vw;background:#8a5be066;top:30%;left:45%;animation:drift3 38s ease-in-out infinite}
+  @keyframes drift1{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(9vw,7vh) scale(1.14)}}
+  @keyframes drift2{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-11vw,-6vh) scale(1.1)}}
+  @keyframes drift3{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(-8vw,6vh) scale(1.16)}66%{transform:translate(6vw,-8vh) scale(.92)}}
+  /* Мелкое зерно поверх — убирает «пластиковость» градиентов */
+  .grain{position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:.035;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E")}
+
+  /* --- Заставка загрузки ---
+     Осенний закат: дождь стекает по «стеклу» экрана, вся вода собирается
+     в кольцо, кольцо разрывается на три капли — они прыгают, пока идёт
+     загрузка, — и в конце вода складывается в улыбку.
+     Вода — поле метаболов в низком разрешении (см. loaderReady в скрипте):
+     капли складываются по альфе, из градиента альфы берётся нормаль
+     поверхности, а по нормали — преломление фона и блик. */
+  #loader{
+    position:fixed;inset:0;z-index:100;overflow:hidden;
+    /* Фон под канвасом повторяет верх закатного градиента: пока канвас
+       не отрисовал первый кадр, страница не мигает тёмным */
+    background:linear-gradient(180deg,#4c5b8e 0%,#8d6f92 30%,#d98f63 56%,#f3b374 78%,#a95c40 100%);
+    transition:opacity .6s ease, transform .6s cubic-bezier(.2,.9,.25,1);
+  }
+  #loader.out{opacity:0;transform:scale(1.05);pointer-events:none}
+  #loader canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+  /* Поле воды считается в низком разрешении и растягивается на экран:
+     микроразмытие убирает лесенку, насыщенность добавляет «мокрости» */
+  /* Вода считается шейдером в полном разрешении устройства —
+     ни размытия, ни сглаживания поверх ей больше не нужно */
+  #lWater{image-rendering:auto}
+  .loader-text{
+    position:absolute;left:0;right:0;top:calc(50% + 112px);text-align:center;z-index:3;
+    font-size:13.5px;color:rgba(52,26,16,.66);letter-spacing:.4px;font-weight:500;
+    text-shadow:0 1px 10px rgba(255,220,180,.5);transition:color .45s ease;
+  }
+  #loader.done .loader-text{color:rgba(38,17,9,.92)}
+  /* Спонсоры проявляются последней сценой; надпись загрузки к этому моменту
+     уже не нужна и уходит */
+  #loader.sponsors-on .loader-text{opacity:0}
+  .sponsors{
+    position:absolute;inset:0;z-index:4;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:22px;
+    opacity:0;pointer-events:none;transition:opacity .55s ease;
+  }
+  #loader.sponsors-on .sponsors{opacity:1}
+  .sp-title{
+    font-size:11.5px;letter-spacing:2.8px;text-transform:uppercase;font-weight:600;
+    color:rgba(52,26,16,.6);text-shadow:0 1px 10px rgba(255,224,186,.6);
+  }
+  .sp-row{display:flex;align-items:center;justify-content:center;gap:42px;flex-wrap:wrap}
+  .sp{opacity:0;transform:translateY(16px) scale(.94)}
+  #loader.sponsors-on .sp{animation:spIn .75s cubic-bezier(.2,.9,.25,1) forwards}
+  #loader.sponsors-on .sp:nth-child(2){animation-delay:.15s}
+  #loader.sponsors-on .sp:nth-child(3){animation-delay:.3s}
+  @keyframes spIn{to{opacity:1;transform:none}}
+  .sp-name{
+    font-size:27px;font-weight:800;letter-spacing:.4px;color:rgba(46,21,11,.9);
+    text-shadow:0 2px 14px rgba(255,228,190,.75);
+  }
+  .sp-logo{
+    width:46px;height:46px;display:block;fill:rgba(46,21,11,.88);
+    filter:drop-shadow(0 2px 12px rgba(255,228,190,.75));
+  }
+  @media (max-width:640px){
+    .sp-row{gap:26px}
+    .sp-name{font-size:21px}
+    .sp-logo{width:37px;height:37px}
+  }
+  /* Режим без анимации: ни канвасов, ни движения — только надпись */
+  #loader.flat{display:flex;align-items:center;justify-content:center}
+  #loader.flat canvas{display:none}
+  #loader.flat .loader-text{position:static}
+  @media (prefers-reduced-motion:reduce){
+    #loader canvas{display:none}
+  }
+
+  /* --- Общая стеклянная поверхность ---
+     Толстое стекло собрано из четырёх слоёв:
+       1) подложка с размытием фона (backdrop-filter);
+       2) градиент заливки — свет падает сверху-слева;
+       3) ::after — преломляющая кромка: яркая на верхней грани и на нижней
+          правой, почти невидимая по бокам (так ведёт себя фаска стекла);
+       4) ::before — медленный блик, скользящий по поверхности. */
+  .glass{
+    position:relative;isolation:isolate;
+    background:linear-gradient(150deg,
+      rgba(255,255,255,.085) 0%, rgba(255,255,255,.026) 45%, rgba(255,255,255,.05) 100%);
+    -webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);
+    border:none;
+    box-shadow:
+      0 10px 38px rgba(0,0,0,.34),
+      0 2px 10px rgba(0,0,0,.18),
+      inset 0 -20px 44px -30px rgba(0,0,0,.55);
+  }
+  /* Кромка градиентом: обычный border одним цветом так не умеет — рисуем
+     рамку слоем и вырезаем середину маской */
+  .glass::after{
+    content:'';position:absolute;inset:0;border-radius:inherit;padding:1px;
+    background:linear-gradient(150deg,
+      rgba(255,255,255,.52) 0%,
+      rgba(255,255,255,.13) 22%,
+      rgba(255,255,255,.035) 48%,
+      rgba(255,255,255,.1) 74%,
+      rgba(255,255,255,.34) 100%);
+    -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite:xor;
+    mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite:exclude;
+    pointer-events:none;z-index:2;
+  }
+  /* Скользящий блик — отражение от источника света */
+  .glass::before{
+    content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:1;
+    background:linear-gradient(104deg,
+      transparent 38%, rgba(255,255,255,.06) 47%, rgba(255,255,255,.022) 53%, transparent 62%);
+    background-size:260% 100%;
+    animation:sheen 11s ease-in-out infinite;
+  }
+  @keyframes sheen{
+    0%,100%{background-position:170% 0}
+    50%{background-position:-70% 0}
+  }
+  /* Содержимое — поверх бликов */
+  .glass > *{position:relative;z-index:3}
+
+  /* --- Экран входа --- */
+  #login{flex:1;display:flex;align-items:center;justify-content:center;padding:24px}
+  .login-card{
+    border-radius:26px;padding:38px 34px;max-width:400px;width:100%;text-align:center;
+    animation:riseIn .7s cubic-bezier(.2,.9,.25,1) backwards;
+  }
+  .login-card h1{font-size:23px;margin:0 0 10px;letter-spacing:-.3px}
+  .login-card p{color:var(--muted);font-size:14px;line-height:1.6;margin:0 0 24px}
+  .tg-btn{
+    display:inline-flex;align-items:center;gap:9px;
+    background:linear-gradient(135deg,#37b3f0,#2185d0);
+    color:#fff;border:none;border-radius:14px;padding:13px 24px;
+    font-size:15px;font-weight:600;text-decoration:none;
+    box-shadow:0 8px 24px rgba(42,171,238,.32), var(--glass-glow);
+    transition:transform .25s cubic-bezier(.2,.9,.25,1), box-shadow .25s;
+  }
+  .tg-btn:hover{transform:translateY(-2px) scale(1.02);box-shadow:0 14px 34px rgba(42,171,238,.44), var(--glass-glow)}
+  .tg-btn:active{transform:translateY(0) scale(.99)}
+  .login-status{margin-top:18px;font-size:13px;color:var(--muted);min-height:18px}
+  .spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.14);border-top-color:var(--accent2);border-radius:50%;animation:spin .8s linear infinite;vertical-align:-2px;margin-right:7px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes riseIn{from{opacity:0;transform:translateY(22px) scale(.97)}to{opacity:1;transform:none}}
+
+  /* --- Каркас приложения --- */
+  /* position+z-index делают всё приложение ОДНИМ стек-контекстом на слое 1.
+     Без этого его стеклянные панели (backdrop-filter) создают собственные
+     контексты, и Chromium сортирует их выше фиксированного оверлея. */
+  #app{display:none;flex:1;height:100%;overflow:hidden;padding:14px;gap:14px;position:relative;z-index:1}
+
+  .sidebar{
+    width:252px;flex:none;border-radius:22px;display:flex;flex-direction:column;overflow:hidden;
+    animation:slideInLeft .6s cubic-bezier(.2,.9,.25,1) backwards;
+  }
+  @keyframes slideInLeft{from{opacity:0;transform:translateX(-18px)}to{opacity:1;transform:none}}
+  .sidebar-head{padding:16px 16px 12px;display:flex;align-items:center;justify-content:space-between}
+  .sidebar-head b{font-size:14px;letter-spacing:.2px}
+  #newChatBtn{
+    background:linear-gradient(135deg,var(--accent),#c9603c);color:#fff;border:none;
+    border-radius:11px;padding:7px 12px;font-size:12px;font-weight:600;
+    white-space:nowrap;flex:none;
+    box-shadow:0 4px 16px rgba(217,119,87,.3), var(--glass-glow);
+    transition:transform .22s cubic-bezier(.2,.9,.25,1), box-shadow .22s;
+  }
+  /* Заголовок панели не должен переносить кнопку на вторую строку */
+  .sidebar-head b{white-space:nowrap}
+  .sidebar-head{gap:8px}
+  #newChatBtn:hover{transform:translateY(-1px) scale(1.04);box-shadow:0 8px 22px rgba(217,119,87,.45), var(--glass-glow)}
+  #newChatBtn:active{transform:scale(.97)}
+
+  .chat-list{flex:1;overflow-y:auto;padding:0 10px 10px}
+  .chat-item{
+    position:relative;padding:11px 12px;border-radius:13px;margin-bottom:5px;cursor:pointer;
+    display:flex;align-items:center;gap:8px;border:1px solid transparent;
+    transition:background .25s, border-color .25s, transform .2s cubic-bezier(.2,.9,.25,1);
+    animation:fadeUp .45s cubic-bezier(.2,.9,.25,1) backwards;
+  }
+  .chat-item:hover{background:var(--glass);border-color:var(--glass-line);transform:translateX(3px)}
+  .chat-item.active{
+    background:var(--glass-strong);border-color:rgba(255,255,255,.16);
+    box-shadow:var(--glass-glow);
+  }
+  /* Тонкая светящаяся полоска у активного чата */
+  .chat-item.active::before{
+    content:'';position:absolute;left:0;top:22%;bottom:22%;width:3px;border-radius:0 3px 3px 0;
+    background:linear-gradient(180deg,var(--accent),var(--accent2));
+    box-shadow:0 0 12px rgba(229,138,99,.7);
+  }
+  .chat-item .t{flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .chat-item .del{opacity:0;color:var(--muted);font-size:12px;flex:none;transition:opacity .2s, color .2s, transform .2s}
+  .chat-item:hover .del{opacity:.75}
+  .chat-item .del:hover{color:var(--bad);transform:scale(1.18)}
+  .sidebar-foot{padding:9px 10px 11px;border-top:1px solid var(--glass-line)}
+  .side-nav{display:flex;flex-direction:column;gap:2px;margin-bottom:8px}
+  .side-nav button{
+    display:flex;align-items:center;gap:10px;width:100%;text-align:left;
+    background:none;border:1px solid transparent;color:var(--muted);
+    border-radius:11px;padding:9px 11px;font-size:13px;
+    transition:background .22s, color .22s, border-color .22s, transform .2s cubic-bezier(.2,.9,.25,1);
+  }
+  .side-nav button:hover{background:var(--glass);border-color:var(--glass-line);color:var(--text);transform:translateX(3px)}
+  .side-nav button svg{
+    width:16px;height:16px;flex:none;fill:none;stroke:currentColor;
+    stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;
+  }
+  .side-nav #logout:hover{color:var(--bad);border-color:rgba(255,123,114,.4);background:rgba(255,123,114,.07)}
+  .side-user{padding:5px 11px 0;font-size:12px;color:var(--muted);border-top:1px solid rgba(255,255,255,.05);padding-top:9px}
+
+  .main{
+    flex:1;display:flex;flex-direction:column;min-width:0;border-radius:22px;overflow:hidden;
+    animation:riseIn .6s cubic-bezier(.2,.9,.25,1) backwards;
+  }
+  header{
+    display:flex;align-items:center;gap:10px;padding:13px 18px;
+    border-bottom:1px solid var(--glass-line);
+    background:rgba(255,255,255,.03);
+  }
+  header h1{font-size:15px;margin:0;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:-.1px}
+  .tag{
+    font-size:11px;padding:4px 11px;border-radius:20px;flex:none;
+    background:var(--glass);border:1px solid var(--glass-line);color:var(--muted);
+    box-shadow:var(--glass-glow);
+  }
+  select{
+    background:var(--glass);color:var(--text);border:1px solid var(--glass-line);
+    border-radius:11px;padding:7px 11px;font-size:13px;flex:none;max-width:180px;
+    box-shadow:var(--glass-glow);cursor:pointer;
+    -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+    transition:border-color .22s, background .22s;
+  }
+  select:hover{border-color:rgba(255,255,255,.22);background:var(--glass-strong)}
+  select:focus{outline:none;border-color:var(--accent2)}
+  select option{background:#131a26;color:var(--text)}
+
+  /* --- Сообщения --- */
+  #messages{flex:1;overflow-y:auto;padding:24px 20px;display:flex;flex-direction:column;gap:14px;max-width:840px;width:100%;margin:0 auto}
+  .msg{
+    max-width:78%;padding:13px 16px;border-radius:19px;font-size:14.5px;line-height:1.6;
+    white-space:pre-wrap;word-wrap:break-word;
+    animation:msgIn .45s cubic-bezier(.2,.9,.25,1) backwards;
+  }
+  @keyframes msgIn{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:none}}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .msg.user{
+    align-self:flex-end;color:#fff;border-bottom-right-radius:6px;
+    background:linear-gradient(135deg,rgba(229,138,99,.92),rgba(196,94,64,.92));
+    box-shadow:0 6px 22px rgba(217,119,87,.28), var(--glass-glow);
+  }
+  .msg.assistant{
+    align-self:flex-start;border-bottom-left-radius:6px;
+    background:var(--glass-strong);border:1px solid var(--glass-line);
+    box-shadow:var(--glass-glow), 0 6px 22px rgba(0,0,0,.2);
+  }
+  .msg.error{
+    align-self:center;font-size:13px;max-width:90%;
+    background:rgba(255,123,114,.11);border:1px solid rgba(255,123,114,.34);color:var(--bad);
+  }
+  /* Пульсирующие точки, пока модель думает */
+  .msg.typing{display:flex;gap:5px;align-items:center;padding:16px 18px}
+  .msg.typing i{width:7px;height:7px;border-radius:50%;background:var(--muted);display:block;animation:blink 1.3s ease-in-out infinite}
+  .msg.typing i:nth-child(2){animation-delay:.18s}
+  .msg.typing i:nth-child(3){animation-delay:.36s}
+  @keyframes blink{0%,80%,100%{opacity:.25;transform:scale(.85)}40%{opacity:1;transform:scale(1)}}
+
+  .zip-link{
+    display:inline-flex;align-items:center;gap:7px;margin-top:11px;
+    background:var(--glass);border:1px solid var(--glass-line);border-radius:12px;
+    padding:9px 14px;font-size:13px;text-decoration:none;color:var(--text);
+    box-shadow:var(--glass-glow);transition:transform .22s cubic-bezier(.2,.9,.25,1), border-color .22s;
+  }
+  .zip-link:hover{transform:translateY(-2px);border-color:var(--accent2);box-shadow:0 8px 22px rgba(122,162,247,.24), var(--glass-glow)}
+  .empty-hint{margin:auto;color:var(--muted);text-align:center;font-size:14px;animation:fadeUp .5s ease backwards}
+
+  /* --- Поле ввода --- */
+  .composer{border-top:1px solid var(--glass-line);background:rgba(255,255,255,.03);padding:14px 18px}
+  .composer-inner{max-width:840px;margin:0 auto}
+  .file-chip{
+    display:none;align-items:center;gap:9px;width:fit-content;margin-bottom:10px;
+    background:var(--glass);border:1px solid var(--glass-line);border-radius:11px;
+    padding:7px 12px;font-size:12px;color:var(--muted);box-shadow:var(--glass-glow);
+    animation:fadeUp .35s cubic-bezier(.2,.9,.25,1) backwards;
+  }
+  .file-chip button{background:none;border:none;color:var(--bad);font-size:14px;padding:0 2px;transition:transform .2s}
+  .file-chip button:hover{transform:scale(1.25)}
+  .row{display:flex;gap:10px;align-items:flex-end}
+  #attachBtn{
+    background:var(--glass);border:1px solid var(--glass-line);color:var(--muted);
+    border-radius:14px;padding:11px 13px;font-size:15px;flex:none;line-height:1;
+    box-shadow:var(--glass-glow);transition:all .22s cubic-bezier(.2,.9,.25,1);
+  }
+  #attachBtn:hover{color:var(--text);border-color:var(--accent2);transform:translateY(-2px)}
+  #attachBtn svg{width:17px;height:17px;display:block;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  .tg-btn svg{width:19px;height:19px;flex:none;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+  textarea{
+    flex:1;resize:none;color:var(--text);font-size:14.5px;font-family:inherit;line-height:1.5;
+    background:var(--glass);border:1px solid var(--glass-line);border-radius:16px;
+    padding:12px 16px;max-height:170px;box-shadow:var(--glass-glow);
+    -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+    transition:border-color .25s, box-shadow .25s;
+  }
+  textarea::placeholder{color:var(--muted)}
+  textarea:focus{
+    outline:none;border-color:rgba(122,162,247,.55);
+    box-shadow:0 0 0 3px rgba(122,162,247,.13), var(--glass-glow);
+  }
+  #send{
+    background:linear-gradient(135deg,var(--accent),#c9603c);color:#fff;border:none;
+    border-radius:14px;padding:12px 22px;font-size:14px;font-weight:600;flex:none;
+    box-shadow:0 6px 20px rgba(217,119,87,.32), var(--glass-glow);
+    transition:transform .22s cubic-bezier(.2,.9,.25,1), box-shadow .22s, opacity .22s;
+  }
+  #send:hover:not(:disabled){transform:translateY(-2px) scale(1.02);box-shadow:0 12px 28px rgba(217,119,87,.46), var(--glass-glow)}
+  #send:active:not(:disabled){transform:scale(.98)}
+  #send:disabled{opacity:.45;cursor:default;box-shadow:none}
+
+  /* --- «Мой API»: модальное стекло поверх затемнения --- */
+  /* Ключевой момент. Пока открыта модалка, снимаем backdrop-filter с панелей
+     приложения: иначе Chromium композитит их ПОВЕРХ фиксированного оверлея и
+     модалка выглядит прозрачной (хотя по хит-тесту лежит сверху). Под
+     затемнением оверлея этот блюр всё равно не виден, так что теряем ноль. */
+  /* Снимаем со ВСЕГО внутри #app, а не только с .glass: backdrop-filter есть
+     ещё у select и textarea, и любого из них хватает, чтобы сломать слои. */
+  body.modal-open #app,
+  body.modal-open #app *{-webkit-backdrop-filter:none !important;backdrop-filter:none !important}
+
+  .overlay{
+    display:none;position:fixed;inset:0;z-index:50;padding:24px;
+    align-items:center;justify-content:center;
+    background:rgba(4,7,13,.72);
+    animation:fadeIn .28s ease backwards;
+  }
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+  .api-modal{
+    width:100%;max-width:760px;max-height:88vh;border-radius:24px;
+    display:flex;flex-direction:column;overflow:hidden;
+    animation:riseIn .45s cubic-bezier(.2,.9,.25,1) backwards;
+    /* Никакого backdrop-filter у модалки: рядом стеклянные .sidebar/.main тоже
+       с backdrop-filter, и Chromium начинает подмешивать их содержимое поверх
+       модалки — она выглядит прозрачной, хотя по хит-тесту лежит сверху.
+       Проверено рендером: плотный фон + отсутствие блюра = стабильно. */
+    background:rgba(17,23,35,.97);
+    -webkit-backdrop-filter:none;backdrop-filter:none;
+  }
+  .api-head{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:16px 20px;border-bottom:1px solid var(--glass-line);
+    background:rgba(255,255,255,.03);
+  }
+  .api-head b{font-size:15px}
+  .modal-close{background:none;border:none;color:var(--muted);font-size:16px;transition:color .2s,transform .2s}
+  .modal-close:hover{color:var(--bad);transform:scale(1.15)}
+
+  /* --- Слайдер силы мышления: тянется мышью/пальцем, снапится по ступеням.
+     Ползунок — прозрачный нативный range поверх, вся картинка рисуется CSS
+     по переменной --p (0..1), чтобы получить плавность и свечение. --- */
+  .eff-wrap{display:flex;flex-direction:column;gap:5px;width:230px;flex:none}
+  .eff-wrap.compact{width:132px;gap:0}
+  .eff{position:relative;height:26px;display:flex;align-items:center}
+  .eff input{
+    position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;z-index:3;
+    cursor:grab;-webkit-appearance:none;appearance:none;background:none;
+  }
+  .eff input:active{cursor:grabbing}
+  .eff input::-webkit-slider-thumb{-webkit-appearance:none;width:26px;height:26px}
+  .eff input::-moz-range-thumb{width:26px;height:26px;border:none;opacity:0}
+  .eff-track{
+    position:absolute;left:0;right:0;height:6px;border-radius:6px;
+    background:rgba(255,255,255,.09);box-shadow:inset 0 1px 2px rgba(0,0,0,.35);overflow:hidden;
+  }
+  .eff-fill{
+    height:100%;border-radius:6px;width:calc(var(--p) * 100%);
+    background:linear-gradient(90deg,var(--accent2),var(--accent));
+    transition:width .38s cubic-bezier(.2,.9,.25,1), background .45s ease;
+  }
+  .eff-thumb{
+    position:absolute;top:50%;width:17px;height:17px;border-radius:50%;
+    left:calc(var(--p) * (100% - 17px));margin-top:-8.5px;
+    background:#fff;box-shadow:0 2px 9px rgba(0,0,0,.45), 0 0 0 1px rgba(255,255,255,.25);
+    transition:left .38s cubic-bezier(.2,.9,.25,1), background .45s ease,
+               box-shadow .35s ease, transform .22s cubic-bezier(.2,.9,.25,1);
+    z-index:2;pointer-events:none;
+  }
+  .eff:hover .eff-thumb{transform:scale(1.14)}
+  /* Пока тянем — никаких переходов, ползунок должен идти за пальцем */
+  .eff.dragging .eff-fill,.eff.dragging .eff-thumb{transition:background .45s ease, box-shadow .35s ease}
+  .eff.dragging .eff-thumb{transform:scale(1.2)}
+
+  /* Максимальный уровень — фиолетовый с живым свечением */
+  .eff.max .eff-fill{
+    background:linear-gradient(90deg,#7c4dff,#c77dff,#8f5bff);
+    background-size:200% 100%;
+    animation:maxFlow 2.4s linear infinite;
+  }
+  .eff.max .eff-thumb{
+    background:#d0a3ff;
+    box-shadow:0 0 0 4px rgba(160,92,255,.22), 0 0 20px 3px rgba(167,102,255,.85);
+    animation:maxPulse 1.7s ease-in-out infinite;
+  }
+  @keyframes maxFlow{to{background-position:200% 0}}
+  @keyframes maxPulse{
+    0%,100%{box-shadow:0 0 0 4px rgba(160,92,255,.2), 0 0 16px 2px rgba(167,102,255,.7)}
+    50%{box-shadow:0 0 0 7px rgba(160,92,255,.09), 0 0 26px 5px rgba(180,120,255,1)}
+  }
+
+  .eff-labels{display:flex;justify-content:space-between;font-size:10.5px;color:var(--muted)}
+  .eff-labels span{transition:color .3s ease, transform .3s cubic-bezier(.2,.9,.25,1)}
+  .eff-labels span.on{color:var(--text);transform:scale(1.06)}
+  .eff.max ~ .eff-labels span.on{color:#c9a0ff}
+  /* Запас справа, чтобы свечение ползунка на максимуме не срезалось краем
+     панели (.main с overflow:hidden) */
+  .eff-slot{display:flex;align-items:center;flex:none;margin-right:12px}
+  .eff-read{font-size:10.5px;color:var(--muted);text-align:center;margin-top:1px;transition:color .3s}
+  .eff-read.max{color:#c9a0ff}
+
+  /* --- Приложение --- */
+  .plat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:10px;margin-bottom:14px}
+  .plat{
+    background:var(--glass);border:1px solid var(--glass-line);border-radius:14px;
+    padding:13px;box-shadow:var(--glass-glow);cursor:pointer;text-align:left;color:var(--text);
+    transition:border-color .22s, transform .22s cubic-bezier(.2,.9,.25,1);
+    animation:fadeUp .4s cubic-bezier(.2,.9,.25,1) backwards;
+  }
+  .plat:hover{border-color:var(--accent2);transform:translateY(-2px)}
+  .plat.sel{border-color:var(--accent);background:rgba(229,138,99,.1)}
+  .plat .ic{font-size:19px;margin-bottom:7px;display:block}
+  .plat .nm{display:block;font-size:13.5px;font-weight:600}
+  .plat .sub{display:block;font-size:11px;color:var(--muted);margin-top:3px}
+  .steps{margin:0;padding-left:19px;font-size:13px;line-height:1.75;color:var(--text)}
+  .steps li{margin-bottom:5px}
+  .steps b{color:var(--accent2);font-weight:600}
+  .app-note{
+    font-size:12.5px;color:var(--muted);line-height:1.6;margin-top:13px;
+    background:var(--glass);border:1px solid var(--glass-line);border-radius:12px;padding:11px 13px;
+  }
+  #installBtn{
+    display:none;align-items:center;gap:8px;margin-bottom:13px;
+    background:linear-gradient(135deg,var(--accent),#c9603c);color:#fff;border:none;
+    border-radius:12px;padding:11px 18px;font-size:13.5px;font-weight:600;
+    box-shadow:0 6px 20px rgba(217,119,87,.32), var(--glass-glow);
+    transition:transform .22s cubic-bezier(.2,.9,.25,1), box-shadow .22s;
+  }
+  #installBtn:hover{transform:translateY(-2px);box-shadow:0 12px 28px rgba(217,119,87,.45), var(--glass-glow)}
+  .installed-badge{
+    display:inline-block;background:rgba(63,185,80,.12);border:1px solid rgba(63,185,80,.4);
+    color:var(--ok);border-radius:10px;padding:8px 13px;font-size:12.5px;margin-bottom:13px;
+  }
+
+  /* Плашка идущей акции: приходит с сервера вместе с состоянием аккаунта,
+     поэтому появляется и исчезает сама, без перезагрузки страницы */
+  .promo-tag{
+    background:linear-gradient(150deg,rgba(63,185,80,.3),rgba(38,132,52,.14));
+    border-color:rgba(120,220,140,.42);color:#d9ffe4;
+    animation:fadeUp .45s cubic-bezier(.2,.9,.25,1) backwards;
+  }
+
+  /* --- Тарифы --- */
+  /* Баннер акции: срок приходит с сервера, вёрстка не знает про даты */
+  .promo-banner{
+    background:linear-gradient(135deg, rgba(126,90,255,.18), rgba(63,185,80,.12));
+    border:1px solid rgba(160,130,255,.32);border-radius:14px;
+    padding:13px 15px;margin-bottom:14px;font-size:13px;line-height:1.5;
+    animation:fadeUp .45s cubic-bezier(.2,.9,.25,1) backwards;
+  }
+  .promo-banner b{color:#c9b6ff}
+  .promo-note{font-size:11.5px;color:var(--ok);margin-top:8px}
+  .plan-card{
+    background:var(--glass);border:1px solid var(--glass-line);border-radius:16px;
+    padding:15px 17px;margin-bottom:11px;box-shadow:var(--glass-glow);
+    animation:fadeUp .45s cubic-bezier(.2,.9,.25,1) backwards;
+    transition:border-color .25s, transform .25s cubic-bezier(.2,.9,.25,1);
+  }
+  .plan-card:hover{border-color:rgba(255,255,255,.2);transform:translateY(-2px)}
+  .plan-card.cur{border-color:rgba(63,185,80,.45);background:rgba(63,185,80,.07)}
+  .plan-top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:9px}
+  .plan-name{font-size:15px;font-weight:600}
+  .plan-cur{font-size:11px;color:var(--ok);margin-left:7px;font-weight:500}
+  .plan-price{font-size:14px;font-weight:600;white-space:nowrap}
+  .plan-price .per{font-size:11.5px;color:var(--muted);font-weight:400}
+  .plan-perks{margin:0 0 10px;padding-left:17px;font-size:12.5px;color:var(--muted);line-height:1.65}
+  .buy-btn{
+    display:inline-flex;align-items:center;gap:7px;text-decoration:none;
+    background:linear-gradient(135deg,var(--accent),#c9603c);color:#fff;border:none;
+    border-radius:11px;padding:9px 16px;font-size:13px;font-weight:600;
+    box-shadow:0 5px 18px rgba(217,119,87,.3), var(--glass-glow);
+    transition:transform .22s cubic-bezier(.2,.9,.25,1), box-shadow .22s;
+  }
+  .buy-btn:hover{transform:translateY(-2px);box-shadow:0 11px 26px rgba(217,119,87,.45), var(--glass-glow)}
+  .buy-btn svg{width:15px;height:15px;flex:none;fill:currentColor;stroke:none}
+  .buy-note{font-size:11.5px;color:var(--muted);margin-top:3px}
+
+  /* --- Профиль --- */
+  .prof-top{display:flex;align-items:center;gap:14px;margin-bottom:16px}
+  .avatar{
+    width:52px;height:52px;flex:none;border-radius:16px;display:grid;place-items:center;
+    font-size:21px;font-weight:600;color:#fff;
+    background:linear-gradient(135deg,var(--accent),#8a5be0);
+    box-shadow:0 6px 20px rgba(217,119,87,.3), var(--glass-glow);
+  }
+  .prof-name{font-size:16px;font-weight:600}
+  .prof-sub{font-size:12.5px;color:var(--muted);margin-top:3px}
+  .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(108px,1fr));gap:10px}
+  .stat{
+    background:var(--glass);border:1px solid var(--glass-line);border-radius:13px;
+    padding:11px 13px;box-shadow:var(--glass-glow);
+  }
+  .stat .k{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+  .stat .v{font-size:18px;font-weight:600;margin-top:4px}
+  .lim-row{margin-bottom:13px}
+  .lim-head{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:6px}
+  .lim-head span:last-child{color:var(--muted)}
+  .lim-bar{height:7px;border-radius:7px;background:rgba(255,255,255,.08);overflow:hidden}
+  .lim-fill{
+    height:100%;border-radius:7px;
+    background:linear-gradient(90deg,var(--accent2),var(--accent));
+    transition:width .8s cubic-bezier(.2,.9,.25,1);
+  }
+  .lim-fill.hot{background:linear-gradient(90deg,#d29922,var(--bad))}
+  .prov-title{font-size:12.5px;font-weight:600;margin:0 0 9px;display:flex;align-items:center;gap:7px}
+  .prov-title .dot{width:8px;height:8px;border-radius:50%;flex:none;display:block}
+  .prov-title .dot.claude{background:#b07ce8;box-shadow:0 0 9px rgba(176,124,232,.6)}
+  .prov-title .dot.gpt{background:#3fb96e;box-shadow:0 0 9px rgba(63,185,110,.6)}
+  .prov-title .dot.kimi{background:#7797ff;box-shadow:0 0 9px rgba(119,151,255,.6)}
+  .set-row{
+    display:flex;align-items:center;justify-content:space-between;gap:14px;
+    padding:11px 0;border-bottom:1px solid rgba(255,255,255,.05);
+  }
+  .set-row:last-child{border-bottom:none}
+  .set-row .lbl{font-size:13px}
+  .set-row .hint{font-size:11.5px;color:var(--muted);margin-top:3px;max-width:330px}
+  .set-row select{max-width:210px}
+  /* Переключатель-«пилюля» */
+  .toggle{width:44px;height:25px;border-radius:25px;border:1px solid var(--glass-line);
+    background:rgba(255,255,255,.07);position:relative;flex:none;transition:background .25s,border-color .25s;padding:0}
+  .toggle::after{content:'';position:absolute;top:2px;left:2px;width:19px;height:19px;border-radius:50%;
+    background:var(--muted);transition:transform .25s cubic-bezier(.2,.9,.25,1),background .25s}
+  .toggle.on{background:rgba(217,119,87,.35);border-color:rgba(217,119,87,.6)}
+  .toggle.on::after{transform:translateX(19px);background:var(--accent)}
+  .accents{display:flex;gap:9px}
+  .accent-dot{
+    width:26px;height:26px;border-radius:50%;border:2px solid transparent;cursor:pointer;
+    transition:transform .2s cubic-bezier(.2,.9,.25,1),border-color .2s;padding:0;
+  }
+  .accent-dot:hover{transform:scale(1.14)}
+  .accent-dot.sel{border-color:#fff;transform:scale(1.1)}
+  .danger-btn{
+    background:rgba(255,123,114,.1);border:1px solid rgba(255,123,114,.35);color:var(--bad);
+    border-radius:11px;padding:8px 14px;font-size:12.5px;transition:all .22s;
+  }
+  .danger-btn:hover{background:rgba(255,123,114,.2);border-color:var(--bad)}
+  .save-hint{font-size:11.5px;color:var(--ok);opacity:0;transition:opacity .3s}
+  .save-hint.show{opacity:1}
+  .api-body{overflow-y:auto;padding:6px 20px 20px}
+  .api-body section{padding:18px 0;border-bottom:1px solid var(--glass-line)}
+  .api-body section:last-child{border-bottom:none}
+  .api-body h3{font-size:13px;margin:0 0 12px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;font-weight:600}
+  .api-section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .api-section-head h3{margin:0}
+  .muted-sm{color:var(--muted);font-size:12px;font-weight:400;text-transform:none;letter-spacing:0}
+  #createKeyBtn,#pgSend,#pgCurl{
+    background:var(--glass);border:1px solid var(--glass-line);color:var(--text);
+    border-radius:11px;padding:7px 13px;font-size:12px;box-shadow:var(--glass-glow);
+    transition:all .22s cubic-bezier(.2,.9,.25,1);
+  }
+  #createKeyBtn:hover:not(:disabled),#pgCurl:hover{border-color:var(--accent2);transform:translateY(-1px)}
+  #createKeyBtn:disabled{opacity:.4;cursor:default}
+  #pgSend{background:linear-gradient(135deg,var(--accent),#c9603c);border:none;font-weight:600;box-shadow:0 5px 18px rgba(217,119,87,.3), var(--glass-glow)}
+  #pgSend:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 10px 26px rgba(217,119,87,.42), var(--glass-glow)}
+  #pgSend:disabled{opacity:.5;cursor:default}
+
+  .key-row{
+    display:flex;align-items:center;gap:10px;padding:10px 13px;margin-bottom:7px;
+    background:var(--glass);border:1px solid var(--glass-line);border-radius:13px;
+    box-shadow:var(--glass-glow);animation:fadeUp .35s cubic-bezier(.2,.9,.25,1) backwards;
+  }
+  .key-row code{flex:1;font-size:12.5px;font-family:ui-monospace,Consolas,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .key-row button{background:none;border:1px solid var(--glass-line);color:var(--muted);border-radius:9px;padding:5px 9px;font-size:11px;flex:none;transition:all .2s}
+  .key-row button:hover{color:var(--text);border-color:var(--accent2)}
+  .key-row button.del:hover{color:var(--bad);border-color:rgba(255,123,114,.5)}
+
+  .pg-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:11px;margin-bottom:12px}
+  .api-body label{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--muted)}
+  .pg-full{margin-bottom:12px}
+  /* Только селекты песочницы тянутся на всю ширину — в настройках профиля
+     они должны оставаться компактными (.set-row select) */
+  .pg-grid select{max-width:none;width:100%}
+  #pgBody{
+    width:100%;resize:vertical;color:var(--text);
+    font-family:ui-monospace,Consolas,monospace;font-size:12.5px;line-height:1.55;
+    background:rgba(0,0,0,.24);border:1px solid var(--glass-line);border-radius:13px;padding:12px 14px;
+    transition:border-color .22s, box-shadow .22s;
+  }
+  #pgBody:focus{outline:none;border-color:rgba(122,162,247,.55);box-shadow:0 0 0 3px rgba(122,162,247,.13)}
+  .pg-actions{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+  .pg-result{
+    margin:0;padding:14px;border-radius:13px;max-height:280px;overflow:auto;
+    background:rgba(0,0,0,.3);border:1px solid var(--glass-line);
+    font-family:ui-monospace,Consolas,monospace;font-size:12.5px;line-height:1.6;
+    color:var(--text);white-space:pre-wrap;word-break:break-word;
+  }
+  .pg-result.err{border-color:rgba(255,123,114,.4);color:var(--bad)}
+  .pg-result.ok{border-color:rgba(63,185,80,.32)}
+
+  /* Тонкие скроллбары, чтобы не спорили со стеклом */
+  ::-webkit-scrollbar{width:9px;height:9px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.11);border-radius:9px;border:2px solid transparent;background-clip:content-box}
+  ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.2);background-clip:content-box}
+
+  /* --- Сворачивание панели и мобильный режим --- */
+  .head-actions{display:flex;align-items:center;gap:6px}
+  #sbCloseBtn,#sbOpenBtn{
+    background:none;border:1px solid transparent;color:var(--muted);
+    border-radius:9px;padding:5px 6px;line-height:0;flex:none;
+    transition:color .2s, background .2s, border-color .2s, transform .2s;
+  }
+  #sbCloseBtn:hover,#sbOpenBtn:hover{color:var(--text);background:var(--glass);border-color:var(--glass-line)}
+  #sbCloseBtn svg,#sbOpenBtn svg{
+    width:17px;height:17px;fill:none;stroke:currentColor;
+    stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;display:block;
+  }
+  /* Кнопка «показать» нужна только когда панель спрятана */
+  #sbOpenBtn{display:none}
+  body.sb-collapsed #sbOpenBtn{display:block}
+
+  /* Десктоп: панель схлопывается по ширине — соседняя область плавно занимает место */
+  .sidebar{transition:width .4s cubic-bezier(.2,.9,.25,1), opacity .3s ease, transform .4s cubic-bezier(.2,.9,.25,1)}
+  body.sb-collapsed .sidebar{
+    width:0;min-width:0;opacity:0;transform:translateX(-14px);
+    pointer-events:none;overflow:hidden;
+  }
+  .sb-backdrop{display:none}
+
+  @media (max-width:820px){
+    #app{padding:8px;gap:8px}
+    .msg{max-width:90%;font-size:14px}
+    header{padding:10px 12px;gap:8px}
+    header h1{font-size:14px}
+    select{max-width:118px;font-size:12px;padding:6px 8px}
+    .eff-wrap.compact{width:96px}
+    #messages{padding:16px 12px;gap:11px}
+    .composer{padding:10px 12px}
+    .api-modal{max-height:92vh;border-radius:20px}
+    .overlay{padding:10px}
+    .pg-grid{grid-template-columns:1fr}
+    .set-row{flex-direction:column;align-items:flex-start;gap:8px}
+    .set-row select,.set-row .eff-wrap{width:100%;max-width:none}
+    .stat-grid{grid-template-columns:repeat(2,1fr)}
+
+    /* Панель уезжает за экран и выдвигается поверх содержимого */
+    .sidebar{
+      position:fixed;left:0;top:0;bottom:0;z-index:40;width:min(80vw,282px);
+      border-radius:0 20px 20px 0;transform:translateX(-102%);opacity:1;
+    }
+    body.sb-open .sidebar{transform:none}
+    /* На мобильном «свёрнуто» — это состояние по умолчанию, отдельный класс не нужен */
+    body.sb-collapsed .sidebar{width:min(80vw,282px);opacity:1;transform:translateX(-102%);pointer-events:none}
+    body.sb-open.sb-collapsed .sidebar{transform:none;pointer-events:auto}
+    #sbOpenBtn{display:block}
+
+    .sb-backdrop{
+      display:block;position:fixed;inset:0;z-index:39;
+      background:rgba(4,7,13,.6);opacity:0;pointer-events:none;
+      transition:opacity .3s ease;
+    }
+    body.sb-open .sb-backdrop{opacity:1;pointer-events:auto}
+  }
+  /* На узких экранах в шапку не помещается всё: убираем плашку тарифа (она
+     есть в профиле) и сокращаем селект, иначе название модели обрезается */
+  @media (max-width:560px){
+    header .tag{display:none}
+    header h1{font-size:13.5px}
+    select{max-width:136px}
+    textarea{font-size:14px;padding:10px 13px}
+    #send{padding:10px 15px;font-size:13px}
+  }
+  @media (max-width:420px){
+    #app{padding:5px;gap:5px}
+    .msg{max-width:94%}
+    select{max-width:118px;padding:6px 7px}
+    .eff-wrap.compact{width:70px}
+    header{gap:6px;padding:9px 10px}
+    .composer{padding:9px 10px}
+    .row{gap:7px}
+    #attachBtn{padding:10px 11px}
+    #send{padding:10px 12px;font-size:12.5px}
+  }
+  /* Уважаем системную настройку «меньше движения» — и ручной выключатель
+     анимаций в профиле (класс .no-anim на <html>) */
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}
+  }
+  .no-anim *,.no-anim *::before,.no-anim *::after{
+    animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important
+  }
+  .no-anim .blob{animation:none !important}
+
+  /* 2026 redesign: спокойная редакционная геометрия и тёплое жидкое стекло. */
+  :root{
+    --bg:#181512;--text:#f4efe7;--muted:#b9ada0;
+    --accent:#d97757;--accent2:#e8b98d;--bad:#ff8e84;--ok:#8fc79b;
+    --glass:rgba(255,244,230,.055);--glass-strong:rgba(255,244,230,.09);
+    --glass-line:rgba(255,237,216,.16);--blur:blur(30px) saturate(145%);
+    font-family:ui-serif,Georgia,"Times New Roman",serif;
+  }
+  body{letter-spacing:.005em}
+  button,select,textarea,.tag,.muted-sm,.login-status,.side-user{
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  .bg{background:radial-gradient(110% 90% at 46% -8%,#493126 0%,#211a16 43%,#141210 100%)}
+  .blob.a{background:#c868465c;opacity:.56}
+  .blob.b{background:#d7a16b4d;opacity:.42}
+  .blob.c{background:#8e5d4a42;opacity:.36}
+  #app{padding:18px;gap:16px}
+  .sidebar{width:274px;border-radius:26px}
+  .main{border-radius:26px}
+  .sidebar-head{padding:20px 18px 14px}
+  .sidebar-head b{font:600 17px/1.2 ui-serif,Georgia,serif}
+  #newChatBtn{
+    background:rgba(217,119,87,.16);color:#f0c6b2;border:1px solid rgba(232,185,141,.24);
+    box-shadow:inset 0 1px rgba(255,255,255,.1);font-weight:600;
+  }
+  #newChatBtn:hover{background:rgba(217,119,87,.28);box-shadow:0 10px 28px rgba(104,45,25,.28)}
+  .chat-item{border-radius:14px;color:#c8bbb0}
+  .chat-item:hover{transform:translateX(2px);background:rgba(255,239,220,.055)}
+  .chat-item.active{background:rgba(232,185,141,.1);border-color:rgba(232,185,141,.18)}
+  .chat-item.active::before{background:linear-gradient(180deg,#edb18d,#c76849);box-shadow:0 0 16px rgba(217,119,87,.52)}
+  .side-nav button{border-radius:13px;color:#c8bbb0}
+  .side-nav button:hover{color:#fff5eb;background:rgba(255,239,220,.065)}
+  header{min-height:68px;padding:13px 18px;border-bottom-color:rgba(255,237,216,.1)}
+  header h1{font:600 18px/1.2 ui-serif,Georgia,serif;letter-spacing:-.01em}
+  select{background:rgba(22,18,15,.58);border-color:rgba(255,237,216,.15);color:#efe7dd}
+  .tag{background:rgba(232,185,141,.1);border-color:rgba(232,185,141,.18);color:#e8c7aa}
+  #messages{padding-top:34px}
+  .msg{animation:claudeMessage .46s cubic-bezier(.2,.75,.25,1) backwards}
+  @keyframes claudeMessage{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  .msg.user{background:rgba(255,239,220,.065);border:1px solid rgba(255,237,216,.09)}
+  .msg.assistant{color:#f4efe7}
+  .composer{padding:14px 18px 20px}
+  .composer-inner{background:rgba(29,24,20,.62);border-color:rgba(255,237,216,.16);border-radius:22px}
+  .composer-inner:focus-within{border-color:rgba(232,185,141,.43);box-shadow:0 0 0 3px rgba(217,119,87,.09),0 22px 52px rgba(0,0,0,.22)}
+  textarea{color:#f6f0e8}
+  #send{background:linear-gradient(145deg,#e08a68,#bd593c);box-shadow:0 8px 24px rgba(101,42,25,.35)}
+  #send:hover:not(:disabled){box-shadow:0 13px 32px rgba(116,48,28,.45)}
+  .login-card{max-width:460px;padding:46px 42px;border-radius:28px;text-align:left}
+  .login-card h1{font-size:32px;font-weight:500;letter-spacing:-.035em;margin-bottom:14px}
+  .login-card p{font-family:ui-sans-serif,system-ui,sans-serif;font-size:15px;line-height:1.7}
+  .tg-btn{width:100%;justify-content:center;background:linear-gradient(145deg,#d97a59,#bd593c);border-radius:14px;box-shadow:0 12px 34px rgba(91,38,23,.36)}
+  .overlay{background:rgba(15,12,10,.67)}
+  .api-modal{border-radius:28px}
+  .api-head b{font:600 20px/1.2 ui-serif,Georgia,serif}
+  .api-body section,.stat,.plan-card,.api-key-card,.pg-result{background:rgba(255,239,220,.045);border-color:rgba(255,237,216,.1)}
+  .prov-title{color:#e8c7aa}
+  .limit-bar>i{background:linear-gradient(90deg,#c85f43,#e9b187)}
+  @media(max-width:760px){#app{padding:7px;gap:7px}.main{border-radius:20px}.sidebar{border-radius:0 24px 24px 0}.login-card{padding:34px 26px}}
+</style>
+<link rel="stylesheet" href="/workspace.css?v=20260906-6">
+</head>
+<body>
+<div class="bg"><div class="blob a"></div><div class="blob b"></div><div class="blob c"></div></div>
+<div class="grain"></div>
+
+<div id="loader">
+  <div class="loader-mark" aria-hidden="true"><span></span></div>
+  <div class="loader-text" id="loaderText">Открываем рабочее пространство</div>
+  <div class="loader-track" aria-hidden="true"><i></i></div>
+</div>
+
+<div id="login">
+  <div class="login-card glass">
+    <section class="login-story">
+      <div class="brand-lockup">
+        <span class="brand-mark">C</span>
+        <span><b>Clop</b><small>AI workspace</small></span>
+      </div>
+      <div class="login-orbit" aria-hidden="true">
+        <span class="orbit-core">C</span>
+        <i class="orbit-one">GPT</i><i class="orbit-two">Kimi</i><i class="orbit-three">API</i>
+      </div>
+      <div class="login-story-copy">
+        <span class="eyebrow">Один аккаунт. Все модели.</span>
+        <h2>Продолжайте разговор там, где остановились.</h2>
+        <p>Чаты, выбранная модель, тариф и лимиты синхронизируются с Telegram-ботом.</p>
+      </div>
+    </section>
+    <section class="login-content">
+      <span class="login-kicker">Без отдельной регистрации</span>
+      <h1>Добро пожаловать</h1>
+      <p>Подтвердите вход в Telegram. Страница автоматически откроет рабочее пространство после подтверждения.</p>
+      <div class="login-points">
+        <span><i>1</i> Нажмите кнопку входа</span>
+        <span><i>2</i> Подтвердите вход в боте</span>
+        <span><i>3</i> Вернитесь к готовому чату</span>
+      </div>
+      <a class="tg-btn" id="tgLoginBtn" href="#" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21.5 4.3 2.9 11.4c-.9.3-.9 1.5.1 1.7l4.7 1.2 1.8 5.4c.2.7 1.1.9 1.6.3l2.5-2.6 4.8 3.5c.6.4 1.4.1 1.6-.6l3-14.4c.2-.8-.6-1.5-1.5-1.6z"/><path d="m7.7 14.3 10.6-7.4-8.2 8.6"/></svg>
+        <span>Войти через Telegram</span>
+        <b aria-hidden="true">→</b>
+      </a>
+      <div class="login-status" id="loginStatus" aria-live="polite"></div>
+      <p class="login-privacy">Clop не создаёт второй аккаунт: используется ваш Telegram-профиль.</p>
+    </section>
+  </div>
+</div>
+
+<div id="app">
+  <div class="sb-backdrop" id="sbBackdrop"></div>
+  <aside class="sidebar glass" aria-label="Боковая панель">
+    <div class="sidebar-head">
+      <div class="brand-lockup sidebar-brand">
+        <span class="brand-mark">C</span>
+        <span><b>Clop</b><small>AI workspace</small></span>
+      </div>
+      <button id="sbCloseBtn" title="Скрыть панель" aria-label="Скрыть панель">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 6l-6 6 6 6"/></svg>
+      </button>
+    </div>
+    <div class="sidebar-tools">
+      <button id="newChatBtn">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        <span>Новый чат</span><kbd>Ctrl N</kbd>
+      </button>
+      <label class="chat-search">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
+        <input id="chatSearch" type="search" placeholder="Найти чат" autocomplete="off" aria-label="Найти чат">
+        <kbd>Ctrl K</kbd>
+      </label>
+    </div>
+    <div class="sidebar-section-title"><span>Недавние</span><span id="chatCount">0</span></div>
+    <div class="chat-list" id="chatList"></div>
+    <div class="sidebar-foot">
+      <nav class="side-nav">
+        <button id="profileBtn">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.4"/><path d="M4.6 20a7.6 7.6 0 0 1 14.8 0"/></svg>
+          Профиль
+        </button>
+        <button id="plansBtn">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.6 2.5 5.2 5.7.8-4.1 4 1 5.7-5.1-2.7-5.1 2.7 1-5.7-4.1-4 5.7-.8z"/></svg>
+          Тарифы
+        </button>
+        <button id="appBtn">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.6h2"/></svg>
+          Приложение
+        </button>
+        <button id="apiBtn">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="12" r="3.2"/><path d="M11.2 12H21M17.5 12v3M14.5 12v2.2"/></svg>
+          Мой API
+        </button>
+        <button id="logout">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 20H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h8M17 15l3-3-3-3M20 12h-9"/></svg>
+          Выйти
+        </button>
+      </nav>
+      <div class="side-user" id="userFoot">—</div>
+    </div>
+  </aside>
+  <main class="main glass">
+    <header class="workspace-header">
+      <div class="header-leading">
+        <button id="sbOpenBtn" title="Показать панель" aria-label="Показать панель">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
+        <div class="title-stack">
+          <span class="title-eyebrow">Рабочее пространство</span>
+          <div class="title-line"><h1 id="chatTitle">Чат</h1><span class="tag" id="planTag">—</span></div>
+        </div>
+      </div>
+      <div class="header-controls">
+        <span class="tag promo-tag" id="promoTag" style="display:none"></span>
+        <label class="model-control"><span>Модель</span><select id="modelSelect" aria-label="Модель"></select></label>
+        <div class="model-usage" id="modelUsage" role="button" tabindex="0" aria-label="Лимиты выбранной модели">
+          <i></i><span>Лимит</span><b id="modelUsagePercent">—</b>
+          <div class="usage-popover" role="tooltip">
+            <div class="usage-popover-head"><b id="usageProvider">Общий лимит</b><span>Бот · сайт · API</span></div>
+            <div class="usage-popover-row"><span>5 часов</span><b id="usageShort">—</b></div>
+            <div class="usage-popover-row"><span>Неделя</span><b id="usageLong">—</b></div>
+          </div>
+        </div>
+        <div class="effort-control"><span>Мышление</span><div id="effortSlot" class="eff-slot"></div></div>
+        <button id="fastToggle" class="toggle" title="Быстрый режим: расход лимита ×1,2" aria-label="Быстрый режим"><span>Быстро</span><i></i></button>
+      </div>
+    </header>
+    <div class="connection-strip" id="connectionStrip" aria-live="polite"><i></i><span>Синхронизация с Telegram включена</span></div>
+    <div id="messages" aria-live="polite"></div>
+    <div class="composer">
+      <div class="composer-inner">
+        <div class="queue-strip" id="queueStrip" hidden aria-live="polite">
+          <span class="queue-mark">↳</span>
+          <span class="queue-copy"><b id="queueTitle">Следующее сообщение</b><small id="queueText"></small></span>
+          <button type="button" id="queueClear">Очистить</button>
+        </div>
+        <div class="file-chip" id="fileChip"><span id="fileChipName"></span><button id="fileChipRemove" aria-label="Убрать вложение">✕</button></div>
+        <div class="row">
+          <button id="attachBtn" title="Прикрепить файл или картинку"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.4 11.5 12 19.9a5 5 0 0 1-7.1-7.1l8.5-8.4a3.3 3.3 0 1 1 4.7 4.7l-8.5 8.4a1.7 1.7 0 0 1-2.3-2.3l7.8-7.8"/></svg></button>
+          <textarea id="input" placeholder="Сообщение для Clop…" rows="1" aria-label="Сообщение"></textarea>
+          <button id="send"><span>Отправить</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 7l5 5-5 5"/></svg></button>
+        </div>
+        <div class="composer-foot"><span id="composerHint">Enter — отправить · Shift + Enter — новая строка</span><span id="draftCount">0</span></div>
+        <input type="file" id="fileInput" style="display:none">
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Профиль: аккаунт, лимиты, настройки по умолчанию и оформление -->
+<div id="profileOverlay" class="overlay" role="dialog" aria-modal="true" aria-labelledby="profileTitle">
+  <div class="api-modal glass">
+    <div class="api-head">
+      <b id="profileTitle">Профиль и настройки</b>
+      <button class="modal-close" data-close="profileOverlay" aria-label="Закрыть">✕</button>
+    </div>
+    <div class="api-body" id="profileBody">
+      <div class="muted-sm" style="padding:18px 0">Загрузка…</div>
+    </div>
+  </div>
+</div>
+
+<!-- Приложение: установка сайта как отдельного приложения (PWA) -->
+<div id="appOverlay" class="overlay" role="dialog" aria-modal="true" aria-labelledby="appTitle">
+  <div class="api-modal glass">
+    <div class="api-head">
+      <b id="appTitle">Приложение</b>
+      <button class="modal-close" data-close="appOverlay" aria-label="Закрыть">✕</button>
+    </div>
+    <div class="api-body" id="appBody"></div>
+  </div>
+</div>
+
+<!-- Тарифы: покупка уходит в бота, счёт в звёздах выставляет Telegram -->
+<div id="plansOverlay" class="overlay" role="dialog" aria-modal="true" aria-labelledby="plansTitle">
+  <div class="api-modal glass">
+    <div class="api-head">
+      <b id="plansTitle">Тарифы</b>
+      <button class="modal-close" data-close="plansOverlay" aria-label="Закрыть">✕</button>
+    </div>
+    <div class="api-body" id="plansBody">
+      <div class="muted-sm" style="padding:18px 0">Загрузка…</div>
+    </div>
+  </div>
+</div>
+
+<!-- «Мой API»: ключи + песочница для отладки запросов -->
+<div id="apiOverlay" class="overlay" role="dialog" aria-modal="true" aria-labelledby="apiTitle">
+  <div class="api-modal glass">
+    <div class="api-head">
+      <b id="apiTitle">Мой API</b>
+      <button class="modal-close" data-close="apiOverlay" aria-label="Закрыть">✕</button>
+    </div>
+    <div class="api-body">
+      <section>
+        <div class="api-section-head">
+          <h3>Ключи <span class="muted-sm" id="keysCount"></span></h3>
+          <button id="createKeyBtn">+ Создать ключ</button>
+        </div>
+        <div id="keysList"><div class="muted-sm">Загрузка…</div></div>
+        <div class="muted-sm" id="baseUrlHint" style="margin-top:10px"></div>
+      </section>
+
+      <section>
+        <h3>Песочница — отладка запросов</h3>
+        <div class="pg-grid">
+          <label>Ключ<select id="pgKey"></select></label>
+          <label>Эндпоинт<select id="pgPath">
+            <option value="/v1/ask">/v1/ask — свой формат</option>
+            <option value="/v1/files">/v1/files — загрузить файл</option>
+            <option value="/v1/chat/completions">/v1/chat/completions — OpenAI</option>
+            <option value="/v1/messages">/v1/messages — Anthropic</option>
+          </select></label>
+          <label>Модель<select id="pgModel"></select></label>
+          <label>Заголовок<select id="pgAuth">
+            <option value="x-api-key">x-api-key</option>
+            <option value="bearer">Authorization: Bearer</option>
+          </select></label>
+        </div>
+        <label class="pg-full">Запрос (JSON)<textarea id="pgBody" rows="7" spellcheck="false"></textarea></label>
+        <div class="muted-sm" style="margin-top:7px">Файлы можно загрузить JSON/base64 здесь или напрямую как multipart с полем <code>file</code>. Они доступны 24 часа; <code>file_id</code> передаётся в <code>attachments</code>, а файлы ответа приходят в <code>artifacts[]</code>.</div>
+        <div class="pg-actions">
+          <button id="pgSend">Отправить</button>
+          <button id="pgCurl">Скопировать curl</button>
+          <span class="muted-sm" id="pgMeta"></span>
+        </div>
+        <pre id="pgResult" class="pg-result">Ответ появится здесь.</pre>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+// Те же текстовые расширения, что бот принимает как документы (см. bot.js TEXT_EXTENSIONS)
+const TEXT_EXT = new Set(['txt','md','markdown','csv','tsv','json','jsonl','log','yml','yaml','xml','html','htm','css','scss','less','js','mjs','cjs','jsx','ts','tsx','vue','svelte','py','java','kt','c','h','cpp','hpp','cs','go','rs','rb','php','sh','bash','ps1','bat','sql','ini','cfg','conf','env','toml','r','swift','dart','lua','pl']);
+const MAX_FILE_CHARS = 60000;
+
+let state = { models: [], limits: {}, effortOptionsByModel: {}, currentModel: null, currentChatId: null,
+  chats: [], sending: false, queue: [], unsent: [], attachedFile: null, attachedImage: null, attachedOffice: null, effort: 'low', effortAvailable: false, fast: false };
+let localMessageId = 0;
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function renderInlineMarkdown(text) {
+  return escapeHtml(text)
+    .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|\s)(https:\/\/[^\s<]+)/g, '$1<a href="$2" target="_blank" rel="noopener noreferrer">$2</a>');
+}
+
+function renderTextMarkdown(text) {
+  const lines = String(text || '').split('\n');
+  let html = '';
+  let list = '';
+  const closeList = () => { if (list) { html += `</${list}>`; list = ''; } };
+  for (const line of lines) {
+    const bullet = line.match(/^\s*[-*]\s+(.+)/);
+    const number = line.match(/^\s*\d+[.)]\s+(.+)/);
+    if (bullet || number) {
+      const wanted = bullet ? 'ul' : 'ol';
+      if (list !== wanted) { closeList(); list = wanted; html += `<${list}>`; }
+      html += `<li>${renderInlineMarkdown((bullet || number)[1])}</li>`;
+      continue;
+    }
+    closeList();
+    const heading = line.match(/^(#{1,3})\s+(.+)/);
+    if (heading) {
+      const level = Math.min(4, heading[1].length + 1);
+      html += `<h${level}>${renderInlineMarkdown(heading[2])}</h${level}>`;
+    } else if (/^\s*>\s?/.test(line)) {
+      html += `<blockquote>${renderInlineMarkdown(line.replace(/^\s*>\s?/, ''))}</blockquote>`;
+    } else if (!line.trim()) {
+      html += '<span class="rich-gap"></span>';
+    } else {
+      html += `<p>${renderInlineMarkdown(line)}</p>`;
+    }
+  }
+  closeList();
+  return html;
+}
+
+function renderRichMessage(text) {
+  const source = String(text || '');
+  let cursor = 0;
+  let html = '';
+  const fence = /```([^\n`]*)\n?([\s\S]*?)```/g;
+  let match;
+  while ((match = fence.exec(source))) {
+    html += renderTextMarkdown(source.slice(cursor, match.index));
+    const lang = String(match[1] || 'код').trim().slice(0, 24) || 'код';
+    html += `<div class="code-block"><div class="code-head"><span>${escapeHtml(lang)}</span><button type="button" data-copy-code>Копировать</button></div><pre><code>${escapeHtml(match[2].replace(/\n$/, ''))}</code></pre></div>`;
+    cursor = match.index + match[0].length;
+  }
+  html += renderTextMarkdown(source.slice(cursor));
+  return `<div class="msg-body">${html}</div>`;
+}
+
+function renderArtifactCards(artifacts) {
+  if (!Array.isArray(artifacts) || !artifacts.length) return '';
+  return `<div class="artifact-list" aria-label="Файлы ответа">${artifacts.map((artifact) => {
+    const name = String(artifact?.name || 'Файл');
+    const size = Math.max(0, Number(artifact?.size) || 0);
+    const ext = (name.split('.').pop() || 'file').slice(0, 5).toUpperCase();
+    const readableSize = size >= 1024 * 1024
+      ? `${(size / (1024 * 1024)).toFixed(1)} МБ`
+      : size >= 1024 ? `${Math.ceil(size / 1024)} КБ` : `${size} Б`;
+    const expiresAt = Number(artifact?.expiresAt);
+    const expired = Number.isFinite(expiresAt) && expiresAt <= Date.now();
+    let downloadUrl = '';
+    if (!expired) {
+      try {
+        const candidate = new URL(String(artifact?.downloadUrl || ''), location.origin);
+        if (candidate.origin === location.origin && candidate.pathname === '/chat/api/artifact') {
+          downloadUrl = candidate.pathname + candidate.search;
+        }
+      } catch {}
+    }
+    const download = expired
+      ? '<span class="artifact-download" aria-disabled="true" title="Срок хранения файла истёк">Срок истёк</span>'
+      : downloadUrl ? `<a class="artifact-download" href="${escapeHtml(downloadUrl)}">Скачать</a>` : '';
+    return `<div class="artifact-card"><span class="artifact-type">${escapeHtml(ext)}</span><span class="artifact-name"><b>${escapeHtml(name)}</b><small>Создано моделью</small></span><span class="artifact-size">${readableSize}</span>${download}</div>`;
+  }).join('')}</div>`;
+}
+
+function bindMessageActions(root) {
+  root.querySelectorAll('[data-copy-code]').forEach((button) => button.addEventListener('click', async () => {
+    const code = button.closest('.code-block')?.querySelector('code')?.textContent || '';
+    try {
+      await navigator.clipboard.writeText(code);
+      const previous = button.textContent;
+      button.textContent = 'Скопировано';
+      setTimeout(() => { button.textContent = previous; }, 1200);
+    } catch {
+      button.textContent = 'Не удалось';
+    }
+  }));
+}
+
+// Короткая CSS-заставка сглаживает только загрузку состояния аккаунта.
+const loaderReady = (() => {
+  let ready;
+  const done = new Promise((resolve) => { ready = resolve; });
+  const started = performance.now();
+  return {
+    done,
+    data() {
+      const delay = Math.max(0, 320 - (performance.now() - started));
+      setTimeout(ready, delay);
+    },
+  };
+})();
+
+function hideLoader() {
+  const el = document.getElementById('loader');
+  if (!el) return;
+  el.classList.add('out');
+  setTimeout(() => el.remove(), 280);
+}
+
+async function boot() {
+  const r = await fetch('/chat/api/me').catch(() => null);
+  let data = null;
+  if (r && r.ok) {
+    const j = await r.json().catch(() => null);
+    if (j && j.ok) data = j;
+  }
+  // Короткий переход не держит пользователя дольше загрузки данных.
+  loaderReady.data();
+  await loaderReady.done;
+  hideLoader();
+  if (data) showApp(data); else showLogin();
+}
+
+function showLogin() {
+  document.getElementById('login').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+}
+
+let loginPoll = null;
+let loginExpiry = null;
+let loginAttempt = 0;
+async function startLogin() {
+  const statusEl = document.getElementById('loginStatus');
+  const button = document.getElementById('tgLoginBtn');
+  // Повторное нажатие открывает уже созданную ссылку, но не создаёт второй
+  // одноразовый код и второй цикл опроса.
+  if (button.getAttribute('aria-busy') === 'true') {
+    if (loginPoll && button.dataset.tgLink) {
+      window.open(button.dataset.tgLink, 'clop-telegram-login');
+    }
+    return;
+  }
+  const attempt = ++loginAttempt;
+  if (loginPoll) clearTimeout(loginPoll);
+  if (loginExpiry) clearTimeout(loginExpiry);
+  const popup = window.open('about:blank', 'clop-telegram-login');
+  button.setAttribute('aria-busy', 'true');
+  statusEl.innerHTML = '<span class="spinner"></span>Создаём безопасную ссылку входа…';
+  let data;
+  try {
+    const r = await fetch('/chat/api/login/start', { method: 'POST' });
+    data = await r.json();
+    if (!r.ok || !data.code || !data.tgLink) throw new Error(data.error || 'Сервер не ответил');
+  } catch (error) {
+    if (popup) popup.close();
+    button.removeAttribute('aria-busy');
+    statusEl.textContent = 'Не удалось начать вход. Проверьте интернет и попробуйте снова.';
+    return;
+  }
+  if (attempt !== loginAttempt) { if (popup) popup.close(); return; }
+  const { code, tgLink } = data;
+  button.href = tgLink;
+  button.dataset.tgLink = tgLink;
+  if (popup) popup.location.href = tgLink;
+  else statusEl.innerHTML = `Браузер заблокировал окно. <a href="${escapeHtml(tgLink)}" target="_blank" rel="noopener">Открыть Telegram вручную</a>.`;
+  if (popup) statusEl.innerHTML = '<span class="spinner"></span>Подтвердите вход в Telegram — эта страница обновится сама.';
+
+  const poll = async () => {
+    if (attempt !== loginAttempt) return;
+    const s = await fetch('/chat/api/login/status?code=' + encodeURIComponent(code)).then(x => x.json()).catch(() => null);
+    if (attempt !== loginAttempt) return;
+    if (s && s.claimed) {
+      loginPoll = null;
+      if (loginExpiry) clearTimeout(loginExpiry);
+      const ex = await fetch('/chat/api/login/exchange', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code }),
+      }).then(x => x.json()).catch(() => null);
+      if (attempt !== loginAttempt) return;
+      if (ex && ex.ok) {
+        loginAttempt++;
+        button.removeAttribute('aria-busy');
+        statusEl.textContent = 'Готово. Открываем ваши чаты…';
+        boot();
+        return;
+      }
+      button.removeAttribute('aria-busy');
+      statusEl.textContent = 'Не удалось войти — попробуйте ещё раз.';
+      return;
+    }
+    loginPoll = setTimeout(poll, 2000);
+  };
+  loginPoll = setTimeout(poll, 2000);
+  loginExpiry = setTimeout(() => {
+    if (attempt !== loginAttempt) return;
+    loginAttempt++;
+    if (loginPoll) clearTimeout(loginPoll);
+    loginPoll = null;
+    button.removeAttribute('aria-busy');
+    statusEl.textContent = 'Ссылка входа устарела. Нажмите кнопку, чтобы получить новую.';
+  }, 10 * 60_000);
+}
+
+// Акция живёт ровно столько, сколько сказал сервер: когда время вышло,
+// плашка убирается сама, даже если страницу не трогали
+function showModelPromo(p) {
+  const el = document.getElementById('promoTag');
+  if (!el) return;
+  if (!p || !p.until || Date.now() >= p.until) { el.style.display = 'none'; return; }
+  const left = Math.max(1, Math.round((p.until - Date.now()) / 60000));
+  el.textContent = `🎁 ${p.title} · ещё ${left} мин`;
+  el.style.display = '';
+  clearTimeout(showModelPromo.t);
+  showModelPromo.t = setTimeout(() => showModelPromo(p), 30_000);
+}
+
+function showApp(data) {
+  document.getElementById('login').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  document.getElementById('userFoot').textContent = data.name + ' · ' + data.planTitle;
+  document.getElementById('planTag').textContent = data.planTitle;
+  showModelPromo(data.modelPromo);
+  state.models = data.models;
+  state.limits = data.limits || {};
+  state.effortOptionsByModel = data.effortOptionsByModel;
+  state.currentModel = data.currentModel;
+  state.fast = data.fast === true;
+  state.currentChatId = data.currentChatId;
+  state.chats = data.chats;
+
+  renderModelSelect();
+  renderUsageIndicator();
+  renderEffortSelect(data.effort);
+  renderFastToggle();
+  renderChatList();
+  renderMessages(data.messages);
+  updateChatTitle();
+  applySidebar();
+}
+
+function renderModelSelect() {
+  const sel = document.getElementById('modelSelect');
+  const providers = [
+    ['gpt', 'GPT'],
+    ['kimi', 'Kimi'],
+  ];
+  const known = new Set(providers.map(([key]) => key));
+  const renderOptions = (models) => models.map((m) =>
+    `<option value="${m.key}" ${m.key === state.currentModel ? 'selected' : ''} ${!m.available ? 'disabled' : ''}>${escapeHtml(m.title)}${m.recommended ? ' · советуем' : ''}${!m.available ? ' 🔒' : ''}</option>`
+  ).join('');
+  sel.innerHTML = providers.map(([provider, title]) => {
+    const models = state.models.filter((m) => m.provider === provider);
+    return models.length ? `<optgroup label="${title}">${renderOptions(models)}</optgroup>` : '';
+  }).join('') + renderOptions(state.models.filter((m) => m.provider !== 'claude' && !known.has(m.provider)));
+  sel.onchange = async () => {
+    const request = (renderModelSelect.request = (renderModelSelect.request || 0) + 1);
+    const previous = state.currentModel;
+    state.currentModel = sel.value;
+    renderUsageIndicator();
+    renderEffortSelect();
+    renderFastToggle();
+    const r = await fetch('/chat/api/profile', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ model: state.currentModel }),
+    }).then(x => x.json()).catch(() => null);
+    if (request !== renderModelSelect.request) return;
+    if (!r || !r.ok) {
+      state.currentModel = previous;
+      renderModelSelect();
+      renderEffortSelect();
+      renderFastToggle();
+      renderUsageIndicator();
+      alert((r && r.error) || 'Не удалось сохранить модель.');
+      return;
+    }
+    state.currentModel = r.model;
+    state.effort = r.effort;
+    state.fast = r.fast;
+    renderModelSelect();
+    renderEffortSelect(r.effort);
+    renderFastToggle();
+    renderUsageIndicator();
+  };
+}
+
+function renderUsageIndicator() {
+  const box = document.getElementById('modelUsage');
+  const model = state.models.find((m) => m.key === state.currentModel);
+  const usage = model && state.limits && state.limits[model.provider];
+  if (!box || !usage || !usage.short || !usage.long || model.unlimited) {
+    if (box) box.style.display = 'none';
+    return;
+  }
+  box.style.display = '';
+  const short = Math.max(0, Math.min(100, Number(usage.short.percent) || 0));
+  const long = Math.max(0, Math.min(100, Number(usage.long.percent) || 0));
+  const highest = Math.max(short, long);
+  const level = highest >= 90 ? 'danger' : highest >= 60 ? 'warning' : 'normal';
+  box.dataset.level = level;
+  document.getElementById('modelUsagePercent').textContent = highest + '%';
+  document.getElementById('usageShort').textContent = short + '%';
+  document.getElementById('usageLong').textContent = long + '%';
+  const names = { gpt: 'Лимит GPT', kimi: 'Лимит Kimi' };
+  document.getElementById('usageProvider').textContent = names[model.provider] || 'Общий лимит';
+}
+
+function renderFastToggle() {
+  const btn = document.getElementById('fastToggle');
+  const model = state.models.find(m => m.key === state.currentModel);
+  btn.style.display = model?.provider === 'gpt' ? '' : 'none';
+  btn.classList.toggle('on', state.fast);
+  btn.setAttribute('aria-pressed', String(state.fast));
+  btn.title = `Быстрый режим: ${state.fast ? 'включён' : 'выключен'} · расход лимита ×1,2`;
+}
+
+/* Слайдер силы мышления: тянется мышью/пальцем и снапится по ступеням.
+   Внутри — обычный input[type=range] (даёт бесплатно drag, тач и клавиатуру),
+   а поверх рисуется своя дорожка с заливкой и ползунком. */
+function buildEffortSlider(container, opts, current, onChange, { labels = true } = {}) {
+  const idx = Math.max(0, opts.indexOf(current));
+  const last = opts.length - 1;
+
+  container.className = 'eff-wrap' + (labels ? '' : ' compact');
+  container.innerHTML = `
+    <div class="eff">
+      <div class="eff-track"><div class="eff-fill"></div></div>
+      <div class="eff-thumb"></div>
+      <input type="range" min="0" max="${last}" step="1" value="${idx}" aria-label="Сила мышления">
+    </div>
+    ${labels
+      ? `<div class="eff-labels">${opts.map(k => `<span data-k="${k}">${k}</span>`).join('')}</div>`
+      : `<div class="eff-read"></div>`}
+  `;
+
+  const eff = container.querySelector('.eff');
+  const input = container.querySelector('input');
+  const read = container.querySelector('.eff-read');
+
+  function paint(i) {
+    eff.style.setProperty('--p', last ? i / last : 0);
+    // Максимум — фиолетовая подсветка с анимацией
+    eff.classList.toggle('max', i === last && last > 0);
+    if (read) { read.textContent = opts[i]; read.classList.toggle('max', i === last && last > 0); }
+    container.querySelectorAll('.eff-labels span')
+      .forEach((s, si) => s.classList.toggle('on', si === i));
+  }
+  paint(idx);
+
+  let lastSent = opts[idx];
+  input.addEventListener('input', () => paint(+input.value));
+  input.addEventListener('pointerdown', () => eff.classList.add('dragging'));
+  const release = () => {
+    eff.classList.remove('dragging');
+    const v = opts[+input.value];
+    if (v !== lastSent) { lastSent = v; onChange(v); }
+  };
+  input.addEventListener('pointerup', release);
+  input.addEventListener('pointercancel', release);
+  // Клавиатура и клик по дорожке не дают pointerup с изменением — ловим change
+  input.addEventListener('change', release);
+
+  return { set(v) { const i = Math.max(0, opts.indexOf(v)); input.value = i; lastSent = opts[i]; paint(i); } };
+}
+
+// Компактный слайдер в шапке чата. Прячется у моделей без силы мышления.
+function renderEffortSelect(preselect) {
+  const slot = document.getElementById('effortSlot');
+  const model = state.models.find(m => m.key === state.currentModel);
+  const opts = state.effortOptionsByModel[state.currentModel] || [];
+  if (!model || !model.supportsEffort || opts.length <= 1) {
+    slot.style.display = 'none';
+    slot.innerHTML = '';
+    state.effortAvailable = false;
+    return;
+  }
+  slot.style.display = '';
+  state.effortAvailable = true;
+  if (preselect && opts.includes(preselect)) state.effort = preselect;
+  if (!opts.includes(state.effort)) state.effort = opts[opts.length - 1];
+
+  const wrap = document.createElement('div');
+  slot.innerHTML = '';
+  slot.appendChild(wrap);
+  buildEffortSlider(wrap, opts, state.effort, async (v) => {
+    state.effort = v;
+    // Сохраняем как настройку по умолчанию — те же поля, что и у бота
+    await fetch('/chat/api/profile', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ effort: v }),
+    }).catch(() => {});
+  }, { labels: false });
+}
+
+function renderChatList() {
+  const list = document.getElementById('chatList');
+  const count = document.getElementById('chatCount');
+  if (count) count.textContent = String(state.chats.length);
+  list.innerHTML = state.chats.length
+    ? state.chats.map((c, i) => `
+      <div class="chat-item ${c.id === state.currentChatId ? 'active' : ''}" data-id="${c.id}" role="button" tabindex="0" aria-current="${c.id === state.currentChatId ? 'true' : 'false'}" style="animation-delay:${Math.min(i * 35, 350)}ms">
+        <span class="t">${escapeHtml(c.title)}</span>
+        <span class="del" data-del="${c.id}" role="button" tabindex="0" aria-label="Удалить чат">🗑</span>
+      </div>`).join('')
+    : '<div class="chat-search-empty">История пока пустая.<br>Создайте первый чат.</div>';
+
+  list.querySelectorAll('.chat-item').forEach(el => {
+    el.addEventListener('click', (e) => {
+      if (e.target.dataset.del) return;
+      switchChat(el.dataset.id);
+    });
+    el.addEventListener('keydown', (e) => {
+      if ((e.key === 'Enter' || e.key === ' ') && !e.target.dataset.del) {
+        e.preventDefault();
+        switchChat(el.dataset.id);
+        if (isNarrow()) closeSidebarDrawer();
+      }
+    });
+  });
+  list.querySelectorAll('[data-del]').forEach(el => {
+    const remove = async (e) => {
+      e.stopPropagation();
+      if (!confirm('Удалить этот чат?')) return;
+      await fetch('/chat/api/chats/delete', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ chatId: el.dataset.del }),
+      });
+      if (el.dataset.del === state.currentChatId) { boot(); return; }
+      const r = await fetch('/chat/api/chats').then(x => x.json());
+      if (r.ok) { state.chats = r.chats; renderChatList(); }
+    };
+    el.addEventListener('click', remove);
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); remove(e); }
+    });
+  });
+  filterChatList();
+}
+
+function filterChatList() {
+  const input = document.getElementById('chatSearch');
+  const list = document.getElementById('chatList');
+  if (!input || !list) return;
+  const q = input.value.trim().toLocaleLowerCase('ru-RU');
+  let visible = 0;
+  list.querySelectorAll('.chat-item').forEach((item) => {
+    const matches = !q || item.querySelector('.t')?.textContent.toLocaleLowerCase('ru-RU').includes(q);
+    item.classList.toggle('search-hidden', !matches);
+    if (matches) visible++;
+  });
+  const old = list.querySelector('.chat-search-empty[data-search]');
+  if (old) old.remove();
+  if (q && !visible && state.chats.length) {
+    list.insertAdjacentHTML('beforeend', '<div class="chat-search-empty" data-search>Ничего не найдено.<br>Попробуйте другой запрос.</div>');
+  }
+}
+
+function updateChatTitle() {
+  const c = state.chats.find(x => x.id === state.currentChatId);
+  document.getElementById('chatTitle').textContent = c ? c.title : 'Новый чат';
+}
+
+function ensureMessageId(message) {
+  if (!message.localId) message.localId = `local-${Date.now().toString(36)}-${++localMessageId}`;
+  return message.localId;
+}
+
+function sameLocalMessage(left, right) {
+  return !!left && !!right && ensureMessageId(left) === ensureMessageId(right);
+}
+
+function unsentEntryFor(message) {
+  return message && state.unsent.find((entry) => sameLocalMessage(entry.message, message));
+}
+
+function rememberUnsent(message, error) {
+  const localId = ensureMessageId(message);
+  let entry = state.unsent.find((item) => ensureMessageId(item.message) === localId);
+  if (entry) entry.error = error;
+  else {
+    entry = { message, error };
+    state.unsent.push(entry);
+  }
+  return entry;
+}
+
+function removeRenderedUnsent(localId) {
+  document.querySelectorAll('[data-unsent-id], [data-unsent-error-id]').forEach((node) => {
+    if (node.dataset.unsentId === localId || node.dataset.unsentErrorId === localId) node.remove();
+  });
+}
+
+function forgetUnsent(message) {
+  const localId = ensureMessageId(message);
+  state.unsent = state.unsent.filter((entry) => ensureMessageId(entry.message) !== localId);
+  removeRenderedUnsent(localId);
+}
+
+function bindUnsentBubble(bubble, entry) {
+  const localId = ensureMessageId(entry.message);
+  bubble.classList.add('unsent');
+  bubble.dataset.unsentId = localId;
+  if (!bubble.querySelector('.unsent-note')) {
+    bubble.insertAdjacentHTML('beforeend', '<div class="unsent-note"><span>Не отправлено</span><button type="button">Повторить</button></div>');
+  }
+  bubble.querySelector('.unsent-note button')?.addEventListener('click', () => retryUnsent(localId), { once: true });
+}
+
+function renderUnsentMessages() {
+  const messages = document.getElementById('messages');
+  state.unsent
+    .filter((entry) => entry.message.chatId === state.currentChatId)
+    .forEach((entry) => {
+      const localId = ensureMessageId(entry.message);
+      const alreadyRendered = [...messages.querySelectorAll('[data-unsent-id]')]
+        .some((node) => node.dataset.unsentId === localId);
+      if (alreadyRendered) return;
+      const bubble = appendMsg('user', entry.message.shownText);
+      bindUnsentBubble(bubble, entry);
+      const errorBubble = appendMsg('error', '⚠️ ' + entry.error);
+      errorBubble.dataset.unsentErrorId = localId;
+    });
+}
+
+function retryUnsent(localId) {
+  const index = state.unsent.findIndex((entry) => ensureMessageId(entry.message) === localId);
+  if (index < 0) return;
+  const [entry] = state.unsent.splice(index, 1);
+  state.queue = state.queue.filter((queued) => !sameLocalMessage(queued, entry.message));
+  removeRenderedUnsent(localId);
+  if (state.sending) {
+    state.queue.unshift(entry.message);
+    renderQueueState();
+    return;
+  }
+  renderQueueState();
+  sendMessage(entry.message);
+}
+
+let chatSwitchRequest = 0;
+async function switchChat(id) {
+  if (id === state.currentChatId) return;
+  const request = ++chatSwitchRequest;
+  const r = await fetch('/chat/api/chat?id=' + encodeURIComponent(id)).then(x => x.json()).catch(() => null);
+  if (request !== chatSwitchRequest || !r || !r.ok) return;
+  state.currentChatId = id;
+  state.currentModel = r.model || state.currentModel;
+  if (r.effort) state.effort = r.effort;
+  if (typeof r.fast === 'boolean') state.fast = r.fast;
+  renderModelSelect();
+  renderUsageIndicator();
+  renderEffortSelect(r.effort);
+  renderFastToggle();
+  renderChatList();
+  renderMessages(r.messages);
+  updateChatTitle();
+}
+
+async function newChat() {
+  const r = await fetch('/chat/api/chats/new', { method: 'POST' }).then(x => x.json()).catch(() => null);
+  if (!r || !r.ok) return;
+  state.chats.unshift(r.chat);
+  state.currentChatId = r.chat.id;
+  state.currentModel = r.chat.model || state.currentModel;
+  renderModelSelect();
+  renderUsageIndicator();
+  renderEffortSelect();
+  renderFastToggle();
+  renderChatList();
+  renderMessages([]);
+  updateChatTitle();
+}
+
+function renderMessages(messages) {
+  const msgs = document.getElementById('messages');
+  msgs.innerHTML = messages.length
+    ? messages.map((m, i) => `<div class="msg ${m.role}" style="animation-delay:${Math.min(i * 25, 300)}ms">${renderRichMessage(m.content)}${renderArtifactCards(m.artifacts)}</div>`).join('')
+    : `<div class="empty-hint">
+        <div class="empty-mark">C</div>
+        <b>Чем могу помочь?</b>
+        <span>Выберите модель, напишите задачу или прикрепите документ. История синхронизируется с Telegram.</span>
+        <div class="empty-prompts">
+          <button type="button" data-prompt="Разбери документ и выдели самое важное">Разобрать документ</button>
+          <button type="button" data-prompt="Помоги написать или исправить код">Написать или исправить код</button>
+          <button type="button" data-prompt="Сравни варианты и объясни различия">Сравнить варианты</button>
+        </div>
+      </div>`;
+  msgs.querySelectorAll('[data-prompt]').forEach((button) => button.addEventListener('click', () => {
+    const input = document.getElementById('input');
+    input.value = button.dataset.prompt;
+    input.dispatchEvent(new Event('input'));
+    input.focus();
+  }));
+  bindMessageActions(msgs);
+  renderUnsentMessages();
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function appendMsg(role, content) {
+  const msgs = document.getElementById('messages');
+  const hint = msgs.querySelector('.empty-hint');
+  if (hint) hint.remove();
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  div.innerHTML = renderRichMessage(content);
+  bindMessageActions(div);
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+  return div;
+}
+
+// Пузырь «модель печатает» — три пульсирующие точки вместо многоточия
+function appendTyping() {
+  const msgs = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = 'msg assistant typing';
+  div.innerHTML = '<span class="thinking-dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="thinking-label">Модель думает</span><span class="thinking-time" aria-hidden="true">0 с</span>';
+  const startedAt = Date.now();
+  const timer = setInterval(() => {
+    const target = div.querySelector('.thinking-time');
+    if (target) target.textContent = Math.max(1, Math.round((Date.now() - startedAt) / 1000)) + ' с';
+  }, 1000);
+  div.startedAt = startedAt;
+  div.stopThinking = () => clearInterval(timer);
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+  return div;
+}
+
+function addZipLink(container, base64, name) {
+  const bytes = atob(base64);
+  const arr = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+  const blob = new Blob([arr], { type: 'application/zip' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name; a.className = 'zip-link'; a.textContent = 'Скачать ' + name;
+  container.appendChild(a);
+}
+
+document.getElementById('attachBtn').addEventListener('click', () => document.getElementById('fileInput').click());
+// Читаем файл в base64: картинки уезжают на сервер именно так
+const asDataUrl = (file) => new Promise((res, rej) => {
+  const r = new FileReader();
+  r.onload = () => res(r.result);
+  r.onerror = () => rej(new Error('не удалось прочитать файл'));
+  r.readAsDataURL(file);
+});
+const IMAGE_EXT = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp']);
+const OFFICE_EXT = new Set(['docx', 'xlsx', 'pptx', 'docm', 'xlsm', 'pptm']);
+
+async function handleSelectedFile(file) {
+  if (!file) return;
+  const ext = file.name.split('.').pop().toLowerCase();
+
+  // Картинку отправляем как есть — её разбирает уже модель
+  if (IMAGE_EXT.has(ext) || file.type.startsWith('image/')) {
+    if (file.size > 8 * 1024 * 1024) { alert('Картинка слишком большая (максимум 8 МБ).'); return; }
+    state.attachedImage = { name: file.name, dataUrl: await asDataUrl(file) };
+    state.attachedFile = null;
+    state.attachedOffice = null;
+    document.getElementById('fileChipName').textContent = '🖼 ' + file.name;
+    document.getElementById('fileChip').style.display = 'flex';
+    return;
+  }
+
+  // Word, Excel и PowerPoint отправляем целиком: текст из них достаёт сервер
+  if (OFFICE_EXT.has(ext)) {
+    if (file.size > 12 * 1024 * 1024) { alert('Документ слишком большой (максимум 12 МБ).'); return; }
+    state.attachedOffice = { name: file.name, data: await asDataUrl(file) };
+    state.attachedFile = null; state.attachedImage = null;
+    document.getElementById('fileChipName').textContent = '📄 ' + file.name;
+    document.getElementById('fileChip').style.display = 'flex';
+    return;
+  }
+
+  if (!TEXT_EXT.has(ext)) {
+    const старый = ['doc', 'xls', 'ppt'].includes(ext);
+    alert(старый
+      ? 'Это старый формат Office. Пересохраните как .docx, .xlsx или .pptx — их читаю.'
+      : 'Понимаю текст и код, картинки (png, jpg, webp) и документы Word, Excel, PowerPoint.');
+    return;
+  }
+  if (file.size > 2 * 1024 * 1024) { alert('Файл слишком большой (максимум 2 МБ).'); return; }
+  const text = await file.text();
+  state.attachedFile = { name: file.name, content: text.length > MAX_FILE_CHARS ? text.slice(0, MAX_FILE_CHARS) + '\n…(обрезано)' : text };
+  state.attachedImage = null;
+  state.attachedOffice = null;
+  document.getElementById('fileChipName').textContent = file.name;
+  document.getElementById('fileChip').style.display = 'flex';
+}
+
+document.getElementById('fileInput').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  await handleSelectedFile(file);
+});
+document.getElementById('fileChipRemove').addEventListener('click', () => {
+  state.attachedFile = null;
+  state.attachedImage = null;
+  state.attachedOffice = null;
+  document.getElementById('fileChip').style.display = 'none';
+});
+
+function takeComposerMessage() {
+  const input = document.getElementById('input');
+  let text = input.value.trim();
+  if (!text && !state.attachedFile && !state.attachedImage && !state.attachedOffice) return null;
+
+  if (state.attachedFile) {
+    text = `Файл \`${state.attachedFile.name}\`:\n\`\`\`\n${state.attachedFile.content}\n\`\`\`\n\n${text}`.trim();
+  }
+  const shownText = input.value.trim()
+    || (state.attachedFile && state.attachedFile.name)
+    || (state.attachedImage && '🖼 ' + state.attachedImage.name)
+    || (state.attachedOffice && '📄 ' + state.attachedOffice.name) || '';
+  const images = state.attachedImage ? [state.attachedImage.dataUrl] : null;
+  const office = state.attachedOffice || null;
+  if (state.attachedOffice && !text) text = 'Прокомментируй документ: о чём он и что важное внутри.';
+  if (state.attachedImage && !text) text = 'Опиши, что на изображении, и ответь по его содержимому.';
+  const message = {
+    text,
+    shownText,
+    images,
+    office,
+    chatId: state.currentChatId,
+    model: state.currentModel,
+    effort: state.effortAvailable ? state.effort : undefined,
+  };
+  ensureMessageId(message);
+  input.value = '';
+  input.style.height = 'auto';
+  document.getElementById('draftCount').textContent = '0';
+  state.attachedFile = null;
+  state.attachedImage = null;
+  state.attachedOffice = null;
+  document.getElementById('fileChip').style.display = 'none';
+  return message;
+}
+
+function renderQueueState() {
+  const strip = document.getElementById('queueStrip');
+  const next = state.queue[0];
+  const failed = unsentEntryFor(next);
+  strip.hidden = !next;
+  if (next) {
+    document.getElementById('queueTitle').textContent = failed
+      ? (state.queue.length > 1 ? `Не отправлено · ещё ${state.queue.length - 1} в очереди` : 'Не отправлено')
+      : (state.queue.length > 1 ? `В очереди: ${state.queue.length}` : 'Следующее сообщение');
+    const preview = String(next.shownText || next.text || 'Вложение').replace(/\s+/g, ' ').trim();
+    document.getElementById('queueText').textContent = preview.length > 110 ? preview.slice(0, 109) + '…' : preview;
+  }
+  const queueAction = document.getElementById('queueClear');
+  queueAction.textContent = failed ? 'Повторить' : 'Очистить';
+  queueAction.title = failed ? 'Повторить неотправленное сообщение' : 'Очистить очередь';
+  queueAction.setAttribute('aria-label', queueAction.title);
+  const send = document.getElementById('send');
+  const queuesNewMessage = state.sending || !!failed;
+  send.classList.toggle('queue-mode', queuesNewMessage);
+  send.querySelector('span').textContent = queuesNewMessage ? 'В очередь' : 'Отправить';
+  send.title = failed
+    ? 'Добавить после неотправленного сообщения'
+    : state.sending ? 'Поставить сообщение следующим' : 'Отправить сообщение';
+  send.setAttribute('aria-label', send.title);
+  document.getElementById('composerHint').textContent = failed
+    ? 'Очередь приостановлена · повторите неотправленное сообщение'
+    : state.sending
+      ? 'Ответ готовится · новое сообщение будет отправлено следующим'
+      : (prefs.sendOnEnter ? 'Enter — отправить · Shift + Enter — новая строка' : 'Ctrl + Enter — отправить · Enter — новая строка');
+}
+
+async function sendMessage(preparedMessage = null) {
+  const message = preparedMessage || takeComposerMessage();
+  if (!message) return;
+  ensureMessageId(message);
+
+  // После ошибки сохраняем исходный порядок: новые сообщения становятся за
+  // неотправленным, пока пользователь не повторит его или не очистит очередь.
+  if (state.sending || (!preparedMessage && unsentEntryFor(state.queue[0]))) {
+    state.queue.push(message);
+    renderQueueState();
+    document.getElementById('input').focus();
+    return;
+  }
+
+  state.sending = true;
+  renderQueueState();
+  let requestSucceeded = false;
+
+  // Запоминаем, В КАКОЙ чат ушло сообщение. Пользователь может переключиться,
+  // пока идёт ответ: тогда пузырь «печатает» уже удалён из DOM, и писать в
+  // него нельзя, а state.currentChatId трогать тем более — иначе следующее
+  // сообщение уйдёт не в тот чат (это и есть «залипание»).
+  const sentChatId = message.chatId;
+  let pending;
+  let userBubble = null;
+  if (state.currentChatId === sentChatId) {
+    userBubble = appendMsg('user', message.shownText);
+    pending = appendTyping();
+  } else {
+    pending = document.createElement('div');
+    pending.startedAt = Date.now();
+  }
+  // Пользователь всё ещё смотрит тот же чат и пузырь на месте?
+  const stillHere = () => state.currentChatId === sentChatId && pending.isConnected;
+
+  const showInBubble = (cls, text, zip, zipName, meta, artifacts) => {
+    if (!stillHere()) return;
+    if (pending.stopThinking) pending.stopThinking();
+    pending.classList.remove('typing');
+    pending.innerHTML = '';
+    pending.className = cls;
+    pending.innerHTML = renderRichMessage(text);
+    bindMessageActions(pending);
+    if (artifacts?.length) pending.insertAdjacentHTML('beforeend', renderArtifactCards(artifacts));
+    if (zip) addZipLink(pending, zip, zipName);
+    if (meta) {
+      const info = document.createElement('div');
+      info.className = 'message-meta';
+      info.textContent = meta;
+      pending.appendChild(info);
+    }
+  };
+
+  const markNotSent = (error) => {
+    const entry = rememberUnsent(message, error);
+    if (!state.queue.some((queued) => sameLocalMessage(queued, message))) state.queue.unshift(message);
+    if (stillHere() && userBubble) {
+      bindUnsentBubble(userBubble, entry);
+      pending.dataset.unsentErrorId = ensureMessageId(message);
+    } else if (state.currentChatId === sentChatId) {
+      renderUnsentMessages();
+    }
+  };
+
+  try {
+    const r = await fetch('/chat/api/message', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        text: message.text, model: message.model, chatId: sentChatId,
+        images: message.images, office: message.office, effort: message.effort,
+      }),
+    });
+    const data = await r.json();
+    if (!data.ok) {
+      const error = data.error || 'Сообщение не отправлено.';
+      showInBubble('msg error', '⚠️ ' + error);
+      markNotSent(error);
+    } else {
+      requestSucceeded = true;
+      if (data.limits) {
+        state.limits = data.limits;
+        renderUsageIndicator();
+      }
+      if (data.model && state.currentChatId === sentChatId) {
+        state.currentModel = data.model;
+        renderModelSelect();
+        renderEffortSelect();
+        renderFastToggle();
+        renderUsageIndicator();
+      }
+      const elapsed = data.durationMs || (Date.now() - pending.startedAt);
+      const total = Number(data.usage?.total || data.tokens?.total || 0);
+      const details = [`Готово за ${Math.max(.1, elapsed / 1000).toFixed(1)} с`];
+      if (total > 0) details.push(`${new Intl.NumberFormat('ru-RU').format(total)} токенов`);
+      showInBubble('msg assistant', data.text, data.zip, data.zipName, details.join(' · '), data.artifacts);
+      // Пользователь ушёл и вернулся в тот же чат: пузырь стёрся при
+      // перерисовке — подтягиваем историю с сервера, иначе ответ не увидеть
+      if (state.currentChatId === sentChatId && !pending.isConnected) {
+        const fresh = await fetch('/chat/api/chat?id=' + encodeURIComponent(sentChatId))
+          .then(x => x.json()).catch(() => null);
+        if (fresh && fresh.ok && state.currentChatId === sentChatId) renderMessages(fresh.messages);
+      }
+      // Сервер мог записать в другой чат (например исходный удалили) — но
+      // переносим фокус только если пользователь никуда не ушёл
+      if (data.chatId && data.chatId !== sentChatId && state.currentChatId === sentChatId) {
+        state.currentChatId = data.chatId;
+      }
+      const chats = await fetch('/chat/api/chats').then(x => x.json()).catch(() => null);
+      if (chats && chats.ok) { state.chats = chats.chats; renderChatList(); updateChatTitle(); }
+    }
+  } catch (e) {
+    const error = 'Не удалось отправить — проверьте связь и попробуйте ещё раз.';
+    showInBubble('msg error', '⚠️ ' + error);
+    markNotSent(error);
+  } finally {
+    if (pending.stopThinking) pending.stopThinking();
+    state.sending = false;
+    if (stillHere()) {
+      const m = document.getElementById('messages');
+      m.scrollTop = m.scrollHeight;
+    }
+    if (requestSucceeded) {
+      const next = state.queue.shift() || null;
+      renderQueueState();
+      if (next) queueMicrotask(() => sendMessage(next));
+    } else {
+      renderQueueState();
+    }
+  }
+}
+
+/* ---------------- Боковая панель ---------------- */
+
+// На узком экране панель — выдвижная шторка поверх чата (класс sb-open),
+// на широком — схлопывается по ширине (класс sb-collapsed). Состояние для
+// широкого экрана запоминаем, для шторки — нет: она всегда закрыта при входе.
+const isNarrow = () => window.matchMedia('(max-width: 820px)').matches;
+
+function applySidebar() {
+  document.body.classList.toggle('sb-collapsed', !!prefs.sidebarCollapsed);
+  const narrow = isNarrow();
+  const open = narrow ? document.body.classList.contains('sb-open') : !prefs.sidebarCollapsed;
+  document.getElementById('sbOpenBtn').setAttribute('aria-expanded', String(open));
+  const sidebar = document.querySelector('.sidebar');
+  const main = document.querySelector('.main');
+  if (sidebar) {
+    sidebar.setAttribute('aria-hidden', String(!open));
+    sidebar.inert = !open;
+  }
+  if (main) main.inert = narrow && open;
+}
+function toggleSidebar() {
+  if (isNarrow()) {
+    const willOpen = !document.body.classList.contains('sb-open');
+    document.body.classList.toggle('sb-open', willOpen);
+    applySidebar();
+    requestAnimationFrame(() => (willOpen
+      ? document.getElementById('sbCloseBtn')
+      : document.getElementById('sbOpenBtn')).focus());
+    return;
+  }
+  prefs.sidebarCollapsed = !prefs.sidebarCollapsed;
+  savePrefs();
+  applySidebar();
+}
+function closeSidebarDrawer({ restoreFocus = true } = {}) {
+  const wasOpen = document.body.classList.contains('sb-open');
+  document.body.classList.remove('sb-open');
+  applySidebar();
+  if (wasOpen && restoreFocus) requestAnimationFrame(() => document.getElementById('sbOpenBtn').focus());
+}
+
+document.getElementById('sbOpenBtn').addEventListener('click', toggleSidebar);
+document.getElementById('sbCloseBtn').addEventListener('click', toggleSidebar);
+document.getElementById('sbBackdrop').addEventListener('click', () => closeSidebarDrawer());
+// На узком экране после выбора чата шторку закрываем — иначе она перекрывает ответ
+document.getElementById('chatList').addEventListener('click', () => {
+  if (isNarrow()) setTimeout(closeSidebarDrawer, 180);
+});
+window.addEventListener('resize', () => {
+  if (!isNarrow()) closeSidebarDrawer({ restoreFocus: false });
+  else applySidebar();
+  syncPlaceholder();
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && isNarrow() && document.body.classList.contains('sb-open')) {
+    event.preventDefault();
+    closeSidebarDrawer();
+  }
+});
+
+// В узкое поле ввода длинный плейсхолдер не влезает и обрезается на второй
+// строке — на телефоне показываем короткий
+function syncPlaceholder() {
+  const i = document.getElementById('input');
+  i.placeholder = window.innerWidth <= 560 ? 'Сообщение…' : 'Напишите сообщение…';
+}
+syncPlaceholder();
+
+/* ---------------- Модальные окна ---------------- */
+
+// Класс на body нужен, чтобы CSS снял backdrop-filter с панелей приложения,
+// пока модалка открыта (см. комментарий у body.modal-open в стилях)
+function anyModalOpen() {
+  return [...document.querySelectorAll('.overlay')].some(o => o.style.display === 'flex');
+}
+const modalReturnFocus = new WeakMap();
+function openModal(id) {
+  document.body.classList.add('modal-open');
+  const modal = document.getElementById(id);
+  const drawerOpen = isNarrow() && document.body.classList.contains('sb-open');
+  modalReturnFocus.set(modal, drawerOpen ? document.getElementById('sbOpenBtn') : document.activeElement);
+  if (drawerOpen) closeSidebarDrawer({ restoreFocus: false });
+  modal.style.display = 'flex';
+  modal.setAttribute('aria-hidden', 'false');
+  requestAnimationFrame(() => modal.querySelector('button, select, input, textarea, a[href]')?.focus());
+}
+function closeModal(o) {
+  o.style.display = 'none';
+  o.setAttribute('aria-hidden', 'true');
+  const previous = modalReturnFocus.get(o);
+  if (previous && previous.isConnected) previous.focus();
+  if (!anyModalOpen()) document.body.classList.remove('modal-open');
+}
+
+/* ---------------- Профиль и настройки ---------------- */
+
+// Настройки оформления живут в браузере (у каждого устройства свои),
+// а модель и сила мышления — на сервере, общие с Telegram-ботом.
+const PREF_KEY = 'clop_prefs';
+const ACCENTS = { orange:'#d97757', blue:'#6d8fc4', violet:'#9876ad', green:'#6f9c79', pink:'#bd718d' };
+const defaultPrefs = { accent:'orange', fontSize:14.5, animations:true, sendOnEnter:true, sidebarCollapsed:false };
+
+function loadPrefs() {
+  try { return { ...defaultPrefs, ...JSON.parse(localStorage.getItem(PREF_KEY) || '{}') }; }
+  catch { return { ...defaultPrefs }; }
+}
+let prefs = loadPrefs();
+
+function applyPrefs() {
+  const root = document.documentElement;
+  root.style.setProperty('--accent', ACCENTS[prefs.accent] || ACCENTS.orange);
+  document.getElementById('messages').style.fontSize = prefs.fontSize + 'px';
+  root.classList.toggle('no-anim', !prefs.animations);
+  const hint = document.getElementById('composerHint');
+  if (hint) hint.textContent = prefs.sendOnEnter
+    ? 'Enter — отправить · Shift + Enter — новая строка'
+    : 'Ctrl + Enter — отправить · Enter — новая строка';
+  if (state.sending) renderQueueState();
+}
+function savePrefs() {
+  try { localStorage.setItem(PREF_KEY, JSON.stringify(prefs)); } catch {}
+  applyPrefs();
+applySidebar();
+}
+applyPrefs();
+
+function fmtDate(ts) {
+  return ts ? new Date(ts).toLocaleDateString('ru-RU', { day:'2-digit', month:'2-digit', year:'numeric' }) : '—';
+}
+function limRow(title, s) {
+  const level = s.percent >= 90 ? 'hot' : s.percent >= 60 ? 'warn' : '';
+  return `<div class="lim-row">
+    <div class="lim-head"><span>${title}</span><span>${s.percent}%${s.exceeded ? ' · исчерпан' : ''}</span></div>
+    <div class="lim-bar"><div class="lim-fill ${level}" style="width:${Math.min(100, s.percent)}%"></div></div>
+  </div>`;
+}
+
+async function openProfile() {
+  openModal('profileOverlay');
+  const body = document.getElementById('profileBody');
+  body.innerHTML = '<div class="muted-sm" style="padding:18px 0">Загрузка…</div>';
+
+  const p = await fetch('/chat/api/profile').then(x => x.json()).catch(() => null);
+  if (!p || !p.ok) {
+    body.innerHTML = `<div class="muted-sm" style="padding:18px 0">⚠️ ${escapeHtml((p && p.error) || 'Не удалось загрузить профиль.')}</div>`;
+    return;
+  }
+
+  const initial = (p.name || '?').trim().charAt(0).toUpperCase();
+  const availModels = p.models.filter(m => m.available && m.provider !== 'claude');
+
+  // У части моделей (Clop 2.5, Haiku 4.5, все GPT) силы мышления нет вовсе —
+  // у них своё встроенное размышление, выбирать нечего. Сервер об этом
+  // сообщает флагом supportsEffort, его и слушаем.
+  function effortControl(modelKey, current) {
+    const m = p.models.find(x => x.key === modelKey);
+    const opts = p.effortOptionsByModel[modelKey] || [];
+    if (!m || !m.supportsEffort || opts.length <= 1) {
+      return { hint: 'У этой модели своё встроенное размышление — настраивать нечего.',
+        html: '<span class="muted-sm">не настраивается</span>' };
+    }
+    return { hint: 'Чем выше, тем тщательнее ответ — и тем быстрее тратится лимит.',
+      html: '<div id="setEffort"></div>', opts, current };
+  }
+  const eff0 = effortControl(p.model, p.effort);
+
+  body.innerHTML = `
+    <section>
+      <div class="prof-top">
+        <div class="avatar">${escapeHtml(initial)}</div>
+        <div>
+          <div class="prof-name">${escapeHtml(p.name)}</div>
+          <div class="prof-sub">${escapeHtml(p.username)} · ${escapeHtml(p.planTitle)}${p.proUntil ? ' до ' + fmtDate(p.proUntil) : ''}</div>
+        </div>
+      </div>
+      <div class="stat-grid">
+        <div class="stat"><div class="k">Запросов</div><div class="v">${p.stats.requests}</div></div>
+        <div class="stat"><div class="k">Токенов</div><div class="v">${(p.stats.tokens/1000).toFixed(1)}к</div></div>
+        <div class="stat"><div class="k">Чатов</div><div class="v">${p.chatsCount}</div></div>
+        <div class="stat"><div class="k">С нами с</div><div class="v" style="font-size:14px">${fmtDate(p.createdAt)}</div></div>
+      </div>
+    </section>
+
+    <section>
+      <h3>Единый лимит</h3>
+      <div class="muted-sm" style="margin-bottom:14px">Бот, сайт и личный API расходуют один общий лимит.</div>
+      <div class="prov-title"><i class="dot gpt"></i>Все GPT-модели</div>
+      ${limRow('5 часов', p.limits.gpt.short)}
+      ${limRow('Неделя', p.limits.gpt.long)}
+      <div class="prov-title" style="margin-top:16px"><i class="dot kimi"></i>Все Kimi-модели</div>
+      ${limRow('5 часов', p.limits.kimi.short)}
+      ${limRow('Неделя', p.limits.kimi.long)}
+      <div class="muted-sm" style="margin-top:12px">Картинки сегодня: ${p.images.used} из ${p.images.limit}</div>
+    </section>
+
+    <section>
+      <div class="api-section-head">
+        <h3>По умолчанию</h3>
+        <span class="save-hint" id="saveHint">✓ Сохранено</span>
+      </div>
+      <div class="set-row">
+        <div><div class="lbl">Модель</div><div class="hint">Применяется и в Telegram-боте, и в новых чатах на сайте.</div></div>
+        <select id="setModel">${availModels.map(m => `<option value="${m.key}" ${m.key===p.model?'selected':''}>${escapeHtml(m.title)}</option>`).join('')}</select>
+      </div>
+      <div class="set-row" id="effortRow">
+        <div><div class="lbl">Сила мышления</div><div class="hint" id="effortHint">${eff0.hint}</div></div>
+        <div id="effortCtl">${eff0.html}</div>
+      </div>
+      <div class="set-row">
+        <div><div class="lbl">⚡ Быстрый режим GPT</div><div class="hint">Доступен на любом тарифе. Ответ быстрее, расход лимита ×1,2.</div></div>
+        <button class="toggle ${p.fast?'on':''}" id="setFast"></button>
+      </div>
+    </section>
+
+    <section>
+      <h3>Оформление</h3>
+      <div class="set-row">
+        <div><div class="lbl">Цвет акцента</div><div class="hint">Сохраняется в этом браузере.</div></div>
+        <div class="accents">${Object.entries(ACCENTS).map(([k,v]) =>
+          `<button class="accent-dot ${prefs.accent===k?'sel':''}" data-accent="${k}" style="background:${v}"></button>`).join('')}</div>
+      </div>
+      <div class="set-row">
+        <div><div class="lbl">Размер текста</div><div class="hint">Размер сообщений в чате.</div></div>
+        <select id="setFont">
+          ${[13,14.5,16,18].map(s => `<option value="${s}" ${prefs.fontSize==s?'selected':''}>${s===13?'Мелкий':s===14.5?'Обычный':s===16?'Крупный':'Очень крупный'}</option>`).join('')}
+        </select>
+      </div>
+      <div class="set-row">
+        <div><div class="lbl">Анимации</div><div class="hint">Выключите, если интерфейс подтормаживает.</div></div>
+        <button class="toggle ${prefs.animations?'on':''}" id="setAnim"></button>
+      </div>
+      <div class="set-row">
+        <div><div class="lbl">Enter отправляет сообщение</div><div class="hint">Если выключено — отправка по Ctrl+Enter, а Enter переносит строку.</div></div>
+        <button class="toggle ${prefs.sendOnEnter?'on':''}" id="setEnter"></button>
+      </div>
+    </section>
+
+    <section>
+      <h3>Опасная зона</h3>
+      <div class="set-row">
+        <div><div class="lbl">Удалить все чаты</div><div class="hint">Скроет всю переписку и на сайте, и в боте. Лимиты и тариф не тронутся.</div></div>
+        <button class="danger-btn" id="clearChats">Удалить все</button>
+      </div>
+    </section>
+  `;
+
+  const hint = document.getElementById('saveHint');
+  const flash = () => { hint.classList.add('show'); setTimeout(() => hint.classList.remove('show'), 1600); };
+
+  async function saveServer(patch) {
+    const r = await fetch('/chat/api/profile', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(patch),
+    }).then(x => x.json()).catch(() => null);
+    if (!r || !r.ok) { alert((r && r.error) || 'Не удалось сохранить.'); return null; }
+    flash();
+    return r;
+  }
+
+  // Слайдер пересобирается при смене модели (у разных моделей свои ступени),
+  // поэтому строим его заново — и только если он вообще есть
+  function bindEffort(ctl) {
+    const host = document.getElementById('setEffort');
+    if (!host || !ctl.opts) return;
+    buildEffortSlider(host, ctl.opts, ctl.current, async (v) => {
+      const r = await saveServer({ effort: v });
+      if (r) renderEffortSelect(r.effort);
+    });
+  }
+  bindEffort(eff0);
+
+  document.getElementById('setModel').addEventListener('change', async (e) => {
+    const r = await saveServer({ model: e.target.value });
+    if (!r) return;
+    const ctl = effortControl(r.model, r.effort);
+    document.getElementById('effortCtl').innerHTML = ctl.html;
+    document.getElementById('effortHint').textContent = ctl.hint;
+    bindEffort(ctl);
+    // Синхронизируем и шапку чата
+    state.currentModel = r.model;
+    renderModelSelect(); renderEffortSelect(r.effort);
+  });
+  document.getElementById('setFast').addEventListener('click', async (e) => {
+    const value = !e.target.classList.contains('on');
+    const r = await saveServer({ fast: value });
+    if (!r) return;
+    state.fast = r.fast;
+    e.target.classList.toggle('on', state.fast);
+    renderFastToggle();
+  });
+
+  body.querySelectorAll('[data-accent]').forEach(b => b.addEventListener('click', () => {
+    prefs.accent = b.dataset.accent; savePrefs();
+    body.querySelectorAll('[data-accent]').forEach(x => x.classList.toggle('sel', x === b));
+  }));
+  document.getElementById('setFont').addEventListener('change', (e) => {
+    prefs.fontSize = parseFloat(e.target.value); savePrefs();
+  });
+  document.getElementById('setAnim').addEventListener('click', (e) => {
+    prefs.animations = !prefs.animations; savePrefs();
+    e.target.classList.toggle('on', prefs.animations);
+  });
+  document.getElementById('setEnter').addEventListener('click', (e) => {
+    prefs.sendOnEnter = !prefs.sendOnEnter; savePrefs();
+    e.target.classList.toggle('on', prefs.sendOnEnter);
+  });
+
+  document.getElementById('clearChats').addEventListener('click', async (e) => {
+    if (!confirm('Удалить все чаты? Переписка скроется и на сайте, и в боте.')) return;
+    e.target.disabled = true;
+    const r = await fetch('/chat/api/chats/clear', { method: 'POST' }).then(x => x.json()).catch(() => null);
+    if (!r || !r.ok) { alert('Не удалось удалить чаты.'); e.target.disabled = false; return; }
+    closeModal(document.getElementById('profileOverlay'));
+    boot();
+  });
+}
+
+document.getElementById('profileBtn').addEventListener('click', openProfile);
+document.getElementById('fastToggle').addEventListener('click', async () => {
+  const r = await fetch('/chat/api/profile', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ fast: !state.fast }),
+  }).then(x => x.json()).catch(() => null);
+  if (r?.ok) { state.fast = r.fast; renderFastToggle(); }
+});
+
+/* ---------------- Приложение ---------------- */
+
+// Сайт ставится как обычное приложение (PWA): своё окно без адресной строки,
+// иконка на устройстве. Вход и лимиты те же самые — ничего не дублируется.
+// На Android и десктопе браузер сам предлагает установку, мы перехватываем
+// это приглашение и показываем своей кнопкой. На iOS такого API нет —
+// там остаётся инструкция «Поделиться → На экран Домой».
+let installPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  installPrompt = e;
+  const b = document.getElementById('installBtn');
+  if (b) b.style.display = 'inline-flex';
+});
+window.addEventListener('appinstalled', () => { installPrompt = null; });
+
+const isStandalone = () =>
+  window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+
+function detectPlatform() {
+  const ua = navigator.userAgent;
+  if (/iPhone|iPad|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) return 'ios';
+  if (/Android/i.test(ua)) return 'android';
+  if (/Linux/i.test(ua)) return 'linux';
+  return 'windows';
+}
+
+const PLATFORMS = {
+  ios:     { nm: 'iPhone / iPad', sub: 'через Safari' },
+  android: { nm: 'Android',       sub: 'через Chrome' },
+  windows: { nm: 'Windows',       sub: 'Chrome или Edge' },
+  linux:   { nm: 'Linux',         sub: 'Chrome / Chromium' },
+};
+
+const STEPS = {
+  ios: [
+    'Откройте этот сайт в <b>Safari</b> — в других браузерах на iPhone установка недоступна.',
+    'Нажмите <b>Поделиться</b> — квадрат со стрелкой вверх внизу экрана.',
+    'Выберите <b>На экран «Домой»</b>.',
+    'Нажмите <b>Добавить</b> — иконка появится на рабочем столе.',
+  ],
+  android: [
+    'Откройте сайт в <b>Chrome</b>.',
+    'Нажмите <b>Установить приложение</b> выше, либо меню <b>⋮</b> → <b>Установить приложение</b>.',
+    'Подтвердите — ярлык появится на рабочем столе.',
+  ],
+  windows: [
+    'Откройте сайт в <b>Chrome</b> или <b>Edge</b>.',
+    'Нажмите <b>Установить приложение</b> выше, либо значок установки справа в адресной строке.',
+    'Приложение откроется отдельным окном и попадёт в меню «Пуск».',
+  ],
+  linux: [
+    'Откройте сайт в <b>Chrome</b> или <b>Chromium</b>.',
+    'Нажмите <b>Установить приложение</b> выше, либо меню <b>⋮</b> → <b>Установить приложение</b>.',
+    'Ярлык добавится в меню приложений системы.',
+  ],
+};
+
+function renderApp(platform) {
+  const cards = Object.entries(PLATFORMS).map(([k, v], i) =>
+    '<button class="plat ' + (k === platform ? 'sel' : '') + '" data-plat="' + k + '"' +
+    ' style="animation-delay:' + (i * 45) + 'ms">' +
+    '<span class="nm">' + v.nm + '</span><span class="sub">' + v.sub + '</span></button>').join('');
+
+  const steps = STEPS[platform].map((x) => '<li>' + x + '</li>').join('');
+  const badge = isStandalone() ? '<div class="installed-badge">✓ Вы уже в приложении</div>' : '';
+
+  document.getElementById('appBody').innerHTML =
+    '<section>' + badge +
+    '<h3>Выберите систему</h3>' +
+    '<div class="plat-grid">' + cards + '</div>' +
+    '<button id="installBtn">Установить приложение</button>' +
+    '<h3>Как установить</h3>' +
+    '<ol class="steps">' + steps + '</ol>' +
+    '<div class="app-note">Это тот же Clop ai, только отдельным окном и с иконкой на устройстве — ' +
+    '<b>вход через Telegram обязателен</b>, аккаунт, чаты и лимиты общие с ботом. ' +
+    'Отдельной регистрации и отдельного расхода токенов нет.</div>' +
+    '</section>';
+
+  // Кнопку установки показываем, только если браузер реально её предложил
+  const btn = document.getElementById('installBtn');
+  if (installPrompt && !isStandalone()) {
+    btn.style.display = 'inline-flex';
+    btn.onclick = async () => {
+      btn.disabled = true;
+      installPrompt.prompt();
+      const res = await installPrompt.userChoice.catch(() => null);
+      if (res && res.outcome === 'accepted') { installPrompt = null; btn.style.display = 'none'; }
+      btn.disabled = false;
+    };
+  }
+
+  document.getElementById('appBody').querySelectorAll('[data-plat]')
+    .forEach((b) => b.addEventListener('click', () => renderApp(b.dataset.plat)));
+}
+
+document.getElementById('appBtn').addEventListener('click', () => {
+  openModal('appOverlay');
+  renderApp(detectPlatform());
+});
+
+// Без service worker браузер не считает сайт устанавливаемым приложением
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js', { scope: '/chat' })
+      .catch((e) => console.warn('sw:', e.message));
+  });
+}
+
+/* ---------------- Тарифы ---------------- */
+
+
+// Оплаты на сайте нет: кнопка ведёт в бота диплинком ?start=buy_<план>,
+// а счёт в звёздах выставляет уже сам Telegram.
+async function openPlans() {
+  openModal('plansOverlay');
+  const body = document.getElementById('plansBody');
+  body.innerHTML = '<div class="muted-sm" style="padding:18px 0">Загрузка…</div>';
+
+  const p = await fetch('/chat/api/plans').then(x => x.json()).catch(() => null);
+  if (!p || !p.ok) {
+    body.innerHTML = `<div class="muted-sm" style="padding:18px 0">⚠️ ${escapeHtml((p && p.error) || 'Не удалось загрузить тарифы.')}</div>`;
+    return;
+  }
+
+  const nf = new Intl.NumberFormat('ru-RU');
+  // Акция приходит с сервера вместе с датой окончания — форматируем на месте
+  const promo = p.promo;
+  const promoTill = promo ? new Date(promo.until).toLocaleString('ru-RU',
+    { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : '';
+  const banner = promo ? `<div class="promo-banner">🎁 <b>Акция: тариф ${escapeHtml((p.plans.find(x => x.key === promo.plan) || {}).title || promo.plan)} бесплатно для всех</b> до ${escapeHtml(promoTill)}. Он уже подключён — покупать ничего не нужно.</div>` : '';
+  body.innerHTML = `<section>${banner}${p.plans.map((pl, i) => {
+    const isCur = pl.key === p.current;
+    const isPromo = promo && pl.key === promo.plan;
+    return `
+    <div class="plan-card ${isCur ? 'cur' : ''}" style="animation-delay:${i * 45}ms">
+      <div class="plan-top">
+        <div class="plan-name">${escapeHtml(pl.title)}${isCur ? '<span class="plan-cur">ваш тариф</span>' : ''}</div>
+        <div class="plan-price">${isPromo ? 'сейчас бесплатно' : pl.stars ? `${nf.format(pl.stars)} ★ <span class="per">/ ${pl.days} дн.</span>` : 'бесплатно'}</div>
+      </div>
+      <ul class="plan-perks">${pl.perks.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul>
+      ${isPromo ? `<div class="promo-note">Открыт всем по акции до ${escapeHtml(promoTill)} — оплата нужна только чтобы оставить тариф после неё.</div>` : ''}
+      ${pl.stars ? `
+        <a class="buy-btn" target="_blank" rel="noopener"
+           href="https://t.me/${encodeURIComponent(p.bot)}?start=buy_${encodeURIComponent(pl.key)}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2.6 2.9 6 6.5.9-4.7 4.6 1.1 6.5-5.8-3-5.8 3 1.1-6.5L2.6 9.5l6.5-.9z"/></svg>
+          ${isCur ? 'Продлить' : 'Купить'} за ${nf.format(pl.stars)} ★
+        </a>
+        <div class="buy-note">Откроется бот в Telegram — там придёт счёт на оплату звёздами.</div>
+      ` : ''}
+    </div>`;
+  }).join('')}</section>`;
+}
+
+document.getElementById('plansBtn').addEventListener('click', openPlans);
+
+/* ---------------- «Мой API»: ключи + песочница ---------------- */
+
+let apiState = { keys: [], max: 5, baseUrl: '' };
+
+function defaultPayload(path, model) {
+  if (path === '/v1/files') return {
+    purpose: 'user_data',
+    file: {
+      filename: 'hello.txt',
+      mime_type: 'text/plain',
+      file_data: 'aGVsbG8gZnJvbSBDbG9wIEFQSSE=',
+    },
+  };
+  if (path === '/v1/ask') return { prompt: 'Привет! Ответь одним словом.', model };
+  return { model, messages: [{ role: 'user', content: 'Привет! Ответь одним словом.' }] };
+}
+
+function syncPgBody() {
+  const path = document.getElementById('pgPath').value;
+  const model = document.getElementById('pgModel').value;
+  document.getElementById('pgBody').value = JSON.stringify(defaultPayload(path, model), null, 2);
+}
+
+function renderKeys() {
+  const list = document.getElementById('keysList');
+  document.getElementById('keysCount').textContent = `${apiState.keys.length} из ${apiState.max}`;
+  document.getElementById('createKeyBtn').disabled = apiState.keys.length >= apiState.max;
+
+  list.innerHTML = apiState.keys.length
+    ? apiState.keys.map((k, i) => `
+      <div class="key-row" style="animation-delay:${i * 40}ms">
+        <code>${escapeHtml(k.key)}</code>
+        <button data-copy="${escapeHtml(k.key)}">Копировать</button>
+        <button class="del" data-delkey="${escapeHtml(k.key)}">Удалить</button>
+      </div>`).join('')
+    : '<div class="muted-sm">Ключей пока нет — создайте первый.</div>';
+
+  list.querySelectorAll('[data-copy]').forEach(b => b.addEventListener('click', async () => {
+    await navigator.clipboard.writeText(b.dataset.copy);
+    const old = b.textContent; b.textContent = '✓ Готово';
+    setTimeout(() => { b.textContent = old; }, 1400);
+  }));
+  list.querySelectorAll('[data-delkey]').forEach(b => b.addEventListener('click', async () => {
+    if (!confirm('Удалить этот ключ? Он сразу перестанет работать.')) return;
+    b.disabled = true;
+    const r = await fetch('/chat/api/keys/delete', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key: b.dataset.delkey }),
+    }).then(x => x.json()).catch(() => null);
+    if (!r || !r.ok) { alert((r && r.error) || 'Не удалось удалить ключ.'); b.disabled = false; return; }
+    await loadKeys();
+  }));
+
+  // Селект ключей в песочнице
+  const pgKey = document.getElementById('pgKey');
+  pgKey.innerHTML = apiState.keys.map(k => `<option value="${escapeHtml(k.key)}">${escapeHtml(k.key)}</option>`).join('')
+    || '<option value="">— нет ключей —</option>';
+  document.getElementById('pgSend').disabled = !apiState.keys.length;
+}
+
+async function loadKeys() {
+  const r = await fetch('/chat/api/keys').then(x => x.json()).catch(() => null);
+  if (!r || !r.ok) {
+    document.getElementById('keysList').innerHTML =
+      `<div class="muted-sm">⚠️ ${escapeHtml((r && r.error) || 'Не удалось загрузить ключи.')}</div>`;
+    return;
+  }
+  apiState.keys = r.keys; apiState.max = r.max; apiState.baseUrl = r.baseUrl || '';
+  document.getElementById('baseUrlHint').textContent = apiState.baseUrl
+    ? 'Базовый адрес: ' + apiState.baseUrl : '';
+  renderKeys();
+}
+
+function openApi() {
+  openModal('apiOverlay');
+  // В песочнице доступны все модели тарифа, кроме брендированных Clop-версий
+  // (у них скрытый капот — через публичный API они не отдаются)
+  const pgModel = document.getElementById('pgModel');
+  const usable = state.models.filter(m => m.available && !m.key.startsWith('clop-'));
+  pgModel.innerHTML = usable.map(m => `<option value="${m.key}">${escapeHtml(m.title)}</option>`).join('');
+  syncPgBody();
+  loadKeys();
+}
+
+document.getElementById('apiBtn').addEventListener('click', openApi);
+
+// Закрытие любых модалок: крестик, клик по фону, Escape
+document.querySelectorAll('.modal-close').forEach(b => b.addEventListener('click', () => {
+  closeModal(document.getElementById(b.dataset.close));
+}));
+document.querySelectorAll('.overlay').forEach(o => o.addEventListener('click', (e) => {
+  if (e.target === o) closeModal(o);
+}));
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  document.querySelectorAll('.overlay').forEach(closeModal);
+});
+document.getElementById('pgPath').addEventListener('change', syncPgBody);
+document.getElementById('pgModel').addEventListener('change', syncPgBody);
+
+document.getElementById('createKeyBtn').addEventListener('click', async (e) => {
+  e.target.disabled = true;
+  const r = await fetch('/chat/api/keys/create', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({}),
+  }).then(x => x.json()).catch(() => null);
+  if (!r || !r.ok) alert((r && r.error) || 'Не удалось создать ключ.');
+  await loadKeys();
+});
+
+document.getElementById('pgCurl').addEventListener('click', async (e) => {
+  const key = document.getElementById('pgKey').value;
+  const path = document.getElementById('pgPath').value;
+  const auth = document.getElementById('pgAuth').value;
+  const header = auth === 'bearer' ? `Authorization: Bearer ${key}` : `x-api-key: ${key}`;
+  const body = document.getElementById('pgBody').value.replace(/\s+/g, ' ').trim();
+  const curl = `curl -X POST ${apiState.baseUrl}${path} \\\n  -H "Content-Type: application/json" \\\n  -H "${header}" \\\n  -d '${body}'`;
+  await navigator.clipboard.writeText(curl);
+  const old = e.target.textContent; e.target.textContent = '✓ Скопировано';
+  setTimeout(() => { e.target.textContent = old; }, 1500);
+});
+
+document.getElementById('pgSend').addEventListener('click', async () => {
+  const btn = document.getElementById('pgSend');
+  const out = document.getElementById('pgResult');
+  const meta = document.getElementById('pgMeta');
+
+  let payload;
+  try { payload = JSON.parse(document.getElementById('pgBody').value); }
+  catch (err) { out.className = 'pg-result err'; out.textContent = 'Неверный JSON в теле запроса: ' + err.message; return; }
+
+  btn.disabled = true;
+  out.className = 'pg-result';
+  out.textContent = 'Отправляем… (облако может «просыпаться» до минуты)';
+  meta.textContent = '';
+
+  const r = await fetch('/chat/api/keys/test', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      apiKey: document.getElementById('pgKey').value,
+      path: document.getElementById('pgPath').value,
+      authHeader: document.getElementById('pgAuth').value,
+      payload,
+    }),
+  }).then(x => x.json()).catch(() => null);
+
+  btn.disabled = false;
+  if (!r || !r.ok) {
+    out.className = 'pg-result err';
+    out.textContent = '⚠️ ' + ((r && r.error) || 'Запрос не прошёл.');
+    if (r && r.durationMs) meta.textContent = r.durationMs + ' мс';
+    return;
+  }
+  out.className = 'pg-result ' + (r.status >= 200 && r.status < 300 ? 'ok' : 'err');
+  meta.textContent = `HTTP ${r.status} · ${r.durationMs} мс`;
+  try { out.textContent = JSON.stringify(JSON.parse(r.body), null, 2); }
+  catch { out.textContent = r.body; }
+});
+
+document.getElementById('tgLoginBtn').addEventListener('click', (e) => { e.preventDefault(); startLogin(); });
+document.getElementById('newChatBtn').addEventListener('click', newChat);
+document.getElementById('send').addEventListener('click', () => sendMessage());
+document.getElementById('queueClear').addEventListener('click', () => {
+  const failed = unsentEntryFor(state.queue[0]);
+  if (failed) {
+    retryUnsent(ensureMessageId(failed.message));
+    return;
+  }
+  state.queue = [];
+  renderQueueState();
+  document.getElementById('input').focus();
+});
+document.getElementById('input').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  // Настройка «Enter отправляет»: иначе отправка по Ctrl/Cmd+Enter
+  if (prefs.sendOnEnter ? !e.shiftKey : (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+document.getElementById('input').addEventListener('input', function () {
+  this.style.height = 'auto';
+  this.style.height = Math.min(170, this.scrollHeight) + 'px';
+  const count = document.getElementById('draftCount');
+  if (count) count.textContent = new Intl.NumberFormat('ru-RU').format(this.value.length);
+});
+
+document.getElementById('chatSearch').addEventListener('input', filterChatList);
+
+document.addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+  if (e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    if (anyModalOpen()) return;
+    if (isNarrow()) {
+      document.body.classList.add('sb-open');
+    } else if (prefs.sidebarCollapsed) {
+      prefs.sidebarCollapsed = false;
+      savePrefs();
+    }
+    applySidebar();
+    requestAnimationFrame(() => document.getElementById('chatSearch').focus());
+  }
+  if (e.key.toLowerCase() === 'n' && !anyModalOpen()) {
+    e.preventDefault();
+    newChat();
+  }
+});
+
+const composerDrop = document.querySelector('.composer-inner');
+['dragenter', 'dragover'].forEach((type) => composerDrop.addEventListener(type, (e) => {
+  e.preventDefault();
+  if (Array.from(e.dataTransfer?.types || []).includes('Files')) composerDrop.classList.add('drag-over');
+}));
+['dragleave', 'drop'].forEach((type) => composerDrop.addEventListener(type, (e) => {
+  e.preventDefault();
+  composerDrop.classList.remove('drag-over');
+}));
+composerDrop.addEventListener('drop', async (e) => {
+  const file = e.dataTransfer?.files?.[0];
+  if (file) await handleSelectedFile(file);
+});
+
+function updateConnectionState() {
+  const strip = document.getElementById('connectionStrip');
+  if (!strip) return;
+  const online = navigator.onLine;
+  strip.classList.toggle('offline', !online);
+  const label = strip.querySelector('span');
+  if (label) label.textContent = online ? 'Синхронизация с Telegram включена' : 'Нет подключения к сети';
+}
+window.addEventListener('online', updateConnectionState);
+window.addEventListener('offline', updateConnectionState);
+updateConnectionState();
+
+document.getElementById('logout').addEventListener('click', async () => {
+  await fetch('/chat/api/logout', { method: 'POST' });
+  location.reload();
+});
+
+boot();
+
+/* Визуальный слой теперь полностью CSS: быстрее открывается и меньше нагружает GPU. */
+</script>
+</body>
+</html>

@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clop ai — чат с ИИ</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#151b23; --line:#263041;
+    --text:#e6edf3; --muted:#8b98a9; --accent:#d97757;
+    font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;height:100vh;background:var(--bg);color:var(--text);display:flex;flex-direction:column}
+  header{display:flex;align-items:center;gap:10px;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+  header h1{font-size:16px;margin:0}
+  header .dot{width:8px;height:8px;border-radius:50%;background:#3fb950}
+  header .sub{color:var(--muted);font-size:12px;margin-left:auto}
+  #log{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:12px;max-width:760px;width:100%;margin:0 auto}
+  .msg{max-width:78%;padding:11px 15px;border-radius:14px;font-size:14px;line-height:1.5;white-space:pre-wrap;word-break:break-word}
+  .msg.user{align-self:flex-end;background:var(--accent);color:#1a1005;border-bottom-right-radius:4px}
+  .msg.assistant{align-self:flex-start;background:#1b2430;border:1px solid var(--line);border-bottom-left-radius:4px}
+  .msg.hint{align-self:center;color:var(--muted);font-size:13px;background:none;text-align:center}
+  .typing{align-self:flex-start;color:var(--muted);font-size:13px;padding:4px 15px}
+  form{display:flex;gap:10px;padding:16px 20px;border-top:1px solid var(--line);background:var(--panel);max-width:760px;width:100%;margin:0 auto;box-sizing:border-box}
+  textarea{flex:1;resize:none;background:#0f151d;border:1px solid var(--line);color:var(--text);border-radius:10px;padding:11px 14px;font-size:14px;font-family:inherit;max-height:140px}
+  textarea:focus{outline:none;border-color:var(--accent)}
+  button{background:var(--accent);border:none;color:#1a1005;font-weight:600;padding:0 20px;border-radius:10px;cursor:pointer;font-size:14px}
+  button:disabled{opacity:.5;cursor:default}
+</style>
+</head>
+<body>
+<header>
+  <span class="dot"></span>
+  <h1>Clop ai</h1>
+  <span class="sub">чат с ИИ прямо на сайте</span>
+</header>
+
+<div id="log">
+  <div class="msg hint">Напишите что-нибудь — начнём диалог 👋</div>
+</div>
+
+<form id="form">
+  <textarea id="input" placeholder="Сообщение…" rows="1"></textarea>
+  <button id="send" type="submit">Отправить</button>
+</form>
+
+<script>
+const log = document.getElementById('log');
+const form = document.getElementById('form');
+const input = document.getElementById('input');
+const sendBtn = document.getElementById('send');
+
+function addMsg(role, text) {
+  const el = document.createElement('div');
+  el.className = 'msg ' + role;
+  el.textContent = text;
+  log.appendChild(el);
+  log.scrollTop = log.scrollHeight;
+  return el;
+}
+
+function getSession() {
+  try { return localStorage.getItem('clop_site_session') || null; } catch { return null; }
+}
+function setSession(id) {
+  try { localStorage.setItem('clop_site_session', id); } catch {}
+}
+
+input.addEventListener('input', () => {
+  input.style.height = 'auto';
+  input.style.height = Math.min(140, input.scrollHeight) + 'px';
+});
+input.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); }
+});
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  input.style.height = 'auto';
+  addMsg('user', text);
+  sendBtn.disabled = true;
+
+  const typing = document.createElement('div');
+  typing.className = 'typing';
+  typing.textContent = '🧠 печатает…';
+  log.appendChild(typing);
+  log.scrollTop = log.scrollHeight;
+
+  try {
+    const r = await fetch('chat.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: text, sessionId: getSession() }),
+    });
+    const data = await r.json();
+    typing.remove();
+    if (!data.ok) {
+      addMsg('assistant', '⚠️ ' + (data.error || 'что-то пошло не так'));
+    } else {
+      if (data.sessionId) setSession(data.sessionId);
+      addMsg('assistant', data.reply);
+    }
+  } catch (err) {
+    typing.remove();
+    addMsg('assistant', '⚠️ Не получилось связаться с сервером. Попробуйте ещё раз.');
+  } finally {
+    sendBtn.disabled = false;
+    input.focus();
+  }
+});
+</script>
+</body>
+</html>
