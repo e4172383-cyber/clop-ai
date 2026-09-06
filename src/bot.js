@@ -7,6 +7,7 @@ import { ask as gptAsk } from './gpt.js';
 import { ask as kimiAsk } from './kimi.js';
 import { generateImage } from './image.js';
 import { BILLING_VERSION } from './token-accounting.js';
+import { wantsGeneratedImage } from './image-intent.js';
 
 const DESKTOP_RELEASE = Object.freeze({
   version: '2.0.6',
@@ -334,6 +335,7 @@ function helpText() {
     '/model — выбрать модель',
     '/effort — сила мышления',
     '/usage — лимиты в процентах',
+    '/image описание — сразу сгенерировать и прикрепить изображение',
     '/plans — тарифы',
     '/buy — купить Pro',
     '/myapi — получить свой личный API-ключ (можно сбросить/перевыпустить кнопкой)',
@@ -796,6 +798,14 @@ async function onCommand(u, chatId, cmd, rawText = '') {
     case '/download':
     case '/app':
       return void await tg.sendMessage(chatId, appDownloadText(), { reply_markup: appDownloadKb() });
+    case '/image':
+    case '/img': {
+      const prompt = rawText.trim().replace(/^\/\S+\s*/u, '').trim();
+      if (!prompt) {
+        return void await tg.sendMessage(chatId, '🖼 Напишите после команды, что создать. Например: `/image рыжий кот-космонавт`.', { reply_markup: mainKb(u) });
+      }
+      return void await handleImageGen(u, chatId, prompt);
+    }
     case '/myapi': {
       // Облачный сервис может спать (бесплатный тариф) — холодный старт до
       // ~50 сек, предупреждаем, чтобы не казалось, что бот завис
@@ -1349,6 +1359,9 @@ export async function handleUpdate(update) {
     return void await onCommand(u, chatId, text.split(/[\s@]/)[0].toLowerCase(), text);
   }
   if (u.pending?.type === 'imagegen') {
+    return void await handleImageGen(u, chatId, text);
+  }
+  if (wantsGeneratedImage(text)) {
     return void await handleImageGen(u, chatId, text);
   }
   await handleAsk(u, chatId, text);
