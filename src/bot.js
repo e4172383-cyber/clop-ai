@@ -6,6 +6,7 @@ import { availablePlans, selectModel } from './model-policy.js';
 import { ask as gptAsk } from './gpt.js';
 import { ask as kimiAsk } from './kimi.js';
 import { generateImage } from './image.js';
+import { BILLING_VERSION } from './token-accounting.js';
 
 const DESKTOP_RELEASE = Object.freeze({
   version: '2.0.6',
@@ -665,6 +666,7 @@ async function handleAsk(u, chatId, text, images = null) {
       input: res.tokens.input, output: res.tokens.output,
       cacheWrite: res.tokens.cacheWrite, cacheRead: res.tokens.cacheRead,
       total: res.tokens.total, billable: billableForLimit, costUsd: res.costUsd, durationMs: res.durationMs,
+      billingVersion: BILLING_VERSION,
     });
     const after = checkLimits(u, model.provider).states;
     const warn = after.find((s) => s.percent >= 85);

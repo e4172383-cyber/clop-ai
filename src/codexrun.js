@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { SANDBOX_DIR, REQUEST_TIMEOUT_MS, CLOP_IDENTITY_PROMPT } from './config.js';
+import { countCodexTokens } from './token-accounting.js';
 
 /* Запуск Codex CLI — общий код для сервера и ретранслятора.
 
@@ -171,14 +172,7 @@ export async function runJob(job, onDelta, signal) {
 }
 
 export function countTokens(usage = {}) {
-  const input = usage.input_tokens || 0;
-  const output = usage.output_tokens || 0;
-  const cacheRead = usage.cached_input_tokens || 0;
-  return {
-    input, output, cacheWrite: 0, cacheRead,
-    total: input + output,
-    billable: input + output,
-  };
+  return countCodexTokens(usage);
 }
 
 export async function healthCheck() {

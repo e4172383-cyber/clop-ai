@@ -1,4 +1,5 @@
 import { PLANS, FREE_GO_PLAN, freeGoActive, WINDOWS, EFFORTS, DEFAULT_EFFORT, MODELS, PROVIDERS, IMAGE_DAILY_LIMITS, DAY } from './config.js';
+import { eventBillable } from './token-accounting.js';
 
 // Модели, чей расход не считается против лимита тарифа (Haiku — навсегда)
 const UNLIMITED_MODELS = new Set(Object.keys(MODELS).filter((k) => MODELS[k].unlimited));
@@ -48,7 +49,7 @@ function countableUsage(u, windowMs, provider, now) {
 
 export function usedIn(u, windowMs, provider, now = Date.now()) {
   let sum = 0;
-  for (const e of countableUsage(u, windowMs, provider, now)) sum += (e.billable ?? e.total) || 0;
+  for (const e of countableUsage(u, windowMs, provider, now)) sum += eventBillable(e, provider);
   return sum;
 }
 

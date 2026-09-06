@@ -1,5 +1,6 @@
 import http from 'node:http';
 import fs from 'node:fs';
+import { BILLING_VERSION } from './token-accounting.js';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -467,7 +468,8 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           ts: Date.now(), chatId: null, model: MODELS[modelKey] ? modelKey : DEFAULT_MODEL,
           effort: null, plan: planOf(u).key,
           input: 0, output: 0, cacheWrite: 0, cacheRead: 0,
-          total: billable, billable, costUsd: 0, durationMs: 0, source: 'cloud-api', requestId,
+          total: billable, billable, billingVersion: BILLING_VERSION,
+          costUsd: 0, durationMs: 0, source: 'cloud-api', requestId,
         });
         await store.save({ strict: true });
         return sendJson(res, 200, { ok: true });
@@ -789,6 +791,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
                 cacheWrite: r.tokens.cacheWrite, cacheRead: r.tokens.cacheRead,
                 total: r.tokens.total,
                 billable: Math.round(measuredBillable * (model.limitMultiplier ?? 1) * (fast ? 1.2 : 1)),
+                billingVersion: BILLING_VERSION,
                 costUsd: r.costUsd, durationMs: r.durationMs, source: 'desktop',
               });
             }
@@ -1340,6 +1343,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
               input: tokens.input || 0, output: tokens.output || 0,
               cacheWrite: tokens.cacheWrite || 0, cacheRead: tokens.cacheRead || 0,
               total: tokens.total || 0, billable: billableForLimit, costUsd: r.costUsd, durationMs: r.durationMs,
+              billingVersion: BILLING_VERSION,
               source: 'site-chat',
             });
           }
