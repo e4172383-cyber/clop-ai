@@ -33,7 +33,18 @@ TOKEN_LIMITS_JSON=<private-plan-limit-matrix>
 
 ## Основные команды бота
 
-`/start`, `/new`, `/chats`, `/model`, `/usage`, `/plans`, `/buy`, `/help`.
+`/start`, `/new`, `/chats`, `/model`, `/usage`, `/plans`, `/buy`, `/download`, `/help`.
+
+## Clop Code
+
+Актуальная версия desktop-приложения: **2.0.5**. Загрузки для Windows x64 и Linux x64 опубликованы на странице `/download`; та же страница доступна из Telegram-бота. Точные размеры тарифных квот в репозитории и пользовательских интерфейсах не публикуются.
+
+Исходники приложения находятся в `desktop/`:
+
+- `npm ci` — установить зависимости;
+- `npm test` — проверить политику доступа, ответы и файлы;
+- `npm run dist` — собрать Windows x64 EXE;
+- `npm run dist:linux` — собрать Linux x64 tar.xz.
 
 ## Данные
 

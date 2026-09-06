@@ -91,6 +91,47 @@ function attachmentDisposition(name) {
   return `attachment; filename*=UTF-8''${encoded}`;
 }
 
+const DESKTOP_DOWNLOADS = new Set([
+  'Clop-Code-Setup-2.0.5.exe',
+  'Clop-Code-2.0.5-linux-x64.tar.xz',
+]);
+
+function serveDesktopFile(req, res, name, { download = false } = {}) {
+  const full = path.join(PUBLIC, download ? 'downloads' : '', name);
+  if (!fs.existsSync(full) || !fs.statSync(full).isFile()) {
+    res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+    return res.end('404');
+  }
+  const stat = fs.statSync(full);
+  const contentType = name.endsWith('.html') ? 'text/html; charset=utf-8' : 'application/octet-stream';
+  const headers = download ? {
+    'content-disposition': attachmentDisposition(name),
+    'cache-control': 'public, max-age=31536000, immutable',
+    'accept-ranges': 'bytes',
+    'x-content-type-options': 'nosniff',
+  } : { 'cache-control': 'public, max-age=300', 'x-content-type-options': 'nosniff' };
+  const range = download && req.headers.range && /^bytes=(\d*)-(\d*)$/.exec(req.headers.range);
+  if (range) {
+    const start = range[1] ? Number(range[1]) : 0;
+    const end = range[2] ? Math.min(Number(range[2]), stat.size - 1) : stat.size - 1;
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end < start || start >= stat.size) {
+      res.writeHead(416, { 'content-range': `bytes */${stat.size}` });
+      return res.end();
+    }
+    res.writeHead(206, {
+      'content-type': contentType,
+      'content-length': end - start + 1,
+      'content-range': `bytes ${start}-${end}/${stat.size}`,
+      ...headers,
+    });
+    if (req.method === 'HEAD') return res.end();
+    return fs.createReadStream(full, { start, end }).pipe(res);
+  }
+  res.writeHead(200, { 'content-type': contentType, 'content-length': stat.size, ...headers });
+  if (req.method === 'HEAD') return res.end();
+  return fs.createReadStream(full).pipe(res);
+}
+
 // Публичный срез лимитов для интерфейсов: проценты и время сброса нужны для
 // выбора модели, а фактические токены и объёмы тарифа остаются на сервере.
 function publicLimits(u) {
@@ -818,6 +859,18 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
       return fs.createReadStream(full).pipe(res);
     }
 
+    if (url.pathname === '/download' && (req.method === 'GET' || req.method === 'HEAD')) {
+      return serveDesktopFile(req, res, 'download.html');
+    }
+    if (url.pathname.startsWith('/downloads/') && (req.method === 'GET' || req.method === 'HEAD')) {
+      const name = url.pathname.slice('/downloads/'.length);
+      if (!DESKTOP_DOWNLOADS.has(name)) {
+        res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+        return res.end('404');
+      }
+      return serveDesktopFile(req, res, name, { download: true });
+    }
+
     if (PWA_FILES[url.pathname]) {
       const full = path.join(PUBLIC, url.pathname.slice(1));
       if (!fs.existsSync(full)) { res.writeHead(404); return res.end('404'); }
@@ -1452,7 +1505,9 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
       });
       return;
     }
-    const file = url.pathname === '/' ? 'index.html' : url.pathname.replace(/^\/+/, '');
+    const file = url.pathname === '/'
+      ? 'index.html'
+      : (url.pathname === '/download' ? 'download.html' : url.pathname.replace(/^\/+/, ''));
     const full = path.join(PUBLIC, file);
     if (!full.startsWith(PUBLIC) || !fs.existsSync(full)) {
       res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
@@ -1466,8 +1521,33 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
       : 'application/octet-stream';
     // Service worker обязан отдаваться с корня, иначе его область (scope)
     // окажется уже нужной и установка приложения не сработает
-    const extra = full.endsWith('sw.js') ? { 'service-worker-allowed': '/', 'cache-control': 'no-cache' } : {};
-    res.writeHead(200, { 'content-type': type, ...extra });
+    const isDownload = file.startsWith('downloads/');
+    const stat = fs.statSync(full);
+    const extra = full.endsWith('sw.js')
+      ? { 'service-worker-allowed': '/', 'cache-control': 'no-cache' }
+      : (isDownload ? {
+        'content-disposition': `attachment; filename="${path.basename(full).replaceAll('"', '')}"`,
+        'cache-control': 'public, max-age=31536000, immutable',
+        'accept-ranges': 'bytes',
+      } : {});
+    const range = isDownload && req.headers.range && /^bytes=(\d*)-(\d*)$/.exec(req.headers.range);
+    if (range) {
+      const start = range[1] ? Number(range[1]) : 0;
+      const end = range[2] ? Math.min(Number(range[2]), stat.size - 1) : stat.size - 1;
+      if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end < start || start >= stat.size) {
+        res.writeHead(416, { 'content-range': `bytes */${stat.size}` });
+        return res.end();
+      }
+      res.writeHead(206, {
+        'content-type': type,
+        'content-length': end - start + 1,
+        'content-range': `bytes ${start}-${end}/${stat.size}`,
+        ...extra,
+      });
+      return fs.createReadStream(full, { start, end }).pipe(res);
+    }
+    res.writeHead(200, { 'content-type': type, 'content-length': stat.size, ...extra });
+    if (req.method === 'HEAD') return res.end();
     fs.createReadStream(full).pipe(res);
   });
   server.listen(WEB_PORT, WEB_HOST, () => {

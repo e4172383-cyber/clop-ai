@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-src 'none'">
+  <meta name="color-scheme" content="dark light">
+  <title>Clop Code</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app" id="app" data-theme="dark" data-mode="workspace">
+    <header class="titlebar">
+      <div class="titlebar-drag">
+        <div class="app-mark" aria-hidden="true"><span>C</span></div>
+        <div class="titlebar-name">Clop Code</div>
+        <div class="workspace-crumb" id="workspaceCrumb" title="Рабочая папка не выбрана">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.7 6.8A1.8 1.8 0 0 1 5.5 5h4l2 2h7A1.8 1.8 0 0 1 20.3 8.8v8.7a1.8 1.8 0 0 1-1.8 1.8h-13a1.8 1.8 0 0 1-1.8-1.8Z"/><path d="M3.7 9.3h16.6"/></svg>
+          <span id="workspaceName">Без рабочей папки</span>
+        </div>
+      </div>
+      <div class="titlebar-status" id="connectionStatus"><span class="status-dot"></span><span>Готов</span></div>
+      <div class="window-controls" aria-label="Управление окном">
+        <button class="window-button" type="button" data-window="minimize" aria-label="Свернуть"><svg viewBox="0 0 12 12"><path d="M2 6.5h8"/></svg></button>
+        <button class="window-button" type="button" data-window="maximize" aria-label="Развернуть"><svg viewBox="0 0 12 12"><rect x="2.2" y="2.2" width="7.6" height="7.6" rx=".5"/></svg></button>
+        <button class="window-button close" type="button" data-window="close" aria-label="Закрыть"><svg viewBox="0 0 12 12"><path d="m2.5 2.5 7 7m0-7-7 7"/></svg></button>
+      </div>
+    </header>
+
+    <div class="shell">
+      <nav class="activity-rail" aria-label="Разделы приложения">
+        <div class="rail-main">
+          <button class="rail-button" type="button" id="railNewChatButton" aria-label="Создать чат" title="Создать чат">
+            <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+          <button class="rail-button active" type="button" id="chatRailButton" data-view="chat" aria-label="Показать или скрыть чаты" title="Чаты">
+            <svg viewBox="0 0 24 24"><path d="M20 14a3 3 0 0 1-3 3H9l-5 3v-5.5A3 3 0 0 1 3 12V7a3 3 0 0 1 3-3h11a3 3 0 0 1 3 3Z"/><path d="M7.5 8.5h8m-8 4h5"/></svg>
+          </button>
+          <button class="rail-button" type="button" data-view="files" aria-label="Артефакты и файлы" title="Артефакты">
+            <svg viewBox="0 0 24 24"><path d="M3.5 6.8A1.8 1.8 0 0 1 5.3 5h4.2l2 2h7.2a1.8 1.8 0 0 1 1.8 1.8v8.7a1.8 1.8 0 0 1-1.8 1.8H5.3a1.8 1.8 0 0 1-1.8-1.8Z"/></svg>
+          </button>
+          <button class="rail-button" type="button" data-view="activity" aria-label="Журнал действий" title="Журнал действий">
+            <svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.7L4 8.5"/><path d="M4 4.5v4h4M12 7.5V12l3 2"/></svg>
+          </button>
+        </div>
+        <div class="rail-bottom">
+          <button class="rail-button" type="button" id="terminalRailButton" aria-label="Терминал" title="Терминал">
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3m6 0h4"/></svg>
+          </button>
+          <button class="rail-button" type="button" id="settingsButton" aria-label="Настройки" title="Настройки">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></svg>
+          </button>
+        </div>
+      </nav>
+
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-head">
+          <div class="sidebar-command-row">
+            <button class="new-chat-button" type="button" id="newChatButton">
+              <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+              <span>Новый чат</span>
+              <kbd>Ctrl N</kbd>
+            </button>
+          </div>
+          <button class="artifacts-button" type="button" id="sidebarArtifactsButton" data-view="files">
+            <svg viewBox="0 0 24 24"><path d="M12 3.5 14.2 8l4.8.7-3.5 3.4.8 4.8-4.3-2.3-4.3 2.3.8-4.8L5 8.7 9.8 8Z"/></svg>
+            <span><strong>Артефакты</strong><small>Файлы и результаты работы</small></span>
+            <svg class="chevron" viewBox="0 0 24 24"><path d="m9 7 5 5-5 5"/></svg>
+          </button>
+          <div class="search-wrap">
+            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg>
+            <input id="chatSearch" type="search" placeholder="Поиск по чатам" autocomplete="off" aria-label="Поиск по чатам">
+          </div>
+        </div>
+        <div class="chat-groups" id="chatGroups">
+          <section class="chat-group">
+            <h2>Сегодня</h2>
+            <div class="chat-list" id="chatList">
+              <div class="chat-list-empty">История появится после первого сообщения</div>
+            </div>
+          </section>
+        </div>
+        <div class="sidebar-footer">
+          <button class="account-card" type="button" id="accountButton">
+            <span class="avatar" id="userAvatar"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/></svg></span>
+            <span class="account-copy"><strong id="accountName">Войти через Telegram</strong><small id="accountPlan">Синхронизация и лимиты</small></span>
+            <svg class="chevron" viewBox="0 0 24 24"><path d="m9 7 5 5-5 5"/></svg>
+          </button>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="chat-toolbar">
+          <div class="chat-title-wrap">
+            <div>
+              <h1 id="chatTitle">Новый чат</h1>
+              <span class="chat-subtitle" id="chatSubtitle">Clop готов помочь</span>
+            </div>
+          </div>
+          <div class="toolbar-actions">
+            <div class="mode-switch" id="modeSwitch" aria-label="Режим доступа">
+              <button type="button" data-mode="chat" title="Только диалог, без доступа к компьютеру"><span class="mode-icon">●</span><span>Чат</span></button>
+              <button type="button" data-mode="workspace" class="active" title="Работа внутри выбранной папки"><span class="mode-icon">◆</span><span>Папка</span></button>
+              <button type="button" data-mode="full" title="Доступ ко всему компьютеру в этом сеансе"><span class="mode-icon">✦</span><span>Полный</span></button>
+            </div>
+            <button class="icon-button" type="button" id="toggleInspector" aria-label="Показать файлы" title="Файлы и действия">
+              <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg>
+            </button>
+          </div>
+        </header>
+
+        <div class="stage">
+          <section class="conversation" id="conversation" aria-live="polite">
+            <div class="empty-state" id="emptyState">
+              <div class="orb-wrap" aria-hidden="true"><div class="orb"><span>C</span></div><div class="orb-ring"></div></div>
+              <p class="eyebrow">ВАШ ИИ ДЛЯ РАБОТЫ</p>
+              <h2>Что создадим сегодня?</h2>
+              <p class="empty-note">Clop может разбираться в коде, работать с файлами и выполнять задачи на компьютере — только с вашим разрешением.</p>
+              <div class="guest-login-card" id="guestLoginPrompt">
+                <span class="guest-login-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m20.7 4.1-3 15.1c-.2 1.1-.9 1.4-1.8.9l-4.6-3.4-2.2 2.1c-.2.2-.5.5-.9.5l.3-4.7 8.6-7.8c.4-.3-.1-.5-.6-.2L5.9 13.3l-4.6-1.4c-1-.3-1-1 .2-1.5l17.9-6.9c.8-.3 1.6.2 1.3.6Z"/></svg></span>
+                <span class="guest-login-copy"><strong>Войдите через Telegram</strong><small>Ваш тариф, лимиты и история будут доступны на всех устройствах.</small></span>
+                <button class="guest-login-button" type="button" id="emptyLoginButton">Войти <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></button>
+              </div>
+              <p class="starter-heading">БЫСТРЫЙ СТАРТ</p>
+              <div class="starter-grid">
+                <button type="button" class="starter" data-prompt="Изучи структуру проекта и коротко объясни, как он устроен">
+                  <span class="starter-icon peach"><svg viewBox="0 0 24 24"><path d="M4 7.5 12 3l8 4.5L12 12Zm0 0V16l8 5 8-5V7.5M12 12v9"/></svg></span>
+                  <span><strong>Разобрать проект</strong><small>Понять структуру и связи</small></span>
+                  <svg class="arrow" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>
+                </button>
+                <button type="button" class="starter" data-prompt="Найди возможные ошибки в проекте и предложи безопасные исправления">
+                  <span class="starter-icon lilac"><svg viewBox="0 0 24 24"><path d="M8 9h8M9 4h6l1 3H8Zm-3 8h12v5a5 5 0 0 1-10 0v-5Z"/><path d="M3 14h3m12 0h3M5 8l3 3m11-3-3 3"/></svg></span>
+                  <span><strong>Найти ошибку</strong><small>Проверить и исправить код</small></span>
+                  <svg class="arrow" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>
+                </button>
+                <button type="button" class="starter" data-prompt="Создай план реализации моей идеи и начни с первого шага">
+                  <span class="starter-icon mint"><svg viewBox="0 0 24 24"><path d="M8 5h12M8 12h12M8 19h12"/><path d="m3 5 1 1 2-2m-3 8 1 1 2-2m-3 8 1 1 2-2"/></svg></span>
+                  <span><strong>Создать по идее</strong><small>От плана до результата</small></span>
+                  <svg class="arrow" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>
+                </button>
+                <button type="button" class="starter" data-prompt="Проведи обзор текущих файлов и предложи, что можно улучшить">
+                  <span class="starter-icon sky"><svg viewBox="0 0 24 24"><path d="M4 4h6v6H4zm10 0h6v6h-6zM4 14h6v6H4zm10 0h6v6h-6z"/></svg></span>
+                  <span><strong>Улучшить проект</strong><small>Упростить и привести в порядок</small></span>
+                  <svg class="arrow" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="message-list" id="messageList"></div>
+          </section>
+
+          <section class="terminal-panel" id="terminalPanel" aria-hidden="true">
+            <div class="terminal-head">
+              <div class="terminal-tabs"><button type="button" class="active"><span class="terminal-dot"></span>Терминал</button></div>
+              <div class="terminal-controls">
+                <button type="button" class="icon-button small" id="clearTerminal" title="Очистить терминал" aria-label="Очистить терминал"><svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3m-9 0 1 13h10l1-13"/></svg></button>
+                <button type="button" class="icon-button small" id="closeTerminal" title="Закрыть терминал" aria-label="Закрыть терминал"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+              </div>
+            </div>
+            <div class="terminal-output" id="terminalOutput"><div class="terminal-welcome">Clop Code Terminal · команды выполняются после подтверждения</div></div>
+            <form class="terminal-form" id="terminalForm">
+              <span class="terminal-prompt">›</span><input id="terminalInput" autocomplete="off" spellcheck="false" placeholder="Введите команду…"><button type="submit">Выполнить</button>
+            </form>
+          </section>
+
+          <div class="composer-zone">
+            <div class="attachment-strip" id="attachmentStrip"></div>
+            <form class="composer" id="composerForm">
+              <textarea id="promptInput" rows="1" maxlength="32000" placeholder="Попросите Clop что-нибудь сделать…" aria-label="Сообщение"></textarea>
+              <div class="composer-bottom">
+                <div class="composer-tools">
+                  <button type="button" class="round-button" id="attachButton" title="Прикрепить файл" aria-label="Прикрепить файл"><svg viewBox="0 0 24 24"><path d="m9 12 5-5a3 3 0 0 1 4 4l-7 7a5 5 0 0 1-7-7l7-7"/></svg></button>
+                  <button type="button" class="control-pill" id="modelButton"><span id="modelLabel">GPT-5.4 Mini</span><svg viewBox="0 0 24 24"><path d="m8 10 4 4 4-4"/></svg></button>
+                  <button type="button" class="control-pill" id="effortButton"><span id="effortLabel">Низкое усиление</span><svg viewBox="0 0 24 24"><path d="m8 10 4 4 4-4"/></svg></button>
+                  <label class="fast-toggle" title="Ответ быстрее, расход лимита ×1,2">
+                    <input type="checkbox" id="fastToggle"><span class="toggle-track"><span></span></span><span>⚡ Быстро</span>
+                  </label>
+                </div>
+                <div class="send-area">
+                  <span class="composer-hint" id="composerHint">Enter — отправить</span>
+                  <button class="send-button" type="submit" id="sendButton" aria-label="Отправить"><svg viewBox="0 0 24 24"><path d="m5 12 7-7 7 7M12 5v14"/></svg></button>
+                  <button class="stop-button hidden" type="button" id="stopButton" aria-label="Остановить"><span></span></button>
+                </div>
+              </div>
+            </form>
+            <p class="fine-print">Clop может ошибаться. Проверяйте важные изменения и команды.</p>
+          </div>
+        </div>
+      </main>
+
+      <aside class="inspector" id="inspector">
+        <div class="inspector-head">
+          <div class="inspector-tabs" role="tablist">
+            <button type="button" class="active" data-inspector-tab="files" role="tab">Артефакты</button>
+            <button type="button" data-inspector-tab="activity" role="tab">Действия <span class="badge hidden" id="activityBadge">0</span></button>
+          </div>
+          <button class="icon-button small" type="button" id="closeInspector" aria-label="Закрыть"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+        </div>
+        <section class="inspector-pane active" id="filesPane">
+          <div class="folder-card" id="folderCard">
+            <span class="folder-symbol"><svg viewBox="0 0 24 24"><path d="M3.5 7A2 2 0 0 1 5.5 5h4l2 2h7A2 2 0 0 1 20.5 9v8.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2Z"/></svg></span>
+            <span><strong id="folderName">Рабочая папка</strong><small id="folderPath">Не выбрана</small></span>
+            <button type="button" id="chooseFolderButton">Выбрать</button>
+          </div>
+          <div class="tree-toolbar">
+            <span>ПРОВОДНИК</span>
+            <button type="button" class="icon-button tiny" id="refreshFiles" title="Обновить" aria-label="Обновить"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7L20 14.5"/><path d="M20 19v-4.5h-4.5"/></svg></button>
+          </div>
+          <div class="file-tree" id="fileTree"><div class="pane-placeholder"><svg viewBox="0 0 24 24"><path d="M3.5 7A2 2 0 0 1 5.5 5h4l2 2h7A2 2 0 0 1 20.5 9v8.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2Z"/></svg><p>Выберите папку, чтобы видеть файлы проекта</p></div></div>
+          <div class="file-preview hidden" id="filePreview">
+            <div class="preview-head"><span id="previewName">Файл</span><button class="icon-button tiny" type="button" id="closePreview" aria-label="Закрыть просмотр"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
+            <pre id="previewContent"></pre>
+          </div>
+        </section>
+        <section class="inspector-pane" id="activityPane">
+          <div class="activity-summary"><div><strong id="actionCount">0</strong><span>действий</span></div><span class="safe-label"><span></span>Под контролем</span></div>
+          <div class="activity-list" id="activityList"><div class="pane-placeholder compact"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.3-5.7L4 8.5"/><path d="M4 4.5v4h4M12 7.5V12l3 2"/></svg><p>Действия агента появятся здесь</p></div></div>
+        </section>
+      </aside>
+    </div>
+
+    <div class="menu-popover hidden" id="modelMenu" role="menu">
+      <div class="menu-label">Модель</div>
+      <button type="button" data-model="gpt-5-4-mini"><span class="model-mark coral">G</span><span><strong>GPT 5.4 Mini</strong><small>Быстрая GPT · 5ч</small></span><svg class="check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg></button>
+      <button type="button" data-model="gpt-luna"><span class="model-mark orange">G</span><span><strong>GPT 5.6 Луна</strong><small>Быстрая GPT · 5ч</small></span><svg class="check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg></button>
+      <button type="button" data-model="gpt-spark"><span class="model-mark violet">G</span><span><strong>Codex 5.3 Спарк</strong><small>Для кода · 5ч</small></span><svg class="check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg></button>
+      <button type="button" data-model="kimi-k2-6"><span class="model-mark blue">K</span><span><strong>Kimi K2.6</strong><small>Большой контекст · 5ч</small></span><svg class="check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg></button>
+      <button type="button" data-model="gpt-astra"><span class="model-mark coral">A</span><span><strong>GPT-6 Astra</strong><small>От GO · 5ч</small></span><svg class="check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg></button>
+      <button type="button" data-model="gpt-5-5"><span class="model-mark orange">G</span><span><strong>GPT 5.5</strong><small>От GO · 5ч</small></span><svg class="check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg></button>
+      <button type="button" data-model="kimi-k2-7-code"><span class="model-mark violet">K</span><span><strong>Kimi K2.7 Code</strong><small>От GO · 5ч</small></span><svg class="check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg></button>
+      <button type="button" data-model="kimi-k3"><span class="model-mark blue">K</span><span><strong>Kimi K3</strong><small>От GO · 5ч</small></span><svg class="check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg></button>
+      <button type="button" data-model="gpt-terra"><span class="model-mark coral">G</span><span><strong>GPT 5.6 Терра</strong><small>От Pro · 5ч</small></span><svg class="check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg></button>
+      <button type="button" data-model="kimi-k3-swarm"><span class="model-mark orange">K</span><span><strong>Kimi K3 Swarm</strong><small>От Pro · 5ч</small></span><svg class="check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg></button>
+      <button type="button" data-model="gpt-sol"><span class="model-mark violet">G</span><span><strong>GPT 5.6 Соль</strong><small>От Max · 5ч</small></span><svg class="check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg></button>
+    </div>
+    <div class="menu-popover compact hidden" id="effortMenu" role="menu">
+      <div class="menu-label">Усиление ответа</div>
+      <button type="button" data-effort="low"><span><strong>Низкое</strong><small>Быстрый ответ</small></span><svg class="check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg></button>
+      <button type="button" data-effort="medium"><span><strong>Среднее</strong><small>Баланс скорости и глубины</small></span><svg class="check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg></button>
+      <button type="button" data-effort="high"><span><strong>Высокое</strong><small>Для сложных задач</small></span><svg class="check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg></button>
+    </div>
+
+    <div class="modal-backdrop hidden" id="onboardingModal" role="dialog" aria-modal="true" aria-labelledby="onboardingTitle">
+      <div class="modal onboarding-card">
+        <div class="onboarding-art"><div class="art-glow"></div><div class="large-mark">C</div><div class="privacy-chip"><svg viewBox="0 0 24 24"><path d="M6 10V8a6 6 0 0 1 12 0v2"/><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M12 14v3"/></svg> Вы управляете доступом</div></div>
+        <div class="onboarding-content">
+          <div class="step-dots"><span class="active"></span><span></span><span></span></div>
+          <div class="onboarding-step active" data-step="0">
+            <p class="eyebrow">ДОБРО ПОЖАЛОВАТЬ</p><h2 id="onboardingTitle">Работайте вместе с Clop</h2>
+            <p>ИИ-помощник понимает ваш проект, предлагает изменения и выполняет действия после вашего решения.</p>
+            <div class="trust-list"><div><span>01</span><p><strong>Прозрачные действия</strong><small>Вы всегда видите, что именно хочет сделать ИИ.</small></p></div><div><span>02</span><p><strong>Ваши границы</strong><small>Уровень доступа можно изменить в любой момент.</small></p></div><div><span>03</span><p><strong>Локальная история</strong><small>Журнал задач и резервные копии остаются на компьютере.</small></p></div></div>
+          </div>
+          <div class="onboarding-step" data-step="1">
+            <p class="eyebrow">УСЛОВИЯ И КОНФИДЕНЦИАЛЬНОСТЬ</p><h2>Перед началом</h2>
+            <div class="terms-box" tabindex="0">
+              <h3>Как работает Clop Code</h3><p>Сообщения, выбранные файлы и результаты разрешённых действий передаются сервису Clop и выбранной модели ИИ для выполнения задачи.</p>
+              <h3>Доступ к компьютеру</h3><p>Установка не даёт ИИ доступ автоматически. Вы выбираете режим, а чувствительные команды, снимки экрана и управление требуют отдельного подтверждения.</p>
+              <h3>Ответственность</h3><p>ИИ может ошибаться. Проверяйте команды и важные изменения. Кнопка «Стоп» прекращает новые действия, но не отменяет уже выполненные.</p>
+              <button type="button" class="text-link" id="openTermsButton">Открыть полные условия</button>
+            </div>
+            <label class="consent-check"><input type="checkbox" id="termsCheckbox"><span class="checkbox-ui"><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg></span><span>Я прочитал(а) и принимаю условия использования и передачу выбранных данных для работы ИИ.</span></label>
+          </div>
+          <div class="onboarding-step" data-step="2">
+            <p class="eyebrow">РЕЖИМ ДОСТУПА</p><h2>Выберите комфортный уровень</h2><p>Начать безопаснее с рабочей папки. Режим можно переключить сверху в любой момент.</p>
+            <div class="access-cards">
+              <button type="button" data-onboarding-mode="chat"><span class="access-icon chat"><svg viewBox="0 0 24 24"><path d="M20 14a3 3 0 0 1-3 3H9l-5 3v-5.5A3 3 0 0 1 3 12V7a3 3 0 0 1 3-3h11a3 3 0 0 1 3 3Z"/></svg></span><span><strong>Только чат</strong><small>Без файлов и управления компьютером</small></span><span class="radio"></span></button>
+              <button type="button" class="selected recommended" data-onboarding-mode="workspace"><span class="recommended-label">Рекомендуем</span><span class="access-icon folder"><svg viewBox="0 0 24 24"><path d="M3.5 7A2 2 0 0 1 5.5 5h4l2 2h7A2 2 0 0 1 20.5 9v8.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2Z"/></svg></span><span><strong>Рабочая папка</strong><small>Чтение проекта, изменения с подтверждением</small></span><span class="radio"></span></button>
+              <button type="button" data-onboarding-mode="full"><span class="access-icon full"><svg viewBox="0 0 24 24"><path d="M12 3 4.5 6.5v5c0 4.7 3.2 8.2 7.5 9.5 4.3-1.3 7.5-4.8 7.5-9.5v-5Z"/><path d="m9 12 2 2 4-4"/></svg></span><span><strong>Полный доступ</strong><small>Все доступные файлы; опасные действия отдельно</small></span><span class="radio"></span></button>
+            </div>
+          </div>
+          <div class="onboarding-actions"><button type="button" class="button ghost hidden" id="onboardingBack">Назад</button><span></span><button type="button" class="button primary" id="onboardingNext">Продолжить <svg viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-backdrop hidden" id="telegramModal" role="dialog" aria-modal="true" aria-labelledby="telegramTitle" aria-describedby="telegramDescription">
+      <div class="modal auth-modal">
+        <button class="modal-close" type="button" data-close-modal="telegramModal" aria-label="Закрыть"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+        <div class="telegram-logo"><svg viewBox="0 0 24 24"><path d="m20.7 4.1-3 15.1c-.2 1.1-.9 1.4-1.8.9l-4.6-3.4-2.2 2.1c-.2.2-.5.5-.9.5l.3-4.7 8.6-7.8c.4-.3-.1-.5-.6-.2L5.9 13.3l-4.6-1.4c-1-.3-1-1 .2-1.5l17.9-6.9c.8-.3 1.6.2 1.3.6Z"/></svg></div>
+        <p class="eyebrow">ЕДИНЫЙ АККАУНТ CLOP</p>
+        <h2 id="telegramTitle">Войдите через Telegram</h2>
+        <p class="auth-lead" id="telegramDescription">Один вход свяжет Clop Code с вашим аккаунтом, тарифом и общими лимитами.</p>
+        <div class="auth-state" id="authIdle">
+          <ol class="auth-steps" aria-label="Как войти">
+            <li><span class="auth-step-number">1</span><span><strong>Откройте бота</strong><small>Нажмите кнопку ниже — Telegram откроется автоматически.</small></span></li>
+            <li><span class="auth-step-number">2</span><span><strong>Подтвердите вход</strong><small>Сверьте код в боте и вернитесь в Clop Code.</small></span></li>
+          </ol>
+          <button type="button" class="button telegram" id="startLoginButton"><svg viewBox="0 0 24 24"><path d="m20.7 4.1-3 15.1c-.2 1.1-.9 1.4-1.8.9l-4.6-3.4-2.2 2.1c-.2.2-.5.5-.9.5l.3-4.7 8.6-7.8c.4-.3-.1-.5-.6-.2L5.9 13.3l-4.6-1.4c-1-.3-1-1 .2-1.5l17.9-6.9c.8-.3 1.6.2 1.3.6Z"/></svg>Открыть Telegram и войти</button>
+        </div>
+        <div class="auth-state hidden" id="authWaiting">
+          <p class="auth-waiting-copy">Сверьте этот код с кодом в Telegram и нажмите «Подтвердить».</p>
+          <div class="auth-code"><small>КОД ДЛЯ ПРОВЕРКИ</small><strong id="loginCode">••••••</strong><button type="button" id="copyLoginCode">Копировать</button></div>
+          <div class="waiting-line"><span class="spinner"></span><span>Ожидаем подтверждение — окно закроется само</span></div>
+          <button type="button" class="text-link" id="cancelLoginButton">Отменить вход</button>
+        </div>
+        <p class="auth-privacy"><svg viewBox="0 0 24 24"><path d="M7 10V8a5 5 0 0 1 10 0v2"/><rect x="5" y="10" width="14" height="10" rx="2"/></svg>Пароль Telegram не передаётся в Clop Code</p>
+      </div>
+    </div>
+
+    <div class="modal-backdrop hidden" id="approvalModal" role="alertdialog" aria-modal="true" aria-labelledby="approvalTitle">
+      <div class="modal approval-modal">
+        <div class="approval-heading"><span class="approval-shield"><svg viewBox="0 0 24 24"><path d="M12 3 4.5 6.5v5c0 4.7 3.2 8.2 7.5 9.5 4.3-1.3 7.5-4.8 7.5-9.5v-5Z"/><path d="M12 8v5m0 3h.01"/></svg></span><div><p class="eyebrow">ТРЕБУЕТСЯ РЕШЕНИЕ</p><h2 id="approvalTitle">Разрешить действие?</h2></div></div>
+        <p id="approvalDescription">Clop запрашивает доступ для выполнения следующего шага.</p>
+        <div class="action-preview"><div class="action-preview-head"><span id="approvalKind">Команда</span><span class="risk-chip" id="approvalRisk">Требует внимания</span></div><pre id="approvalCode"></pre></div>
+        <div class="approval-context"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5m0-8h.01"/></svg><p id="approvalNote">Проверьте действие. Оно будет выполнено с правами вашей учётной записи Windows.</p></div>
+        <div class="approval-actions"><button type="button" class="button ghost danger-text" id="denyAction">Отклонить</button><button type="button" class="button primary" id="allowAction">Разрешить один раз</button></div>
+      </div>
+    </div>
+
+    <div class="modal-backdrop hidden" id="fullModeModal" role="alertdialog" aria-modal="true" aria-labelledby="fullModeTitle">
+      <div class="modal compact-modal">
+        <span class="modal-icon warning"><svg viewBox="0 0 24 24"><path d="M12 3 2.8 19h18.4Z"/><path d="M12 9v4m0 3h.01"/></svg></span><h2 id="fullModeTitle">Включить полный доступ?</h2>
+        <p>Clop сможет запрашивать работу с файлами вне выбранной папки. Команды, экран, мышь, клавиатура и чувствительные данные всё равно потребуют отдельного подтверждения.</p>
+        <label class="session-check"><input type="checkbox" id="fullModeAcknowledge"><span class="checkbox-ui"><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></svg></span><span>Я понимаю возможности этого режима</span></label>
+        <div class="modal-actions"><button type="button" class="button ghost" data-close-modal="fullModeModal">Отмена</button><button type="button" class="button primary" id="confirmFullMode" disabled>Включить на сеанс</button></div>
+      </div>
+    </div>
+
+    <div class="modal-backdrop hidden" id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <div class="modal settings-modal">
+        <aside class="settings-nav"><div><div class="settings-brand"><div class="app-mark small"><span>C</span></div><strong>Настройки</strong></div><button type="button" class="active" data-settings-tab="general"><svg viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M9 18h6"/></svg>Основные</button><button type="button" data-settings-tab="model"><svg viewBox="0 0 24 24"><path d="M12 3 4 7v10l8 4 8-4V7Z"/><path d="m4 7 8 4 8-4m-8 4v10"/></svg>Модель</button><button type="button" data-settings-tab="privacy"><svg viewBox="0 0 24 24"><path d="M12 3 4.5 6.5v5c0 4.7 3.2 8.2 7.5 9.5 4.3-1.3 7.5-4.8 7.5-9.5v-5Z"/></svg>Доступ и данные</button><button type="button" data-settings-tab="about"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-9h.01"/></svg>О приложении</button></div><button type="button" class="settings-account" id="settingsAccount"><span class="avatar small" id="settingsAvatar">C</span><span><strong id="settingsAccountName">Гость</strong><small id="settingsPlan">Войти</small></span></button></aside>
+        <section class="settings-content">
+          <div class="settings-top"><div><p class="eyebrow">CLOP CODE</p><h2 id="settingsTitle">Основные</h2></div><button class="modal-close static" type="button" data-close-modal="settingsModal" aria-label="Закрыть"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
+          <div class="settings-pane active" data-settings-pane="general">
+            <div class="setting-group"><h3>Интерфейс</h3><div class="setting-row"><div><strong>Тема</strong><small>Оформление окна Clop Code</small></div><select id="themeSelect"><option value="dark">Тёмная</option><option value="light">Светлая</option><option value="system">Как в системе</option></select></div><label class="setting-row"><div><strong>Анимации</strong><small>Плавные переходы и эффекты</small></div><input class="switch-input" type="checkbox" id="animationsSetting"><span class="switch-ui"></span></label></div>
+            <div class="setting-group"><h3>Редактор</h3><label class="setting-row"><div><strong>Enter отправляет сообщение</strong><small>Shift + Enter добавляет новую строку</small></div><input class="switch-input" type="checkbox" id="enterSendsSetting"><span class="switch-ui"></span></label></div>
+          </div>
+          <div class="settings-pane" data-settings-pane="model">
+            <div class="setting-group"><h3>Ответы</h3><div class="setting-row"><div><strong>Модель по умолчанию</strong><small>Используется в новых чатах</small></div><select id="modelSelect"><option value="gpt-5-4-mini">GPT 5.4 Mini</option><option value="gpt-luna">GPT 5.6 Луна</option><option value="gpt-spark">Codex 5.3 Спарк</option><option value="kimi-k2-6">Kimi K2.6</option></select></div><div class="setting-row"><div><strong>Усиление</strong><small>Глубина рассуждения модели</small></div><select id="effortSelect"><option value="low">Низкое</option><option value="medium">Среднее</option><option value="high">Высокое</option></select></div><label class="setting-row"><div><strong>Быстрый режим</strong><small>Выше скорость, расход лимита ×1,2</small></div><input class="switch-input" type="checkbox" id="fastSetting"><span class="switch-ui"></span></label></div>
+            <div class="setting-group"><h3>Агент</h3><div class="setting-row"><div><strong>Максимум шагов</strong><small>До остановки автономной задачи</small></div><div class="range-value"><input type="range" min="1" max="30" id="maxStepsSetting"><output id="maxStepsValue">12</output></div></div><div class="setting-row"><div><strong>Тайм-аут команды</strong><small>Максимальное ожидание терминала</small></div><div class="number-field"><input type="number" min="5" max="300" id="shellTimeoutSetting"><span>сек.</span></div></div></div>
+          </div>
+          <div class="settings-pane" data-settings-pane="privacy">
+            <div class="setting-group"><h3>Текущий доступ</h3><div class="permission-overview"><div class="permission-mode-icon"><svg viewBox="0 0 24 24"><path d="M3.5 7A2 2 0 0 1 5.5 5h4l2 2h7A2 2 0 0 1 20.5 9v8.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2Z"/></svg></div><div><strong id="settingsModeName">Рабочая папка</strong><small id="settingsModeDescription">Чтение внутри выбранной папки</small></div><button type="button" class="button secondary small-button" id="changeModeButton">Изменить</button></div></div>
+            <div class="setting-group"><h3>Данные</h3><button type="button" class="setting-row clickable" id="openBackups"><div><strong>Резервные копии</strong><small>Просмотреть сохранённые версии файлов</small></div><svg class="chevron" viewBox="0 0 24 24"><path d="m9 7 5 5-5 5"/></svg></button><button type="button" class="setting-row clickable" id="openTermsSettings"><div><strong>Условия использования</strong><small>Версия 2026-09-05</small></div><svg class="chevron" viewBox="0 0 24 24"><path d="m9 7 5 5-5 5"/></svg></button></div>
+          </div>
+          <div class="settings-pane" data-settings-pane="about">
+            <div class="about-hero"><div class="large-mark small-mark">C</div><h3>Clop Code</h3><p>Версия 2.0.1</p><span>ИИ-пространство для Windows</span></div><div class="setting-group"><button type="button" class="setting-row clickable" id="openWebsite"><div><strong>Сайт Clop</strong><small>clop-ai.onrender.com</small></div><svg class="external-icon" viewBox="0 0 24 24"><path d="M14 5h5v5m0-5-8 8"/><path d="M18 13v6H5V6h6"/></svg></button><div class="setting-row"><div><strong>Обновления</strong><small>Установлена актуальная версия</small></div><span class="ok-chip">Актуально</span></div></div>
+            <button type="button" class="button ghost logout-button hidden" id="logoutButton">Выйти из аккаунта</button>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <div class="toast-stack" id="toastStack" aria-live="polite"></div>
+  </div>
+  <script src="app.js" defer></script>
+</body>
+</html>

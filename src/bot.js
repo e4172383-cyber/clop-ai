@@ -7,6 +7,13 @@ import { ask as gptAsk } from './gpt.js';
 import { ask as kimiAsk } from './kimi.js';
 import { generateImage } from './image.js';
 
+const DESKTOP_RELEASE = Object.freeze({
+  version: '2.0.5',
+  released: '06.09.2026',
+  windows: 'Clop-Code-Setup-2.0.5.exe',
+  linux: 'Clop-Code-2.0.5-linux-x64.tar.xz',
+});
+
 // Единая точка входа: Claude-модели идут через Claude CLI, GPT-модели — через
 // Codex CLI. Возвращаемая форма одинаковая для обоих (ok/text/tokens/...).
 // Отказ входа у провайдера ни при чём для пользователя: он видел бы чужую
@@ -107,6 +114,7 @@ function mainKb(u) {
       [{ text: '📊 Лимиты', callback_data: 'usage' }, { text: '💎 Тарифы', callback_data: 'plans' }],
       [{ text: '🖼 Сгенерировать (бета)', callback_data: 'imagegen' }],
       [{ text: '🌐 Чат на сайте (бета)', url: 'https://clop-ai.onrender.com/chat' }],
+      [{ text: `💻 Скачать Clop Code · v${DESKTOP_RELEASE.version}`, callback_data: 'app_download' }],
       [{ text: '🔑 Мой API', callback_data: 'myapi' }, { text: '❓ Помощь', callback_data: 'help' }],
       [{ text: '🛟 Поддержка 24/7', callback_data: 'support' }],
     ],
@@ -328,6 +336,7 @@ function helpText() {
     '/plans — тарифы',
     '/buy — купить Pro',
     '/myapi — получить свой личный API-ключ (можно сбросить/перевыпустить кнопкой)',
+    '/download — скачать Clop Code для Windows или Linux',
     '/menu — главное меню',
     '',
     '*Контекст*',
@@ -344,6 +353,27 @@ function helpText() {
 
 function helpKb() {
   return backKb([[{ text: '©️ Документация авторских прав', callback_data: 'copyright' }]]);
+}
+
+function appDownloadText() {
+  return [
+    '💻 *Clop Code для компьютера*', '',
+    `Актуальная версия: *${DESKTOP_RELEASE.version}*`,
+    `Выпуск: ${DESKTOP_RELEASE.released}`, '',
+    'Один Telegram-аккаунт, общие модели, подписка и лимиты с ботом и сайтом.', '',
+    '🪟 *Windows 10/11 x64* — установщик EXE.',
+    '🐧 *Linux x64* — архив tar.xz. Распакуйте его и запустите файл `clop-code`.', '',
+    'В Linux доступны чат, файлы и терминал. Управление экраном и мышью пока поддерживается только в Windows.',
+  ].join('\n');
+}
+
+function appDownloadKb() {
+  const root = `${PUBLIC_URL}/downloads`;
+  return backKb([
+    [{ text: '🪟 Скачать для Windows', url: `${root}/${DESKTOP_RELEASE.windows}` }],
+    [{ text: '🐧 Скачать для Linux x64', url: `${root}/${DESKTOP_RELEASE.linux}` }],
+    [{ text: '🌐 Версия и инструкция', url: `${PUBLIC_URL}/download` }],
+  ]);
 }
 
 function copyrightText() {
@@ -761,6 +791,9 @@ async function onCommand(u, chatId, cmd, rawText = '') {
       return void await tg.sendMessage(chatId, plansText(u), { reply_markup: plansKb(u) });
     case '/buy':
       return void await tg.sendMessage(chatId, plansText(u), { reply_markup: plansKb(u) });
+    case '/download':
+    case '/app':
+      return void await tg.sendMessage(chatId, appDownloadText(), { reply_markup: appDownloadKb() });
     case '/myapi': {
       // Облачный сервис может спать (бесплатный тариф) — холодный старт до
       // ~50 сек, предупреждаем, чтобы не казалось, что бот завис
@@ -902,6 +935,7 @@ async function onCallback(u, q) {
     return void await edit(startText(u), mainKb(u));
   }
   if (data === 'usage') { await tg.answerCallback(q.id); return void await edit(usageText(u), backKb()); }
+  if (data === 'app_download') { await tg.answerCallback(q.id); return void await edit(appDownloadText(), appDownloadKb()); }
   if (data === 'help') { await tg.answerCallback(q.id); return void await edit(helpText(), helpKb()); }
   if (data === 'copyright') { await tg.answerCallback(q.id); return void await edit(copyrightText(), backKb([[{ text: '⬅️ Назад к справке', callback_data: 'help' }]])); }
   // Подтверждение подключения приложения: код виден в ссылке, поэтому сам по
