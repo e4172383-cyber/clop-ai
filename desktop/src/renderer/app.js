@@ -419,9 +419,12 @@
 
   function modelLimitDetails(model) {
     const provider = String(model?.provider || '').toLowerCase();
-    const states = Array.isArray(state.user?.limits?.[provider]?.states)
-      ? state.user.limits[provider].states
-      : [];
+    const providerLimits = state.user?.limits?.[provider];
+    const states = Array.isArray(providerLimits?.states)
+      ? providerLimits.states
+      : (providerLimits && typeof providerLimits === 'object'
+        ? Object.entries(providerLimits).map(([key, value]) => ({ key, ...(value && typeof value === 'object' ? value : {}) }))
+        : []);
     const windowDetail = (key, fallbackTitle) => {
       const value = states.find((item) => item?.key === key) || null;
       const rawPercent = Number(value?.percent);

@@ -95,7 +95,7 @@ function attachmentDisposition(name) {
 
 const DESKTOP_DOWNLOADS = new Set([
   'Clop-Code-Setup-2.0.6.exe',
-  'Clop-Code-Setup-2.0.7.exe',
+  'Clop-Code-Setup-2.0.8.exe',
   'Clop-Code-2.0.6-linux-x64.tar.xz',
   'Clop-AI-Mobile-1.0.0.apk',
   'Clop-AI-Mobile-1.0.1.apk',
@@ -395,7 +395,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
     }
     if (url.pathname === '/releases.json' && req.method === 'GET') {
       return sendJson(res, 200, {
-        desktop: { version: '2.0.7', url: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-Setup-2.0.7.exe` },
+        desktop: { version: '2.0.8', url: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-Setup-2.0.8.exe` },
         android: { version: '1.0.1', url: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-AI-Mobile-1.0.1.apk` },
       });
     }

@@ -11,9 +11,9 @@ import { wantsGeneratedImage } from './image-intent.js';
 import { createImageJob, imageJobRecoveryAction, prepareImageJobRetry } from './image-job.js';
 
 const DESKTOP_RELEASE = Object.freeze({
-  version: '2.0.7',
+  version: '2.0.8',
   released: '06.09.2026',
-  windows: 'Clop-Code-Setup-2.0.7.exe',
+  windows: 'Clop-Code-Setup-2.0.8.exe',
   linux: 'Clop-Code-2.0.6-linux-x64.tar.xz',
   androidVersion: '1.0.1',
   android: 'Clop-AI-Mobile-1.0.1.apk',
