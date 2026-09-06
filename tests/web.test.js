@@ -127,21 +127,21 @@ test('serves the public desktop release page and resumable installers without da
   assert.match(page.headers.get('content-type'), /^text\/html/);
   const html = await page.text();
   assert.match(html, /Android 8/);
-  assert.match(html, /Clop-Code-Setup-2\.0\.6\.exe/);
+  assert.match(html, /Clop-Code-Setup-2\.0\.7\.exe/);
   assert.match(html, /Clop-Code-2\.0\.6-linux-x64\.tar\.xz/);
-  assert.match(html, /Clop-AI-Mobile-1\.0\.0\.apk/);
+  assert.match(html, /Clop-AI-Mobile-1\.0\.1\.apk/);
   assert.doesNotMatch(html, /\d[\d ]{3,}\s*токен/iu);
 
-  const partial = await fetch(baseUrl + '/downloads/Clop-Code-Setup-2.0.6.exe', {
+  const partial = await fetch(baseUrl + '/downloads/Clop-Code-Setup-2.0.7.exe', {
     headers: { range: 'bytes=0-31' },
   });
   assert.equal(partial.status, 206);
   assert.equal(partial.headers.get('content-length'), '32');
   assert.match(partial.headers.get('content-range'), /^bytes 0-31\/\d+$/);
-  assert.match(partial.headers.get('content-disposition'), /Clop-Code-Setup-2\.0\.6\.exe/);
+  assert.match(partial.headers.get('content-disposition'), /Clop-Code-Setup-2\.0\.7\.exe/);
   assert.equal((await partial.arrayBuffer()).byteLength, 32);
 
-  const apk = await fetch(baseUrl + '/downloads/Clop-AI-Mobile-1.0.0.apk', {
+  const apk = await fetch(baseUrl + '/downloads/Clop-AI-Mobile-1.0.1.apk', {
     headers: { range: 'bytes=0-3' },
   });
   assert.equal(apk.status, 206);

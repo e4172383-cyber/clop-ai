@@ -17,6 +17,8 @@ const fsp = fs.promises;
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
+const { Readable } = require('node:stream');
+const { pipeline } = require('node:stream/promises');
 const {
   defaults,
   cleanSettings,
@@ -630,6 +632,15 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = REQUEST_TIMEOUT_M
     clearTimeout(timer);
     upstream?.removeEventListener('abort', abort);
   }
+}
+
+function isNewerVersion(candidate, current) {
+  const a = String(candidate || '').split('.').map((part) => Number.parseInt(part, 10) || 0);
+  const b = String(current || '').split('.').map((part) => Number.parseInt(part, 10) || 0);
+  for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
+    if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) > (b[i] || 0);
+  }
+  return false;
 }
 
 async function parseResponseError(response) {
@@ -1373,6 +1384,26 @@ function handle(channel, fn) {
 }
 
 function registerIpc() {
+  handle('update-check', async () => {
+    const releases = await apiJson('/releases.json');
+    const release = releases?.desktop;
+    const current = app.getVersion();
+    return { available: Boolean(release?.version && isNewerVersion(release.version, current)), current, version: release?.version || current };
+  });
+  handle('update-install', async () => {
+    const releases = await apiJson('/releases.json');
+    const release = releases?.desktop;
+    const expectedPrefix = `${SERVER}/downloads/Clop-Code-Setup-`;
+    if (!release?.url?.startsWith(expectedPrefix) || !release.url.endsWith('.exe')) throw new Error('Сервер обновлений вернул неверный адрес.');
+    const response = await fetchWithTimeout(release.url, {}, 10 * 60 * 1000);
+    if (!response.ok || !response.body) throw new Error('Не удалось скачать обновление.');
+    const file = path.join(app.getPath('temp'), `Clop-Code-Setup-${release.version}.exe`);
+    await pipeline(Readable.fromWeb(response.body), fs.createWriteStream(file));
+    const installer = spawn(file, [], { detached: true, stdio: 'ignore' });
+    installer.unref();
+    setTimeout(() => app.quit(), 500);
+    return { ok: true };
+  });
   handle('state', async () => {
     if (token && !account) {
       try { await refreshAccount(); } catch { /* state remains usable offline */ }

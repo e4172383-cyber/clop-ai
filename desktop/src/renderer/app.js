@@ -7,7 +7,7 @@
 
   const elements = {};
   for (const id of [
-    'app', 'workspaceCrumb', 'workspaceName', 'connectionStatus', 'sidebar', 'newChatButton',
+    'app', 'workspaceCrumb', 'workspaceName', 'connectionStatus', 'updateButton', 'sidebar', 'newChatButton',
     'railNewChatButton', 'chatRailButton', 'sidebarArtifactsButton', 'guestLoginPrompt',
     'chatSearch', 'chatGroups', 'chatList', 'accountButton', 'userAvatar', 'accountName',
     'accountPlan', 'chatTitle', 'chatSubtitle', 'modeSwitch',
@@ -2333,6 +2333,16 @@
   }
 
   function bindEvents() {
+    elements.updateButton.addEventListener('click', async () => {
+      elements.updateButton.disabled = true;
+      elements.updateButton.textContent = 'Скачиваю…';
+      try { await api.installUpdate(); }
+      catch (error) {
+        elements.updateButton.disabled = false;
+        elements.updateButton.textContent = 'Обновить';
+        toast(errorText(error), 'error');
+      }
+    });
     all('[data-window]').forEach((button) => button.addEventListener('click', () => api.window(button.dataset.window).catch((error) => toast(errorText(error), 'error'))));
     elements.newChatButton.addEventListener('click', newChat);
     elements.railNewChatButton.addEventListener('click', newChat);
@@ -2533,6 +2543,8 @@
     try {
       hydrate(await api.state());
       updateConnection();
+      const update = await api.checkUpdate().catch(() => null);
+      if (update?.available) elements.updateButton.classList.remove('hidden');
     } catch (error) {
       setConnection('Ошибка загрузки', 'offline');
       toast(errorText(error), 'error', 8000);

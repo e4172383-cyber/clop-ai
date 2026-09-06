@@ -4,7 +4,7 @@ import { BILLING_VERSION } from './token-accounting.js';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { WEB_PORT, WEB_HOST, MODELS, PLANS, PROVIDERS, DEFAULT_MODEL, DEFAULT_EFFORT, EFFORTS, DAY, BOT_NAME, freeGoActive, FREE_GO_UNTIL, FREE_GO_PLAN, MODEL_PROMO, modelPromoActive } from './config.js';
+import { WEB_PORT, WEB_HOST, PUBLIC_URL, MODELS, PLANS, PROVIDERS, DEFAULT_MODEL, DEFAULT_EFFORT, EFFORTS, DAY, BOT_NAME, freeGoActive, FREE_GO_UNTIL, FREE_GO_PLAN, MODEL_PROMO, modelPromoActive } from './config.js';
 import * as store from './store.js';
 import * as sites from './sites.js';
 import * as desk from './desktop.js';
@@ -95,8 +95,10 @@ function attachmentDisposition(name) {
 
 const DESKTOP_DOWNLOADS = new Set([
   'Clop-Code-Setup-2.0.6.exe',
+  'Clop-Code-Setup-2.0.7.exe',
   'Clop-Code-2.0.6-linux-x64.tar.xz',
   'Clop-AI-Mobile-1.0.0.apk',
+  'Clop-AI-Mobile-1.0.1.apk',
 ]);
 
 function serveDesktopFile(req, res, name, { download = false } = {}) {
@@ -390,6 +392,12 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
         'x-clop-revision': String(process.env.RENDER_GIT_COMMIT || 'local').slice(0, 40),
       });
       return res.end('ok');
+    }
+    if (url.pathname === '/releases.json' && req.method === 'GET') {
+      return sendJson(res, 200, {
+        desktop: { version: '2.0.7', url: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-Setup-2.0.7.exe` },
+        android: { version: '1.0.1', url: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-AI-Mobile-1.0.1.apk` },
+      });
     }
 
     // Чат для сайта hm550863.webhm.cloud — стучится сюда через PHP-прокси

@@ -11,12 +11,12 @@ import { wantsGeneratedImage } from './image-intent.js';
 import { createImageJob, imageJobRecoveryAction, prepareImageJobRetry } from './image-job.js';
 
 const DESKTOP_RELEASE = Object.freeze({
-  version: '2.0.6',
+  version: '2.0.7',
   released: '06.09.2026',
-  windows: 'Clop-Code-Setup-2.0.6.exe',
+  windows: 'Clop-Code-Setup-2.0.7.exe',
   linux: 'Clop-Code-2.0.6-linux-x64.tar.xz',
-  androidVersion: '1.0.0',
-  android: 'Clop-AI-Mobile-1.0.0.apk',
+  androidVersion: '1.0.1',
+  android: 'Clop-AI-Mobile-1.0.1.apk',
 });
 
 // Единая точка входа: Claude-модели идут через Claude CLI, GPT-модели — через
