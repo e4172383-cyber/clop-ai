@@ -104,6 +104,7 @@ const DESKTOP_DOWNLOADS = new Set([
   'Clop-AI-Mobile-1.0.1.apk',
   'Clop-AI-Mobile-1.0.2.apk',
   'Clop-AI-Mobile-1.0.3.apk',
+  'Clop-AI-Mobile-1.0.4.apk',
 ]);
 
 function serveDesktopFile(req, res, name, { download = false } = {}) {
@@ -406,7 +407,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           windowsUrl: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-Setup-2.0.9.exe`,
           linuxUrl: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-2.0.9-linux-x64.tar.xz`,
         },
-        android: { version: '1.0.3', url: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-AI-Mobile-1.0.3.apk` },
+        android: { version: '1.0.4', url: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-AI-Mobile-1.0.4.apk` },
       });
     }
 
@@ -604,10 +605,11 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
       };
 
       if (url.pathname === '/desk/init' && req.method === 'POST') {
-        readJsonBody(req).then((b) => sendJson(res, 200, {
-          ok: desk.initPair(b.code, b.secretHash, b.device),
-          bot: getBotUsername(),
-        })).catch(() => sendJson(res, 400, { ok: false }));
+        readJsonBody(req).then(async (b) => {
+          const ok = desk.initPair(b.code, b.secretHash, b.device);
+          if (ok) await store.save({ strict: true });
+          return sendJson(res, 200, { ok, bot: getBotUsername() });
+        }).catch(() => sendJson(res, 400, { ok: false }));
         return;
       }
 

@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { raw as storeRaw, saveSoon } from './store.js';
 
 /* Подключение настольного приложения Clop Code.
 
@@ -31,14 +32,29 @@ if (!process.env.WEB_SESSION_SECRET && !process.env.WEB_PASSWORD) {
 
 const PAIR_TTL_MS = 10 * 60_000;
 const MAX_PENDING_PAIRS = 2_000;
-const pairs = new Map(); // code -> { secretHash, device, userId, createdAt }
+// Пары входа хранятся вместе с основной базой. Render может перезапустить
+// бесплатный инстанс между подтверждением в Telegram и возвращением в
+// приложение; обычный Map в этот момент терял код и оставлял клиент ждать.
+function pairs() {
+  const db = storeRaw();
+  if (!db.desktopPairs || typeof db.desktopPairs !== 'object' || Array.isArray(db.desktopPairs)) db.desktopPairs = {};
+  return db.desktopPairs;
+}
 
 const b64 = (buf) => buf.toString('base64url');
 const sha256 = (s) => crypto.createHash('sha256').update(String(s)).digest('base64url');
 
 function cleanup() {
   const now = Date.now();
-  for (const [code, v] of pairs) if (now - v.createdAt > PAIR_TTL_MS) pairs.delete(code);
+  const current = pairs();
+  let changed = false;
+  for (const [code, value] of Object.entries(current)) {
+    if (!value || now - Number(value.createdAt || 0) > PAIR_TTL_MS) {
+      delete current[code];
+      changed = true;
+    }
+  }
+  if (changed) saveSoon();
 }
 
 // Шаг 1: приложение объявляет код и хэш своего секрета
@@ -46,29 +62,32 @@ export function initPair(code, secretHash, device) {
   cleanup();
   if (!/^[a-z0-9]{10,32}$/i.test(String(code || ''))) return false;
   if (!/^[A-Za-z0-9_-]{20,64}$/.test(String(secretHash || ''))) return false;
+  const current = pairs();
   // Активный код нельзя перехватить, подменив для него хэш секрета.
-  if (pairs.has(String(code)) || pairs.size >= MAX_PENDING_PAIRS) return false;
-  pairs.set(String(code), {
+  if (current[String(code)] || Object.keys(current).length >= MAX_PENDING_PAIRS) return false;
+  current[String(code)] = {
     secretHash: String(secretHash),
     device: String(device || 'ПК').slice(0, 60),
     userId: null,
     createdAt: Date.now(),
-  });
+  };
+  saveSoon();
   return true;
 }
 
 export function pairInfo(code) {
   cleanup();
-  const v = pairs.get(String(code));
+  const v = pairs()[String(code)];
   return v ? { device: v.device, claimed: Boolean(v.userId) } : null;
 }
 
 // Шаг 2: подтверждение из бота
 export function claimPair(code, userId) {
   cleanup();
-  const v = pairs.get(String(code));
+  const v = pairs()[String(code)];
   if (!v) return false;
   v.userId = String(userId);
+  saveSoon();
   return true;
 }
 
@@ -76,12 +95,14 @@ export function claimPair(code, userId) {
 // иначе по времени ответа можно подбирать секрет посимвольно
 export function redeemPair(code, secret) {
   cleanup();
-  const v = pairs.get(String(code));
+  const current = pairs();
+  const v = current[String(code)];
   if (!v || !v.userId) return null;
   const a = Buffer.from(sha256(secret));
   const b = Buffer.from(v.secretHash);
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
-  pairs.delete(String(code));
+  delete current[String(code)];
+  saveSoon();
   return { userId: v.userId, device: v.device };
 }
 

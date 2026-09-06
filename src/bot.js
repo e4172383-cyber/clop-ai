@@ -17,8 +17,8 @@ const DESKTOP_RELEASE = Object.freeze({
   released: '06.09.2026',
   windows: 'Clop-Code-Setup-2.0.9.exe',
   linux: 'Clop-Code-2.0.9-linux-x64.tar.xz',
-  androidVersion: '1.0.3',
-  android: 'Clop-AI-Mobile-1.0.3.apk',
+  androidVersion: '1.0.4',
+  android: 'Clop-AI-Mobile-1.0.4.apk',
 });
 
 // Единая точка входа: Claude-модели идут через Claude CLI, GPT-модели — через
@@ -1001,6 +1001,7 @@ async function onCallback(u, q) {
   // себе он бесполезен — токен выдаётся только владельцу секрета на том ПК
   if (data.startsWith('desk_ok:')) {
     const ok = desk.claimPair(data.slice(8), u.id);
+    if (ok) await store.save();
     await tg.answerCallback(q.id);
     return void await edit(ok
       ? '✅ Приложение подключено — вернитесь в него, вход завершится сам.\n\nЛимиты и модели те же, что здесь. Отключить доступ можно командой /devices.'

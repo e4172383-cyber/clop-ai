@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { once } from 'node:events';
 import test, { after, before, beforeEach } from 'node:test';
@@ -130,7 +131,7 @@ test('serves the public desktop release page and resumable installers without da
   assert.match(html, /Android 8/);
   assert.match(html, /Clop-Code-Setup-2\.0\.9\.exe/);
   assert.match(html, /Clop-Code-2\.0\.9-linux-x64\.tar\.xz/);
-  assert.match(html, /Clop-AI-Mobile-1\.0\.3\.apk/);
+  assert.match(html, /Clop-AI-Mobile-1\.0\.4\.apk/);
   assert.doesNotMatch(html, /\d[\d ]{3,}\s*токен/iu);
 
   const partial = await fetch(baseUrl + '/downloads/Clop-Code-Setup-2.0.9.exe', {
@@ -142,7 +143,7 @@ test('serves the public desktop release page and resumable installers without da
   assert.match(partial.headers.get('content-disposition'), /Clop-Code-Setup-2\.0\.9\.exe/);
   assert.equal((await partial.arrayBuffer()).byteLength, 32);
 
-  const apk = await fetch(baseUrl + '/downloads/Clop-AI-Mobile-1.0.3.apk', {
+  const apk = await fetch(baseUrl + '/downloads/Clop-AI-Mobile-1.0.4.apk', {
     headers: { range: 'bytes=0-3' },
   });
   assert.equal(apk.status, 206);
@@ -195,6 +196,37 @@ test('/desk/me exposes only percentage token-limit state', async () => {
       );
     }
   }
+});
+
+test('Android Telegram login survives the confirmation round trip and returns a working token', async () => {
+  const code = crypto.randomBytes(10).toString('hex');
+  const secret = crypto.randomBytes(32).toString('base64url');
+  const secretHash = crypto.createHash('sha256').update(secret).digest('base64url');
+  const headers = { 'content-type': 'application/json' };
+
+  const initialized = await fetch(baseUrl + '/desk/init', {
+    method: 'POST', headers,
+    body: JSON.stringify({ code, secretHash, device: 'Android login test' }),
+  });
+  assert.equal(initialized.status, 200);
+  assert.equal((await initialized.json()).ok, true);
+  assert.equal(store.raw().desktopPairs[code].secretHash, secretHash);
+
+  assert.equal(desktop.claimPair(code, user.id), true);
+  const redeemed = await fetch(baseUrl + '/desk/poll', {
+    method: 'POST', headers,
+    body: JSON.stringify({ code, secret }),
+  });
+  assert.equal(redeemed.status, 200);
+  const login = await redeemed.json();
+  assert.equal(login.ok, true);
+  assert.match(login.token, /^[^.]+\.[^.]+$/);
+
+  const profile = await fetch(baseUrl + '/desk/me', {
+    headers: { authorization: 'Bearer ' + login.token },
+  });
+  assert.equal(profile.status, 200);
+  assert.equal((await profile.json()).ok, true);
 });
 
 test('the limited offer unlocks Astra, keeps its usage outside plan limits, and Sol is free with a visible multiplier', async () => {
