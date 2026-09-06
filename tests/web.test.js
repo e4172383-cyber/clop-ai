@@ -61,6 +61,7 @@ const okResult = (overrides = {}) => ({
 
 async function fakeAsk(args) {
   modelCalls.push({
+    client: args.client || 'chat',
     prompt: args.prompt,
     messages: args.chat.messages.map((message) => ({ role: message.role, content: message.content })),
     imageDir: args.images?.dir || null,
@@ -129,18 +130,18 @@ test('serves the public desktop release page and resumable installers without da
   assert.match(page.headers.get('content-type'), /^text\/html/);
   const html = await page.text();
   assert.match(html, /Android 8/);
-  assert.match(html, /Clop-Code-Setup-2\.0\.9\.exe/);
-  assert.match(html, /Clop-Code-2\.0\.9-linux-x64\.tar\.xz/);
+  assert.match(html, /Clop-Code-Setup-2\.0\.10\.exe/);
+  assert.match(html, /Clop-Code-2\.0\.10-linux-x64\.tar\.xz/);
   assert.match(html, /Clop-AI-Mobile-1\.0\.4\.apk/);
   assert.doesNotMatch(html, /\d[\d ]{3,}\s*токен/iu);
 
-  const partial = await fetch(baseUrl + '/downloads/Clop-Code-Setup-2.0.9.exe', {
+  const partial = await fetch(baseUrl + '/downloads/Clop-Code-Setup-2.0.10.exe', {
     headers: { range: 'bytes=0-31' },
   });
   assert.equal(partial.status, 206);
   assert.equal(partial.headers.get('content-length'), '32');
   assert.match(partial.headers.get('content-range'), /^bytes 0-31\/\d+$/);
-  assert.match(partial.headers.get('content-disposition'), /Clop-Code-Setup-2\.0\.9\.exe/);
+  assert.match(partial.headers.get('content-disposition'), /Clop-Code-Setup-2\.0\.10\.exe/);
   assert.equal((await partial.arrayBuffer()).byteLength, 32);
 
   const apk = await fetch(baseUrl + '/downloads/Clop-AI-Mobile-1.0.4.apk', {
@@ -227,6 +228,22 @@ test('Android Telegram login survives the confirmation round trip and returns a 
   });
   assert.equal(profile.status, 200);
   assert.equal((await profile.json()).ok, true);
+});
+
+test('/desk/chat marks the request as a desktop action client', async () => {
+  const deviceId = 'desktop-action-client';
+  desktop.addDevice(user, deviceId, 'Clop Code test');
+  const token = desktop.signToken(user.id, deviceId);
+  modelResults.push(okResult({ text: '<clop_action>{"tool":"write","path":"index.html","content":"ok"}</clop_action>' }));
+
+  const response = await fetch(baseUrl + '/desk/chat', {
+    method: 'POST',
+    headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+    body: JSON.stringify({ text: 'Создай сайт', model: 'gpt-luna' }),
+  });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).ok, true);
+  assert.equal(modelCalls[0].client, 'desktop');
 });
 
 test('the limited offer unlocks Astra, keeps its usage outside plan limits, and Sol is free with a visible multiplier', async () => {

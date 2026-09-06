@@ -13,10 +13,10 @@ import { createImageJob, imageJobRecoveryAction, prepareImageJobRetry } from './
 import { addOfferUsage, claimOffer, offerActiveFor, offerState } from './limited-offer.js';
 
 const DESKTOP_RELEASE = Object.freeze({
-  version: '2.0.9',
+  version: '2.0.10',
   released: '06.09.2026',
-  windows: 'Clop-Code-Setup-2.0.9.exe',
-  linux: 'Clop-Code-2.0.9-linux-x64.tar.xz',
+  windows: 'Clop-Code-Setup-2.0.10.exe',
+  linux: 'Clop-Code-2.0.10-linux-x64.tar.xz',
   androidVersion: '1.0.4',
   android: 'Clop-AI-Mobile-1.0.4.apk',
 });
@@ -27,10 +27,10 @@ const DESKTOP_RELEASE = Object.freeze({
 // английскую ошибку про токен и не понял бы, что делать
 const AUTH_BROKEN = /revoked|refresh|unauthorized|401|not logged in|log in again|re-login|no credential configured|authorization grant is invalid|invalid_grant/i;
 
-export async function askModel({ chat, model, effortKey, prompt, onDelta, images, fast = false, signal }) {
+export async function askModel({ chat, model, effortKey, prompt, onDelta, images, fast = false, signal, client = 'chat' }) {
   return runModelJob(async () => {
     if (model?.runtime === 'kimi') {
-      const r = await kimiAsk({ chat, modelCli: model.cli, kimiEffort: model.kimiEffort, prompt, onDelta, signal });
+      const r = await kimiAsk({ chat, modelCli: model.cli, kimiEffort: model.kimiEffort, prompt, onDelta, signal, client });
       if (!r.ok && AUTH_BROKEN.test(String(r.error || ''))) {
         return { ...r, provider: 'kimi', error: 'Вход Kimi временно недоступен. Владелец сервиса уже может проверить авторизацию.' };
       }

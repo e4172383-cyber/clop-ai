@@ -63,20 +63,23 @@ function assistantText(obj) {
   return '';
 }
 
-export async function ask({ chat, modelCli, kimiEffort, prompt, onDelta, signal }) {
+export async function ask({ chat, modelCli, kimiEffort, prompt, onDelta, signal, client = 'chat' }) {
   if (signal?.aborted) return { ok: false, error: 'aborted', durationMs: 0 };
   const started = Date.now();
   const fullPrompt = transcript(chat, prompt);
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clop-kimi-job-'));
   const agentFile = path.join(workDir, 'chat-agent.md');
+  const desktopClient = client === 'desktop';
   fs.writeFileSync(agentFile, [
     '---',
     'name: clop-chat',
-    'description: Safe chat-only assistant',
+    `description: ${desktopClient ? 'Clop Code desktop response engine' : 'Safe chat-only assistant'}`,
     'tools: []',
     'subagents: []',
     '---',
-    'You are a chat assistant. Answer the user directly. You have no tools and cannot access files.',
+    desktopClient
+      ? 'You are the response engine for Clop Code desktop. You cannot touch the user computer directly, but the desktop application executes each <clop_action> block it receives. Follow the clop_protocol in the user message exactly: emit one requested action at a time, wait for clop_result, continue until the work is complete, and never paste code instead of requesting write.'
+      : 'You are a chat assistant. Answer the user directly. You have no tools and cannot access files.',
   ].join('\n'));
   return await new Promise((resolve) => {
     const args = [KIMI_ENTRY, '-m', modelCli, '--agent-file', agentFile,
