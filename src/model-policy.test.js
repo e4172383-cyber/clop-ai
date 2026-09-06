@@ -33,6 +33,8 @@ test('all selectable bot models use GPT or Kimi, never Claude', () => {
 test('Clop aliases are removed and the new GPT models have the requested gates', () => {
   assert.equal(Object.keys(MODELS).some((key) => key.startsWith('clop-')), false);
   assert.ok(MODELS['gpt-5-4-mini'].plans.includes('free'));
+  assert.ok(MODELS['gpt-terra'].plans.includes('free'));
+  assert.deepEqual(MODELS['gpt-terra'].plans, ['free', 'go', 'pro', 'max', 'max20', 'coderplus']);
   assert.equal(MODELS['gpt-5-5'].plans.includes('free'), false);
   assert.ok(MODELS['gpt-5-5'].plans.includes('go'));
 });

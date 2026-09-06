@@ -40,7 +40,7 @@
     { key: 'gpt-5-5', title: 'GPT 5.5', provider: 'gpt', description: 'Мощная универсальная GPT — от GO', available: false, plans: ['go', 'pro', 'max', 'max20', 'coderplus'] },
     { key: 'kimi-k2-7-code', title: 'Kimi K2.7 Code', provider: 'kimi', description: 'Кодовая Kimi — от GO', available: false, plans: ['go', 'pro', 'max', 'max20', 'coderplus'] },
     { key: 'kimi-k3', title: 'Kimi K3', provider: 'kimi', description: 'Флагманская Kimi — от GO', available: false, plans: ['go', 'pro', 'max', 'max20', 'coderplus'] },
-    { key: 'gpt-terra', title: 'GPT 5.6 Терра', provider: 'gpt', description: 'Мощная GPT-модель — от Pro', available: false, plans: ['pro', 'max', 'max20', 'coderplus'] },
+    { key: 'gpt-terra', title: 'GPT 5.6 Терра', provider: 'gpt', description: 'Мощная GPT-модель — доступна всем', available: true, plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'] },
     { key: 'kimi-k3-swarm', title: 'Kimi K3 Swarm', provider: 'kimi', description: 'Максимальная Kimi — от Pro', available: false, plans: ['pro', 'max', 'max20', 'coderplus'] },
     { key: 'gpt-sol', title: 'GPT 5.6 Соль', provider: 'gpt', description: 'Топовая GPT — от Max', available: false, plans: ['max', 'max20', 'coderplus'] },
   ];
