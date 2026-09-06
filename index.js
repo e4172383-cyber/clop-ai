@@ -62,6 +62,7 @@ async function startBot() {
         { command: 'plans', description: 'Тарифы' },
         { command: 'buy', description: 'Купить Pro' },
         { command: 'myapi', description: 'Мой личный API-ключ' },
+        { command: 'download', description: 'Скачать Clop Code' },
         { command: 'help', description: 'Помощь' },
       ],
     });

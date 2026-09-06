@@ -25,7 +25,7 @@
     'approvalCode', 'approvalNote', 'denyAction', 'allowAction', 'fullModeModal',
     'fullModeAcknowledge', 'confirmFullMode', 'settingsButton', 'settingsModal',
     'settingsTitle', 'settingsAccount', 'settingsAvatar', 'settingsAccountName', 'settingsPlan',
-    'themeSelect', 'animationsSetting', 'enterSendsSetting', 'modelSelect', 'effortSelect',
+    'themeSelect', 'animationsSetting', 'enterSendsSetting', 'approvalModeSetting', 'modelSelect', 'effortSelect',
     'fastSetting', 'maxStepsSetting', 'maxStepsValue', 'shellTimeoutSetting', 'emptyLoginButton',
     'settingsModeName', 'settingsModeDescription', 'changeModeButton', 'openBackups',
     'openTermsSettings', 'openWebsite', 'logoutButton', 'toastStack',
@@ -67,7 +67,7 @@
     loggedIn: false,
     user: null,
     settings: {
-      workDir: '', theme: 'dark', animations: true, enterSends: true, maxSteps: 12,
+      workDir: '', theme: 'dark', animations: true, enterSends: true, approvalMode: 'smart', maxSteps: 12,
       shellTimeout: 90, model: '', effort: 'low', fast: false,
     },
     mode: 'chat',
@@ -520,6 +520,7 @@
     elements.themeSelect.value = settings.theme || 'dark';
     elements.animationsSetting.checked = settings.animations !== false;
     elements.enterSendsSetting.checked = settings.enterSends !== false;
+    elements.approvalModeSetting.value = settings.approvalMode || 'smart';
     elements.fastToggle.checked = Boolean(settings.fast);
     elements.fastSetting.checked = Boolean(settings.fast);
     elements.maxStepsSetting.value = String(settings.maxSteps || 12);
@@ -2368,6 +2369,7 @@
     elements.themeSelect.addEventListener('change', () => saveSetting({ theme: elements.themeSelect.value }));
     elements.animationsSetting.addEventListener('change', () => saveSetting({ animations: elements.animationsSetting.checked }));
     elements.enterSendsSetting.addEventListener('change', () => saveSetting({ enterSends: elements.enterSendsSetting.checked }));
+    elements.approvalModeSetting.addEventListener('change', () => saveSetting({ approvalMode: elements.approvalModeSetting.value }));
     elements.modelSelect.addEventListener('change', () => saveSetting({ model: elements.modelSelect.value }));
     elements.effortSelect.addEventListener('change', () => saveSetting({ effort: elements.effortSelect.value }));
     elements.fastSetting.addEventListener('change', () => saveSetting({ fast: elements.fastSetting.checked }));

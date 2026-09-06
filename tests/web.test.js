@@ -126,18 +126,18 @@ test('serves the public desktop release page and resumable installers without da
   assert.equal(page.status, 200);
   assert.match(page.headers.get('content-type'), /^text\/html/);
   const html = await page.text();
-  assert.match(html, /Clop Code 2\.0\.5/);
-  assert.match(html, /Clop-Code-Setup-2\.0\.5\.exe/);
-  assert.match(html, /Clop-Code-2\.0\.5-linux-x64\.tar\.xz/);
+  assert.match(html, /Clop Code 2\.0\.6/);
+  assert.match(html, /Clop-Code-Setup-2\.0\.6\.exe/);
+  assert.match(html, /Clop-Code-2\.0\.6-linux-x64\.tar\.xz/);
   assert.doesNotMatch(html, /\d[\d ]{3,}\s*токен/iu);
 
-  const partial = await fetch(baseUrl + '/downloads/Clop-Code-Setup-2.0.5.exe', {
+  const partial = await fetch(baseUrl + '/downloads/Clop-Code-Setup-2.0.6.exe', {
     headers: { range: 'bytes=0-31' },
   });
   assert.equal(partial.status, 206);
   assert.equal(partial.headers.get('content-length'), '32');
   assert.match(partial.headers.get('content-range'), /^bytes 0-31\/\d+$/);
-  assert.match(partial.headers.get('content-disposition'), /Clop-Code-Setup-2\.0\.5\.exe/);
+  assert.match(partial.headers.get('content-disposition'), /Clop-Code-Setup-2\.0\.6\.exe/);
   assert.equal((await partial.arrayBuffer()).byteLength, 32);
 
   const missing = await fetch(baseUrl + '/downloads/private.env');

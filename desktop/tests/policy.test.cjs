@@ -11,6 +11,7 @@ const {
   needsActionRecovery,
   resolveTarget,
   decision,
+  approvalDecision,
   sensitive,
 } = require('../src/policy.cjs');
 
@@ -127,12 +128,26 @@ test('decision applies chat, workspace, full-access, and approval rules', () => 
   assert.equal(decision('full', 'read', { outside: false, abs: 'C:\\Users\\me\\.env' }), 'ask');
 });
 
+test('approvalDecision supports smart, allow-all, and always-ask modes without bypassing access scope', () => {
+  const inside = { outside: false, abs: 'notes.txt' };
+  const outside = { outside: true, abs: 'D:\\notes.txt' };
+  assert.equal(approvalDecision('workspace', 'read', inside, 'smart'), 'allow');
+  assert.equal(approvalDecision('workspace', 'write', inside, 'smart'), 'ask');
+  assert.equal(approvalDecision('workspace', 'shell', inside, 'allow'), 'allow');
+  assert.equal(approvalDecision('workspace', 'read', inside, 'ask'), 'ask');
+  assert.equal(approvalDecision('chat', 'read', inside, 'allow'), 'deny');
+  assert.equal(approvalDecision('workspace', 'read', outside, 'allow'), 'deny');
+  assert.equal(approvalDecision('full', 'write', outside, 'allow', { targetExists: true }), 'allow');
+  assert.equal(approvalDecision('full', 'external', inside, 'allow'), 'ask');
+});
+
 test('cleanSettings accepts safe values, clamps numbers, and preserves protected fields', () => {
   const previous = { ...defaults, agreementVersion: '2026-09-05', agreementAt: 1234 };
   const cleaned = cleanSettings({
     animations: false,
     enterSends: false,
     fast: true,
+    approvalMode: 'ask',
     theme: 'system',
     maxSteps: 99.9,
     shellTimeout: 1,
@@ -145,6 +160,7 @@ test('cleanSettings accepts safe values, clamps numbers, and preserves protected
   assert.equal(cleaned.animations, false);
   assert.equal(cleaned.enterSends, false);
   assert.equal(cleaned.fast, true);
+  assert.equal(cleaned.approvalMode, 'ask');
   assert.equal(cleaned.theme, 'system');
   assert.equal(cleaned.maxSteps, 30);
   assert.equal(cleaned.shellTimeout, 5);

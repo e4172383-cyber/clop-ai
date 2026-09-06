@@ -92,8 +92,8 @@ function attachmentDisposition(name) {
 }
 
 const DESKTOP_DOWNLOADS = new Set([
-  'Clop-Code-Setup-2.0.5.exe',
-  'Clop-Code-2.0.5-linux-x64.tar.xz',
+  'Clop-Code-Setup-2.0.6.exe',
+  'Clop-Code-2.0.6-linux-x64.tar.xz',
 ]);
 
 function serveDesktopFile(req, res, name, { download = false } = {}) {

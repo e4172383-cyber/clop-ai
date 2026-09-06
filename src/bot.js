@@ -8,10 +8,10 @@ import { ask as kimiAsk } from './kimi.js';
 import { generateImage } from './image.js';
 
 const DESKTOP_RELEASE = Object.freeze({
-  version: '2.0.5',
+  version: '2.0.6',
   released: '06.09.2026',
-  windows: 'Clop-Code-Setup-2.0.5.exe',
-  linux: 'Clop-Code-2.0.5-linux-x64.tar.xz',
+  windows: 'Clop-Code-Setup-2.0.6.exe',
+  linux: 'Clop-Code-2.0.6-linux-x64.tar.xz',
 });
 
 // Единая точка входа: Claude-модели идут через Claude CLI, GPT-модели — через

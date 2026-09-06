@@ -1,11 +1,12 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const ACTIONS = new Set(['list', 'read', 'write', 'shell', 'screenshot', 'click', 'type', 'key']);
-const defaults = Object.freeze({ workDir: '', theme: 'dark', animations: true, enterSends: true, maxSteps: 12, shellTimeout: 90, model: '', effort: 'low', fast: false, agreementVersion: '', agreementAt: 0 });
+const defaults = Object.freeze({ workDir: '', theme: 'dark', animations: true, enterSends: true, approvalMode: 'smart', maxSteps: 12, shellTimeout: 90, model: '', effort: 'low', fast: false, agreementVersion: '', agreementAt: 0 });
 function cleanSettings(input = {}, previous = defaults) {
   const out = { ...previous };
   for (const k of ['animations', 'enterSends', 'fast']) if (typeof input[k] === 'boolean') out[k] = input[k];
   if (['dark', 'light', 'system'].includes(input.theme)) out.theme = input.theme;
+  if (['smart', 'allow', 'ask'].includes(input.approvalMode)) out.approvalMode = input.approvalMode;
   for (const [k, min, max] of [['maxSteps', 1, 30], ['shellTimeout', 5, 300]]) if (Number.isFinite(input[k])) out[k] = Math.min(max, Math.max(min, Math.floor(input[k])));
   if (typeof input.model === 'string' && /^[a-z0-9-]{0,60}$/.test(input.model)) out.model = input.model;
   if (['low', 'medium', 'high', 'xhigh'].includes(input.effort)) out.effort = input.effort;
@@ -63,4 +64,13 @@ function decision(mode, tool, target = {}) {
   if (['list','read'].includes(tool)) return 'allow';
   return mode === 'full' ? 'allow' : 'ask';
 }
-module.exports = { defaults, cleanSettings, parseAction, needsActionRecovery, resolveTarget, decision, sensitive };
+function approvalDecision(mode, tool, target = {}, approvalMode = 'smart', options = {}) {
+  let verdict = decision(mode, tool, target);
+  if (verdict === 'deny') return verdict;
+  if (tool === 'external') return 'ask';
+  if (approvalMode === 'allow') return 'allow';
+  if (approvalMode === 'ask') return 'ask';
+  if (options.alwaysAsk || (target.outside && mode === 'full') || options.targetExists) verdict = 'ask';
+  return verdict;
+}
+module.exports = { defaults, cleanSettings, parseAction, needsActionRecovery, resolveTarget, decision, approvalDecision, sensitive };

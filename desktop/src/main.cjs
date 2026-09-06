@@ -23,8 +23,7 @@ const {
   parseAction,
   needsActionRecovery,
   resolveTarget,
-  decision,
-  sensitive,
+  approvalDecision,
 } = require('./policy.cjs');
 const {
   dedupeResponseFileCandidates,
@@ -818,15 +817,10 @@ function rejectAllApprovals() {
 }
 
 async function authorize(tool, action = {}, target = null, { alwaysAsk = false } = {}) {
-  let verdict = decision(accessMode, tool, target || {});
-  // Внешние HTTPS-ссылки (Telegram-вход, сайт) не являются инструментами ПК,
-  // поэтому доступны в любом режиме, но всегда только после подтверждения.
-  if (tool === 'external') verdict = 'ask';
-  if (target?.outside && accessMode === 'full') verdict = 'ask';
-  if (tool === 'write' && target?.abs && fs.existsSync(target.abs)) verdict = 'ask';
-  // Дополнительное подтверждение может ужесточить allow, но не превращает
-  // запрет режима «Только чат» в разрешённое действие.
-  if (alwaysAsk && verdict === 'allow') verdict = 'ask';
+  const verdict = approvalDecision(accessMode, tool, target || {}, settings.approvalMode, {
+    alwaysAsk,
+    targetExists: Boolean(tool === 'write' && target?.abs && fs.existsSync(target.abs)),
+  });
   if (verdict === 'deny') throw new Error('Текущий режим доступа не разрешает это действие.');
   if (verdict === 'ask') {
     const allowed = await requestApproval(approvalSummary(tool, action, target));
