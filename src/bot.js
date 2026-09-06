@@ -8,6 +8,7 @@ import { ask as kimiAsk } from './kimi.js';
 import { generateImage } from './image.js';
 import { BILLING_VERSION } from './token-accounting.js';
 import { wantsGeneratedImage } from './image-intent.js';
+import { createImageJob, imageJobRecoveryAction, prepareImageJobRetry } from './image-job.js';
 
 const DESKTOP_RELEASE = Object.freeze({
   version: '2.0.6',
@@ -1223,7 +1224,25 @@ async function handleDocument(u, chatId, msg) {
   await handleAsk(u, chatId, prompt);
 }
 
-async function handleImageGen(u, chatId, prompt) {
+async function persistImageJob(u, job) {
+  u.imageJob = job;
+  await store.save({ strict: true });
+}
+
+async function clearImageJob(u) {
+  delete u.imageJob;
+  await store.save({ strict: true });
+}
+
+async function imageFailureMessage(u, chatId, placeholder, text) {
+  if (placeholder?.message_id) {
+    const edited = await tg.editMessage(chatId, placeholder.message_id, text);
+    if (edited) return;
+  }
+  await tg.sendMessage(chatId, text, { reply_markup: mainKb(u) });
+}
+
+async function handleImageGen(u, chatId, prompt, { recoveryJob = null } = {}) {
   if (busy.has(u.id)) return void await tg.sendMessage(chatId, '⏳ Дождитесь предыдущего ответа.');
   const lim = imageLimitState(u);
   if (lim.exceeded) {
@@ -1235,27 +1254,68 @@ async function handleImageGen(u, chatId, prompt) {
   busy.add(u.id);
   let placeholder = null;
   try {
-    placeholder = await tg.sendMessage(chatId, '🖼 Генерирую… это может занять минуту-две (бета)');
-  } catch {}
-  try {
+    if (recoveryJob) {
+      const existingId = Number(recoveryJob.placeholderMessageId) || null;
+      if (existingId) {
+        const edited = await tg.editMessage(chatId, existingId, '🔄 Сервер перезапустился. Автоматически продолжаю генерацию…');
+        if (edited) placeholder = { message_id: existingId };
+      }
+      if (!placeholder) placeholder = await tg.sendMessage(chatId, '🔄 Продолжаю генерацию после перезапуска сервера…');
+      const retried = prepareImageJobRetry({ ...recoveryJob, placeholderMessageId: placeholder?.message_id || existingId });
+      await persistImageJob(u, retried);
+    } else {
+      try { placeholder = await tg.sendMessage(chatId, '🖼 Генерирую… это может занять минуту-две (бета)'); } catch {}
+      await persistImageJob(u, createImageJob({ chatId, prompt, placeholderMessageId: placeholder?.message_id }));
+    }
+
     const res = await generateImage(prompt);
     if (!res.ok) {
       u.stats.errors += 1;
-      store.saveSoon();
+      await clearImageJob(u);
       const errText = `⚠️ Не удалось сгенерировать: \`${res.error}\``;
-      if (placeholder) { try { await tg.editMessage(chatId, placeholder.message_id, errText); return; } catch {} }
-      return void await tg.sendMessage(chatId, errText, { reply_markup: mainKb(u) });
+      return void await imageFailureMessage(u, chatId, placeholder, errText);
     }
-    store.addImageGeneration(u);
-    if (placeholder) { try { await tg.deleteMessage(chatId, placeholder.message_id); } catch {} }
+
+    await persistImageJob(u, { ...u.imageJob, stage: 'sending' });
     await tg.sendPhoto(chatId, res.buffer, 'image.png', { caption: `🖼 ${prompt}`.slice(0, 1000) });
+    store.addImageGeneration(u);
+    await clearImageJob(u);
+    if (placeholder) { try { await tg.deleteMessage(chatId, placeholder.message_id); } catch {} }
   } catch (e) {
     console.error('[imagegen]', e.message);
     u.stats.errors += 1;
-    store.saveSoon();
-    await tg.sendMessage(chatId, `⚠️ Ошибка генерации: ${String(e.message).slice(0, 200)}`, { reply_markup: mainKb(u) });
+    try { await clearImageJob(u); } catch {}
+    await imageFailureMessage(u, chatId, placeholder, `⚠️ Ошибка генерации: ${String(e.message).slice(0, 200)}`);
   } finally {
     busy.delete(u.id);
+  }
+}
+
+export async function recoverInterruptedImageJobs() {
+  const users = store.allUsers().filter((u) => u.imageJob);
+  if (!users.length) return;
+  console.log(`[imagegen] найдено незавершённых задач: ${users.length}`);
+
+  for (const u of users) {
+    const job = u.imageJob;
+    const action = imageJobRecoveryAction(job);
+    if (action === 'retry') {
+      await handleImageGen(u, Number(job.chatId), job.prompt, { recoveryJob: job });
+      continue;
+    }
+
+    try { await clearImageJob(u); } catch {}
+    if (action === 'notify') {
+      const chatId = Number(job.chatId);
+      const text = '⚠️ Генерация прервалась из-за перезапуска сервера. Неудачная попытка не потратила лимит; повторите запрос.';
+      if (job.placeholderMessageId) {
+        const edited = await tg.editMessage(chatId, job.placeholderMessageId, text);
+        if (edited) continue;
+      }
+      try { await tg.sendMessage(chatId, text, { reply_markup: mainKb(u) }); } catch (e) {
+        console.error('[imagegen] не удалось уведомить после перезапуска:', e.message);
+      }
+    }
   }
 }
 

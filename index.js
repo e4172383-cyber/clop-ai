@@ -4,7 +4,7 @@ import os from 'node:os';
 import { BOT_NAME, ensureDirs, WEB_HOST, WEB_PORT, initializeModelPromo } from './src/config.js';
 import * as store from './src/store.js';
 import * as tg from './src/telegram.js';
-import { handleUpdate } from './src/bot.js';
+import { handleUpdate, recoverInterruptedImageJobs } from './src/bot.js';
 import { startWeb } from './src/web.js';
 import * as codexAuth from './src/codexauth.js';
 import * as kimiAuth from './src/kimiauth.js';
@@ -80,6 +80,7 @@ async function startBot() {
   }
 
   tg.pollUpdates(handleUpdate, { onError: (e) => console.error('[poll]', e.message) });
+  recoverInterruptedImageJobs().catch((e) => console.error('[imagegen] восстановление:', e.message));
 }
 
 if (!noBot) await startBot();
