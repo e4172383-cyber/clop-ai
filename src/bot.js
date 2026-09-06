@@ -5,6 +5,7 @@ import { planOf, effortOf, allowedEffortOptions, checkLimits, checkAllLimits, ba
 import { availablePlans, selectModel } from './model-policy.js';
 import { ask as gptAsk } from './gpt.js';
 import { ask as kimiAsk } from './kimi.js';
+import { runModelJob } from './model-queue.js';
 import { generateImage } from './image.js';
 import { BILLING_VERSION } from './token-accounting.js';
 import { wantsGeneratedImage } from './image-intent.js';
@@ -27,21 +28,23 @@ const DESKTOP_RELEASE = Object.freeze({
 const AUTH_BROKEN = /revoked|refresh|unauthorized|401|not logged in|log in again|re-login|no credential configured|authorization grant is invalid|invalid_grant/i;
 
 export async function askModel({ chat, model, effortKey, prompt, onDelta, images, fast = false, signal }) {
-  if (model?.runtime === 'kimi') {
-    const r = await kimiAsk({ chat, modelCli: model.cli, kimiEffort: model.kimiEffort, prompt, onDelta, signal });
-    if (!r.ok && AUTH_BROKEN.test(String(r.error || ''))) {
-      return { ...r, provider: 'kimi', error: 'Вход Kimi временно недоступен. Владелец сервиса уже может проверить авторизацию.' };
+  return runModelJob(async () => {
+    if (model?.runtime === 'kimi') {
+      const r = await kimiAsk({ chat, modelCli: model.cli, kimiEffort: model.kimiEffort, prompt, onDelta, signal });
+      if (!r.ok && AUTH_BROKEN.test(String(r.error || ''))) {
+        return { ...r, provider: 'kimi', error: 'Вход Kimi временно недоступен. Владелец сервиса уже может проверить авторизацию.' };
+      }
+      return { ...r, provider: 'kimi' };
     }
-    return { ...r, provider: 'kimi' };
-  }
-  const selected = model?.provider === "gpt" ? model : MODELS[DEFAULT_MODEL];
-  const r = await gptAsk({ chat, modelCli: selected.cli, prompt, onDelta, images,
-    fixedEffort: selected.fixedEffort || (selected.supportsEffort ? effortKey : undefined),
-    hideIdentity: selected.hideIdentity, fast, signal });
-  if (!r.ok && AUTH_BROKEN.test(String(r.error || ""))) {
-    return { ...r, provider: "gpt", error: "Вход GPT временно недоступен. Владелец сервиса уже может проверить авторизацию." };
-  }
-  return { ...r, provider: "gpt" };
+    const selected = model?.provider === "gpt" ? model : MODELS[DEFAULT_MODEL];
+    const r = await gptAsk({ chat, modelCli: selected.cli, prompt, onDelta, images,
+      fixedEffort: selected.fixedEffort || (selected.supportsEffort ? effortKey : undefined),
+      hideIdentity: selected.hideIdentity, fast, signal });
+    if (!r.ok && AUTH_BROKEN.test(String(r.error || ""))) {
+      return { ...r, provider: "gpt", error: "Вход GPT временно недоступен. Владелец сервиса уже может проверить авторизацию." };
+    }
+    return { ...r, provider: "gpt" };
+  }, signal);
 }
 import * as sites from './sites.js';
 import * as desk from './desktop.js';
@@ -691,7 +694,7 @@ async function handleAsk(u, chatId, text, images = null) {
     chat.model = model.key;
     // Текущий размер контекста этого чата — вход+кэш этого хода примерно равен
     // тому, что сейчас реально загружено в окно контекста модели
-    chat.contextTokens = res.tokens.input + res.tokens.cacheRead + res.tokens.cacheWrite;
+    chat.contextTokens = res.tokens.input + res.tokens.cacheWrite;
     store.pushMessage(chat, 'assistant', res.text, { tokens: res.tokens.total, model: model.key, effort: effort.key });
     // В быстром режиме GPT списывает на 20% больше. total/costUsd остаются
     // фактическими, а повышающий коэффициент применяется только к лимиту.
@@ -701,6 +704,7 @@ async function handleAsk(u, chatId, text, images = null) {
       ts: Date.now(), chatId: chat.id, model: model.key, effort: effort.key, plan: planOf(u).key,
       input: res.tokens.input, output: res.tokens.output,
       cacheWrite: res.tokens.cacheWrite, cacheRead: res.tokens.cacheRead,
+      promptTokens: res.tokens.promptTokens,
       total: res.tokens.total, billable: billableForLimit, costUsd: res.costUsd, durationMs: res.durationMs,
       billingVersion: BILLING_VERSION, offerBonus,
     });

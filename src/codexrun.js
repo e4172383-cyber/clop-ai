@@ -171,8 +171,8 @@ export async function runJob(job, onDelta, signal) {
   return runCodex(freshArgs(modelCli, opts), freshStdin, onDelta, cwd, signal);
 }
 
-export function countTokens(usage = {}) {
-  return countCodexTokens(usage);
+export function countTokens(usage = {}, options) {
+  return countCodexTokens(usage, options);
 }
 
 export async function healthCheck() {

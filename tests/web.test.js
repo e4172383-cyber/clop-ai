@@ -431,6 +431,24 @@ test('/chat/api/message returns the percentage limits after recording usage', as
   assert.deepEqual(body.limits.gpt, profile.limits.gpt);
 });
 
+test('/chat/api/message never spends quota when the model returns an error', async () => {
+  const chat = store.newChat(user, 'Ошибка без списания');
+  const beforeUsage = user.usage.length;
+  const beforeMessages = chat.messages.length;
+  modelResults.push({ ok: false, provider: 'gpt', error: 'temporary provider failure' });
+
+  const response = await authed('/chat/api/message', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ text: 'Этот запрос не должен списаться', model: 'gpt-luna', chatId: chat.id }),
+  });
+
+  assert.equal(response.status, 502);
+  assert.equal(user.usage.length, beforeUsage);
+  assert.equal(chat.messages.length, beforeMessages);
+  assert.equal(user.stats.tokens, 0);
+});
+
 test('/chat/api/message preserves partial content from an unfinished final file', async () => {
   const chat = store.newChat(user, 'Оборванный проект');
   modelResults.push(okResult({

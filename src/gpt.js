@@ -64,13 +64,17 @@ export async function ask({ chat, modelCli, prompt, onDelta, fixedEffort, hideId
   const text = (res.text || '').trim();
   if (!text) return { ok: false, error: 'пустой ответ модели', durationMs: Date.now() - started };
 
-  console.log(`[gpt] <- OK usage=${JSON.stringify(countTokens(res.usage))}`);
+  const tokens = countTokens(res.usage, {
+    prompt,
+    imageCount: (images && images.paths && images.paths.length) || 0,
+  });
+  console.log(`[gpt] <- OK durationMs=${Date.now() - started} usage=${JSON.stringify(tokens)}`);
 
   return {
     ok: true,
     text,
     threadId: res.threadId || threadId,
-    tokens: countTokens(res.usage),
+    tokens,
     costUsd: 0,
     durationMs: Date.now() - started,
     stopReason: null,
