@@ -16,8 +16,8 @@ const DESKTOP_RELEASE = Object.freeze({
   released: '06.09.2026',
   windows: 'Clop-Code-Setup-2.0.8.exe',
   linux: 'Clop-Code-2.0.6-linux-x64.tar.xz',
-  androidVersion: '1.0.2',
-  android: 'Clop-AI-Mobile-1.0.2.apk',
+  androidVersion: '1.0.3',
+  android: 'Clop-AI-Mobile-1.0.3.apk',
 });
 
 // Единая точка входа: Claude-модели идут через Claude CLI, GPT-модели — через
@@ -55,7 +55,12 @@ import { claimCode } from './weblogin.js';
 
 const busy = new Set();
 
-const dt = (ts) => new Date(ts).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+// Render работает в UTC, поэтому часовой пояс указываем явно. Иначе даты в
+// сообщениях бота отстают от времени пользователя в Киеве.
+const dt = (ts) => new Date(ts).toLocaleString('ru-RU', {
+  timeZone: 'Europe/Kyiv',
+  day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+});
 
 // Анонс скорого релиза — баннер в главном меню, до даты выхода
 const UPCOMING_RELEASE = {
@@ -967,7 +972,7 @@ async function onCallback(u, q) {
     await store.save();
     await tg.answerCallback(q.id, offer.active ? '🎁 50 млн токенов подключены на 1 час' : 'Предложение уже использовано', true);
     return void await edit(offer.active
-      ? `🎁 *Предложение подключено*\n\n50 млн токенов для GPT 5.6 Sol и GPT-6 Astra доступны до ${dt(offer.until)}.`
+      ? `🎁 *Предложение подключено*\n\n50 млн токенов для GPT 5.6 Sol и GPT-6 Astra доступны до ${dt(offer.until)} по Киеву.`
       : 'Предложение уже завершилось.', mainKb(u));
   }
   if (data === 'usage') { await tg.answerCallback(q.id); return void await edit(usageText(u), backKb()); }
