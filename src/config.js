@@ -217,15 +217,15 @@ export const modelPromoActive = () => false;
 export const modelInPromo = () => false;
 
 // Получить бонус можно только в течение часа после запуска предложения.
-// У каждого нажавшего свой час использования, даже если он забрал бонус
+// У каждого нажавшего свои пять часов использования, даже если он забрал бонус
 // ближе к концу общей выдачи.
 export const LIMITED_OFFER = Object.freeze({
-  id: 'gpt-50m-hour-20260906',
-  title: '50 млн токенов на GPT 5.6 Sol и GPT-6 Astra',
+  id: 'gpt-10m-five-hours-20260907',
+  title: '10 млн токенов на GPT 5.6 Sol и GPT-6 Astra',
   models: ['gpt-sol', 'gpt-astra'],
-  tokens: 50_000_000,
-  claimUntil: 1788723649075,
-  durationMs: HOUR,
+  tokens: 10_000_000,
+  claimUntil: 1788781690882,
+  durationMs: 5 * HOUR,
 });
 
 export const PLANS = {

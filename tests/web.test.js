@@ -312,6 +312,9 @@ test('the limited offer unlocks Astra, keeps its usage outside plan limits, and 
 });
 
 test('offer claim and expiry are calculated from server time', () => {
+  assert.equal(config.LIMITED_OFFER.tokens, 10_000_000);
+  assert.equal(config.LIMITED_OFFER.durationMs, 5 * 60 * 60 * 1000);
+  assert.deepEqual(config.LIMITED_OFFER.models, ['gpt-sol', 'gpt-astra']);
   const sample = {};
   const beforeClose = config.LIMITED_OFFER.claimUntil - 1000;
   const claimed = limitedOffer.claimOffer(sample, beforeClose);

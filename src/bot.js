@@ -136,7 +136,7 @@ function mainKb(u) {
       [{ text: `🤖 Модель: ${m.heavy ? '⚠️ ' : ''}${m.short}`, callback_data: 'model' }, { text: `🧠 Мышление: ${effortLabel}`, callback_data: 'effort' }],
       ...(m.provider === 'gpt' ? [[{ text: `⚡ Быстро: ${u.fast ? 'ВКЛ' : 'ВЫКЛ'} · расход ×1,2`, callback_data: 'fast_toggle' }]] : []),
       [{ text: '📊 Лимиты', callback_data: 'usage' }, { text: '💎 Тарифы', callback_data: 'plans' }],
-      ...(showOffer ? [[{ text: offer.claimed ? '🎁 Бонус GPT активен' : '🎁 Получить 50 млн токенов', callback_data: 'offer_claim' }]] : []),
+      ...(showOffer ? [[{ text: offer.claimed ? '🎁 Бонус GPT активен' : '🎁 Получить 10 млн токенов', callback_data: 'offer_claim' }]] : []),
       [{ text: '🖼 Сгенерировать (бета)', callback_data: 'imagegen' }],
       [{ text: '🌐 Чат на сайте (бета)', url: 'https://clop-ai.onrender.com/chat' }],
       [{ text: `💻 Скачать Clop Code · v${DESKTOP_RELEASE.version}`, callback_data: 'app_download' }],
@@ -991,9 +991,9 @@ async function onCallback(u, q) {
     const offer = claimOffer(u);
     if (!offer) return void await tg.answerCallback(q.id, 'Предложение уже завершилось', true);
     await store.save();
-    await tg.answerCallback(q.id, offer.active ? '🎁 50 млн токенов подключены на 1 час' : 'Предложение уже использовано', true);
+    await tg.answerCallback(q.id, offer.active ? '🎁 10 млн токенов подключены на 5 часов' : 'Предложение уже использовано', true);
     return void await edit(offer.active
-      ? `🎁 *Предложение подключено*\n\n50 млн токенов для GPT 5.6 Sol и GPT-6 Astra доступны до ${dt(offer.until)} по Киеву.`
+      ? `🎁 *Предложение подключено*\n\n10 млн токенов для GPT 5.6 Sol и GPT-6 Astra доступны до ${dt(offer.until)} по Киеву.`
       : 'Предложение уже завершилось.', mainKb(u));
   }
   if (data === 'usage') { await tg.answerCallback(q.id); return void await edit(usageText(u), backKb()); }
