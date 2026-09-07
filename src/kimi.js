@@ -4,7 +4,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { MAX_CONTEXT_MESSAGES, REQUEST_TIMEOUT_MS } from './config.js';
-import { home as kimiHome, save as saveKimiAuth } from './kimiauth.js';
+import { home as kimiHome, save as saveKimiAuth, snapshot as kimiAuthSnapshot } from './kimiauth.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const KIMI_ENTRY = path.join(ROOT, 'node_modules', '@moonshot-ai', 'kimi-code', 'dist', 'main.mjs');
@@ -136,4 +136,13 @@ export async function ask({ chat, modelCli, kimiEffort, prompt, onDelta, signal,
       finish({ ok: true, text: finalText.trim(), tokens: usage || { input, output, cacheWrite: 0, cacheRead: 0, total: input + output, billable: input + output }, costUsd: 0, durationMs: Date.now() - started, stopReason: null });
     });
   });
+}
+
+export async function healthCheck() {
+  let authReady = false;
+  try { authReady = Boolean(process.env.KIMI_AUTH_B64 || kimiAuthSnapshot()); } catch {}
+  return {
+    ok: fs.existsSync(KIMI_ENTRY) && authReady,
+    version: fs.existsSync(KIMI_ENTRY) ? 'Kimi Code готов' : 'Kimi Code не найден',
+  };
 }

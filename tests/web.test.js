@@ -155,6 +155,20 @@ test('serves the public desktop release page and resumable installers without da
   await missing.text();
 });
 
+test('public status reports API and model routes without secrets or quota sizes', async () => {
+  const response = await fetch(baseUrl + '/status.json');
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.ok, true);
+  assert.equal(typeof body.server.processingMs, 'number');
+  assert.equal(typeof body.server.uptimeSeconds, 'number');
+  assert.deepEqual(Object.keys(body.providers).sort(), ['gpt', 'kimi']);
+  assert.ok(body.models.some((model) => model.provider === 'gpt'));
+  assert.ok(body.models.some((model) => model.provider === 'kimi'));
+  assert.match(JSON.stringify(body), /GPT-6 Astra/);
+  assert.doesNotMatch(JSON.stringify(body), /token|secret|auth|cli/iu);
+});
+
 test('/chat/api/me exposes promo state and percentage-only provider limits', async () => {
   const response = await authed('/chat/api/me');
   assert.equal(response.status, 200);

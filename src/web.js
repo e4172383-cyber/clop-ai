@@ -39,6 +39,9 @@ import { buildZip } from './zip.js';
 import { listApiKeys, createApiKey, deleteApiKey, proxyApiRequest, cloudEnabled } from './cloud.js';
 import * as chatArtifacts from './chatartifacts.js';
 import { voiceLimitState, startVoiceSession, chargeVoiceHeartbeat, stopVoiceSession } from './voice-limits.js';
+import { healthCheck as gptHealthCheck } from './gpt.js';
+import { healthCheck as kimiHealthCheck } from './kimi.js';
+import { publicServiceStatus } from './provider-status.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(__dirname, 'public');
@@ -58,6 +61,26 @@ const siteChats = new Map();
 // Один desktop-запрос на пользователя: параллельные устройства не могут
 // одновременно пройти проверку одного и того же остатка лимита.
 const desktopBusy = new Set();
+let statusCache = null;
+let statusCacheAt = 0;
+let statusPending = null;
+
+function currentPublicStatus() {
+  const now = Date.now();
+  if (statusCache && now - statusCacheAt < 5_000) return Promise.resolve(statusCache);
+  if (statusPending) return statusPending;
+  const started = Date.now();
+  statusPending = Promise.all([
+    gptHealthCheck().catch(() => ({ ok: false })),
+    kimiHealthCheck().catch(() => ({ ok: false })),
+  ]).then(([gptHealth, kimiHealth]) => {
+    statusCache = publicServiceStatus({ gptHealth, kimiHealth, processingMs: Date.now() - started });
+    statusCacheAt = Date.now();
+    return statusCache;
+  }).finally(() => { statusPending = null; });
+  return statusPending;
+}
+
 function siteChat(sessionId) {
   const id = sessionId && siteChats.has(sessionId) ? sessionId : crypto.randomUUID();
   if (!siteChats.has(id)) siteChats.set(id, { id, sessionId: null, messages: [] });
@@ -402,6 +425,14 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
         'x-clop-revision': String(process.env.RENDER_GIT_COMMIT || 'local').slice(0, 40),
       });
       return res.end('ok');
+    }
+    if (url.pathname === '/status.json' && req.method === 'GET') {
+      currentPublicStatus().then((status) => sendJson(res, 200, status)).catch(() => sendJson(res, 200, publicServiceStatus({
+        gptHealth: { ok: false },
+        kimiHealth: { ok: false },
+        processingMs: 0,
+      })));
+      return;
     }
     if (url.pathname === '/releases.json' && req.method === 'GET') {
       return sendJson(res, 200, {

@@ -11,6 +11,7 @@ import { BILLING_VERSION } from './token-accounting.js';
 import { wantsGeneratedImage } from './image-intent.js';
 import { createImageJob, imageJobRecoveryAction, prepareImageJobRetry } from './image-job.js';
 import { addOfferUsage, claimOffer, offerActiveFor, offerState } from './limited-offer.js';
+import { recordProviderResult } from './provider-status.js';
 
 const DESKTOP_RELEASE = Object.freeze({
   version: '2.0.11',
@@ -31,6 +32,7 @@ export async function askModel({ chat, model, effortKey, prompt, onDelta, images
   return runModelJob(async () => {
     if (model?.runtime === 'kimi') {
       const r = await kimiAsk({ chat, modelCli: model.cli, kimiEffort: model.kimiEffort, prompt, onDelta, signal, client });
+      recordProviderResult('kimi', r);
       if (!r.ok && AUTH_BROKEN.test(String(r.error || ''))) {
         return { ...r, provider: 'kimi', error: 'Вход Kimi временно недоступен. Владелец сервиса уже может проверить авторизацию.' };
       }
@@ -40,6 +42,7 @@ export async function askModel({ chat, model, effortKey, prompt, onDelta, images
     const r = await gptAsk({ chat, modelCli: selected.cli, prompt, onDelta, images,
       fixedEffort: selected.fixedEffort || (selected.supportsEffort ? effortKey : undefined),
       hideIdentity: selected.hideIdentity, fast, signal });
+    recordProviderResult('gpt', r);
     if (!r.ok && AUTH_BROKEN.test(String(r.error || ""))) {
       return { ...r, provider: "gpt", error: "Вход GPT временно недоступен. Владелец сервиса уже может проверить авторизацию." };
     }
