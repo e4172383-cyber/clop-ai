@@ -171,6 +171,7 @@ test('public status reports API and model routes without secrets or quota sizes'
   assert.equal(typeof body.server.uptimeSeconds, 'number');
   assert.equal(typeof body.traffic, 'object');
   assert.equal(body.traffic.requestWindowSeconds, 60);
+  assert.equal(body.traffic.throughputWindowDays, 60);
   assert.equal(body.traffic.requestsPerSecond, 0.017);
   assert.equal(body.traffic.tokensPerSecond, 60);
   assert.equal(body.providers.gpt.tokensPerSecond, 60);

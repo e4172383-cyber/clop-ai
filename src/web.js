@@ -66,7 +66,7 @@ let statusCacheAt = 0;
 let statusPending = null;
 
 function publicProviderUsageSamples(now = Date.now()) {
-  const cutoff = now - 60 * 60 * 1000;
+  const cutoff = now - 60 * DAY;
   const result = [];
   for (const user of store.allUsers()) {
     for (const event of user.usage || []) {
@@ -76,7 +76,9 @@ function publicProviderUsageSamples(now = Date.now()) {
         provider,
         at: Number(event.ts) || 0,
         durationMs: Number(event.durationMs) || 0,
-        outputTokens: Number(event.output) || 0,
+        // У старых записей отдельного output ещё могло не быть. Для них
+        // используем общее число только как запасной источник скорости.
+        outputTokens: Number(event.output) || Number(event.total) || 0,
       });
     }
   }

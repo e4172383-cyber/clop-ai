@@ -2,6 +2,7 @@ import { MODELS } from './config.js';
 
 const WINDOW_MS = 60 * 60 * 1000;
 const RATE_WINDOW_MS = 60 * 1000;
+const THROUGHPUT_WINDOW_MS = 60 * 24 * 60 * 60 * 1000;
 const MAX_SAMPLES = 40;
 const samples = { gpt: [], kimi: [] };
 
@@ -45,12 +46,14 @@ function providerSummary(provider, health, now, usageSamples = []) {
   const durations = successes.map((sample) => sample.durationMs).filter(Number.isFinite).sort((a, b) => a - b);
   const medianMs = durations.length ? durations[Math.floor(durations.length / 2)] : null;
   const persisted = usageSamples
-    .filter((sample) => sample.provider === provider && now - sample.at <= WINDOW_MS)
+    .filter((sample) => sample.provider === provider && now - sample.at <= THROUGHPUT_WINDOW_MS)
     .map((sample) => ({
       at: Number(sample.at) || 0,
       durationMs: finiteDuration(sample.durationMs),
       outputTokens: finiteTokens(sample.outputTokens),
-    }));
+    }))
+    .sort((a, b) => b.at - a.at)
+    .slice(0, MAX_SAMPLES);
   // Успешные события расхода лежат в Redis и переживают перезапуск Render.
   // Внутренние samples нужны как мгновенный запасной источник до сохранения.
   const metricSamples = persisted.length ? persisted : successes;
@@ -74,6 +77,7 @@ function providerSummary(provider, health, now, usageSamples = []) {
     requestsPerSecond: roundedRate(currentMinute.length / (RATE_WINDOW_MS / 1000), 3),
     tokensPerSecond: generationSeconds > 0 ? roundedRate(outputTokens / generationSeconds, 1) : 0,
     throughputSamples: throughput.length,
+    throughputWindowDays: THROUGHPUT_WINDOW_MS / (24 * 60 * 60 * 1000),
   };
 }
 
@@ -112,6 +116,7 @@ export function publicServiceStatus({ gptHealth, kimiHealth, processingMs = 0, u
       tokensPerSecond: roundedRate(tokenRates.reduce((sum, value) => sum + value, 0), 1),
       requestWindowSeconds: RATE_WINDOW_MS / 1000,
       throughputSamples: providerValues.reduce((sum, provider) => sum + provider.throughputSamples, 0),
+      throughputWindowDays: THROUGHPUT_WINDOW_MS / (24 * 60 * 60 * 1000),
     },
     providers,
     models,
