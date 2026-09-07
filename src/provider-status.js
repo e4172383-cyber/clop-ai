@@ -2,7 +2,7 @@ import { MODELS } from './config.js';
 
 const WINDOW_MS = 60 * 60 * 1000;
 const RATE_WINDOW_MS = 60 * 1000;
-const THROUGHPUT_WINDOW_MS = 60 * 24 * 60 * 60 * 1000;
+const THROUGHPUT_WINDOW_MS = RATE_WINDOW_MS;
 const MAX_SAMPLES = 40;
 const samples = { gpt: [], kimi: [] };
 
@@ -58,7 +58,10 @@ function providerSummary(provider, health, now, usageSamples = []) {
   // Внутренние samples нужны как мгновенный запасной источник до сохранения.
   const metricSamples = persisted.length ? persisted : successes;
   const currentMinute = metricSamples.filter((sample) => now - sample.at <= RATE_WINDOW_MS);
-  const throughput = metricSamples.filter((sample) => sample.durationMs > 0 && sample.outputTokens > 0);
+  // Скорость отражает только ответы, завершённые за последнюю минуту.
+  // Каждый ответ даёт свою фактическую пару «выходные токены / время», а
+  // несколько сообщений в окне складываются в общую среднюю скорость.
+  const throughput = currentMinute.filter((sample) => sample.durationMs > 0 && sample.outputTokens > 0);
   const outputTokens = throughput.reduce((total, sample) => total + sample.outputTokens, 0);
   const generationSeconds = throughput.reduce((total, sample) => total + sample.durationMs, 0) / 1000;
   let status = health?.ok ? 'operational' : 'unavailable';
@@ -77,7 +80,7 @@ function providerSummary(provider, health, now, usageSamples = []) {
     requestsPerSecond: roundedRate(currentMinute.length / (RATE_WINDOW_MS / 1000), 3),
     tokensPerSecond: generationSeconds > 0 ? roundedRate(outputTokens / generationSeconds, 1) : 0,
     throughputSamples: throughput.length,
-    throughputWindowDays: THROUGHPUT_WINDOW_MS / (24 * 60 * 60 * 1000),
+    throughputWindowSeconds: THROUGHPUT_WINDOW_MS / 1000,
   };
 }
 
@@ -116,7 +119,7 @@ export function publicServiceStatus({ gptHealth, kimiHealth, processingMs = 0, u
       tokensPerSecond: roundedRate(tokenRates.reduce((sum, value) => sum + value, 0), 1),
       requestWindowSeconds: RATE_WINDOW_MS / 1000,
       throughputSamples: providerValues.reduce((sum, provider) => sum + provider.throughputSamples, 0),
-      throughputWindowDays: THROUGHPUT_WINDOW_MS / (24 * 60 * 60 * 1000),
+      throughputWindowSeconds: THROUGHPUT_WINDOW_MS / 1000,
     },
     providers,
     models,

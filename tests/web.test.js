@@ -157,6 +157,13 @@ test('serves the public desktop release page and resumable installers without da
 
 test('public status reports API and model routes without secrets or quota sizes', async () => {
   store.addUsage(user, {
+    ts: Date.now() - 61_000,
+    model: 'kimi-k2-6',
+    output: 900,
+    total: 1_000,
+    durationMs: 1_000,
+  });
+  store.addUsage(user, {
     ts: Date.now(),
     model: 'gpt-luna',
     output: 120,
@@ -171,10 +178,11 @@ test('public status reports API and model routes without secrets or quota sizes'
   assert.equal(typeof body.server.uptimeSeconds, 'number');
   assert.equal(typeof body.traffic, 'object');
   assert.equal(body.traffic.requestWindowSeconds, 60);
-  assert.equal(body.traffic.throughputWindowDays, 60);
+  assert.equal(body.traffic.throughputWindowSeconds, 60);
   assert.equal(body.traffic.requestsPerSecond, 0.017);
   assert.equal(body.traffic.tokensPerSecond, 60);
   assert.equal(body.providers.gpt.tokensPerSecond, 60);
+  assert.equal(body.providers.kimi.tokensPerSecond, 0, 'a message older than one minute leaves the speed window');
   assert.deepEqual(Object.keys(body.providers).sort(), ['gpt', 'kimi']);
   assert.ok(body.models.some((model) => model.provider === 'gpt'));
   assert.ok(body.models.some((model) => model.provider === 'kimi'));
