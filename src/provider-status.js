@@ -37,15 +37,25 @@ function recentSamples(provider, now) {
   return samples[provider];
 }
 
-function providerSummary(provider, health, now) {
+function providerSummary(provider, health, now, usageSamples = []) {
   const recent = recentSamples(provider, now);
   const successes = recent.filter((sample) => sample.ok);
   const last = recent.at(-1) || null;
   const lastSuccess = successes.at(-1) || null;
   const durations = successes.map((sample) => sample.durationMs).filter(Number.isFinite).sort((a, b) => a - b);
   const medianMs = durations.length ? durations[Math.floor(durations.length / 2)] : null;
-  const currentMinute = recent.filter((sample) => now - sample.at <= RATE_WINDOW_MS);
-  const throughput = successes.filter((sample) => sample.durationMs > 0 && sample.outputTokens > 0);
+  const persisted = usageSamples
+    .filter((sample) => sample.provider === provider && now - sample.at <= WINDOW_MS)
+    .map((sample) => ({
+      at: Number(sample.at) || 0,
+      durationMs: finiteDuration(sample.durationMs),
+      outputTokens: finiteTokens(sample.outputTokens),
+    }));
+  // Успешные события расхода лежат в Redis и переживают перезапуск Render.
+  // Внутренние samples нужны как мгновенный запасной источник до сохранения.
+  const metricSamples = persisted.length ? persisted : successes;
+  const currentMinute = metricSamples.filter((sample) => now - sample.at <= RATE_WINDOW_MS);
+  const throughput = metricSamples.filter((sample) => sample.durationMs > 0 && sample.outputTokens > 0);
   const outputTokens = throughput.reduce((total, sample) => total + sample.outputTokens, 0);
   const generationSeconds = throughput.reduce((total, sample) => total + sample.durationMs, 0) / 1000;
   let status = health?.ok ? 'operational' : 'unavailable';
@@ -61,16 +71,16 @@ function providerSummary(provider, health, now) {
     medianResponseMs: medianMs,
     recentRequests: recent.length,
     recentSuccessPercent: recent.length ? Math.round((successes.length / recent.length) * 100) : null,
-    requestsPerSecond: recent.length ? roundedRate(currentMinute.length / (RATE_WINDOW_MS / 1000), 3) : null,
-    tokensPerSecond: generationSeconds > 0 ? roundedRate(outputTokens / generationSeconds, 1) : null,
+    requestsPerSecond: roundedRate(currentMinute.length / (RATE_WINDOW_MS / 1000), 3),
+    tokensPerSecond: generationSeconds > 0 ? roundedRate(outputTokens / generationSeconds, 1) : 0,
     throughputSamples: throughput.length,
   };
 }
 
-export function publicServiceStatus({ gptHealth, kimiHealth, processingMs = 0, now = Date.now() } = {}) {
+export function publicServiceStatus({ gptHealth, kimiHealth, processingMs = 0, usageSamples = [], now = Date.now() } = {}) {
   const providers = {
-    gpt: providerSummary('gpt', gptHealth, now),
-    kimi: providerSummary('kimi', kimiHealth, now),
+    gpt: providerSummary('gpt', gptHealth, now, usageSamples),
+    kimi: providerSummary('kimi', kimiHealth, now, usageSamples),
   };
   const models = Object.values(MODELS)
     .filter((model) => model.provider === 'gpt' || model.provider === 'kimi')
@@ -98,8 +108,8 @@ export function publicServiceStatus({ gptHealth, kimiHealth, processingMs = 0, n
       processingMs: finiteDuration(processingMs) || 0,
     },
     traffic: {
-      requestsPerSecond: requestRates.length ? roundedRate(requestRates.reduce((sum, value) => sum + value, 0), 3) : null,
-      tokensPerSecond: tokenRates.length ? roundedRate(tokenRates.reduce((sum, value) => sum + value, 0), 1) : null,
+      requestsPerSecond: roundedRate(requestRates.reduce((sum, value) => sum + value, 0), 3),
+      tokensPerSecond: roundedRate(tokenRates.reduce((sum, value) => sum + value, 0), 1),
       requestWindowSeconds: RATE_WINDOW_MS / 1000,
       throughputSamples: providerValues.reduce((sum, provider) => sum + provider.throughputSamples, 0),
     },

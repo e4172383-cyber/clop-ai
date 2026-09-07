@@ -65,6 +65,24 @@ let statusCache = null;
 let statusCacheAt = 0;
 let statusPending = null;
 
+function publicProviderUsageSamples(now = Date.now()) {
+  const cutoff = now - 60 * 60 * 1000;
+  const result = [];
+  for (const user of store.allUsers()) {
+    for (const event of user.usage || []) {
+      const provider = MODELS[event.model]?.provider;
+      if ((provider !== 'gpt' && provider !== 'kimi') || Number(event.ts) < cutoff) continue;
+      result.push({
+        provider,
+        at: Number(event.ts) || 0,
+        durationMs: Number(event.durationMs) || 0,
+        outputTokens: Number(event.output) || 0,
+      });
+    }
+  }
+  return result.sort((a, b) => b.at - a.at).slice(0, 400);
+}
+
 function currentPublicStatus() {
   const now = Date.now();
   if (statusCache && now - statusCacheAt < 5_000) return Promise.resolve(statusCache);
@@ -74,7 +92,12 @@ function currentPublicStatus() {
     gptHealthCheck().catch(() => ({ ok: false })),
     kimiHealthCheck().catch(() => ({ ok: false })),
   ]).then(([gptHealth, kimiHealth]) => {
-    statusCache = publicServiceStatus({ gptHealth, kimiHealth, processingMs: Date.now() - started });
+    statusCache = publicServiceStatus({
+      gptHealth,
+      kimiHealth,
+      processingMs: Date.now() - started,
+      usageSamples: publicProviderUsageSamples(),
+    });
     statusCacheAt = Date.now();
     return statusCache;
   }).finally(() => { statusPending = null; });

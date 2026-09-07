@@ -35,12 +35,11 @@ try {
     import('../src/config.js'),
     import('../src/desktop.js'),
     import('../src/limited-offer.js'),
-    import('../src/provider-status.js'),
   ]);
 } finally {
   globalThis.setInterval = realSetInterval;
 }
-const [web, store, webchat, config, desktop, limitedOffer, providerStatus] = modules;
+const [web, store, webchat, config, desktop, limitedOffer] = modules;
 
 let server;
 let baseUrl;
@@ -157,10 +156,12 @@ test('serves the public desktop release page and resumable installers without da
 });
 
 test('public status reports API and model routes without secrets or quota sizes', async () => {
-  providerStatus.recordProviderResult('gpt', {
-    ok: true,
+  store.addUsage(user, {
+    ts: Date.now(),
+    model: 'gpt-luna',
+    output: 120,
+    total: 600,
     durationMs: 2_000,
-    tokens: { output: 120, total: 600 },
   });
   const response = await fetch(baseUrl + '/status.json');
   assert.equal(response.status, 200);
