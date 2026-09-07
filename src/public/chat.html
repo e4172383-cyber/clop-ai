@@ -1038,7 +1038,7 @@
         <h3>Баланс и режим API</h3>
         <div class="pg-grid">
           <label>Новый ключ<select id="newKeyMode"><option value="subscription">Лимиты подписки</option><option value="payg">Оплата по факту · все модели</option></select></label>
-          <label>Пополнение<select id="topupStars"><option value="86">$1 · 86 ★</option><option value="430">$5 · 430 ★</option><option value="860">$10 · 860 ★</option><option value="4300">$50 · 4 300 ★</option><option value="8600">$100 · 8 600 ★</option><option value="43000">$500 · 43 000 ★</option></select></label>
+          <label>Сумма пополнения, $<input id="topupUsd" type="number" inputmode="numeric" min="1" max="500" step="1" value="1"></label>
         </div>
         <div class="pg-actions"><b id="apiBalance">Баланс: $0.00</b><button id="topupBalanceBtn">Пополнить через Telegram</button></div>
         <div id="apiPrices" class="muted-sm" style="margin-top:10px"></div>
@@ -2712,7 +2712,9 @@ document.getElementById('createKeyBtn').addEventListener('click', async (e) => {
 });
 
 document.getElementById('topupBalanceBtn').addEventListener('click', () => {
-  const stars = document.getElementById('topupStars').value;
+  const usd = Math.max(1, Math.min(500, Math.round(Number(document.getElementById('topupUsd').value) || 1)));
+  document.getElementById('topupUsd').value = String(usd);
+  const stars = usd * 86;
   const bot = apiState.bot || 'ClopAiRobotBot';
   window.open(`https://t.me/${encodeURIComponent(bot)}?start=balance_${encodeURIComponent(stars)}`, '_blank', 'noopener');
 });
