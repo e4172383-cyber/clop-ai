@@ -390,6 +390,7 @@ function helpText() {
     '/team — корпоративная команда',
     '/team_add @username — пригласить участника',
     '/team_remove @username — удалить участника',
+    '/phone — сохранить свой номер для приглашения',
     '/buy — купить Pro',
     '/myapi — получить свой личный API-ключ (можно сбросить/перевыпустить кнопкой)',
     '/download — скачать Clop Code для Windows или Linux',
@@ -857,11 +858,18 @@ async function onCommand(u, chatId, cmd, rawText = '') {
       return void await tg.sendMessage(chatId, corporatePlansText(u), { reply_markup: corporatePlansKb(u) });
     case '/team':
       return void await tg.sendMessage(chatId, teamText(u), { reply_markup: teamKb(u) });
+    case '/phone':
+      return void await tg.sendMessage(chatId, 'Нажмите кнопку ниже, чтобы сохранить свой Telegram-номер для приглашений в корпоративную команду.', { reply_markup: {
+        keyboard: [[{ text: '📱 Поделиться моим номером', request_contact: true }]],
+        resize_keyboard: true,
+        one_time_keyboard: true,
+        input_field_placeholder: 'Поделиться номером',
+      } });
     case '/team_add': {
       const identifier = rawText.trim().replace(/^\/\S+\s*/u, '').trim();
       if (!identifier) return void await tg.sendMessage(chatId, 'Укажите username, Telegram ID или сохранённый номер. Например: `/team_add @username`.', { reply_markup: teamKb(u) });
       const target = store.findUserByIdentifier(identifier);
-      if (!target) return void await tg.sendMessage(chatId, 'Пользователь не найден. Он должен нажать /start; для поиска по номеру — ещё и поделиться контактом с ботом.', { reply_markup: teamKb(u) });
+      if (!target) return void await tg.sendMessage(chatId, 'Пользователь не найден. Он должен нажать /start; для поиска по номеру — ещё и один раз использовать /phone.', { reply_markup: teamKb(u) });
       const result = store.inviteToTeam(u, target);
       if (!result.ok) return void await tg.sendMessage(chatId, `⚠️ ${result.error}`, { reply_markup: teamKb(u) });
       try {
@@ -1007,7 +1015,7 @@ function teamText(u) {
     lines.push('/team_add 123456789 — пригласить по Telegram ID');
     lines.push('/team_add +380… — пригласить по сохранённому номеру');
     lines.push('/team_remove @username — удалить участника');
-    lines.push('', 'Пользователь должен заранее нажать /start. По номеру он также должен поделиться контактом с ботом.');
+    lines.push('', 'Пользователь должен заранее нажать /start. Для приглашения по номеру он один раз использует /phone.');
   }
   return lines.join('\n');
 }
@@ -1161,7 +1169,7 @@ async function onCallback(u, q) {
   if (data === 'team') { await tg.answerCallback(q.id); return void await edit(teamText(u), teamKb(u)); }
   if (data === 'team_add_help') {
     await tg.answerCallback(q.id);
-    return void await edit('➕ *Добавление участника*\n\nОтправьте отдельным сообщением одну из команд:\n`/team_add @username`\n`/team_add 123456789`\n`/team_add +380…`\n\nПользователь должен заранее нажать /start. Для поиска по номеру он должен поделиться своим контактом с ботом.', teamKb(u));
+    return void await edit('➕ *Добавление участника*\n\nОтправьте отдельным сообщением одну из команд:\n`/team_add @username`\n`/team_add 123456789`\n`/team_add +380…`\n\nПользователь должен заранее нажать /start. Для поиска по номеру он один раз использует команду /phone.', teamKb(u));
   }
   if (data.startsWith('team_accept:') || data.startsWith('team_decline:')) {
     const accept = data.startsWith('team_accept:');
@@ -1566,7 +1574,7 @@ export async function handleUpdate(update) {
   if (msg.contact) {
     if (String(msg.contact.user_id || '') !== String(u.id)) return void await tg.sendMessage(chatId, 'Отправьте именно свой контакт, чтобы сохранить ваш номер для приглашений в команду.');
     const ok = store.savePhone(u, msg.contact.phone_number);
-    return void await tg.sendMessage(chatId, ok ? '✅ Номер сохранён. Теперь владелец корпоративной команды может найти вас по этому номеру.' : '⚠️ Не удалось распознать номер.');
+    return void await tg.sendMessage(chatId, ok ? '✅ Номер сохранён. Теперь владелец корпоративной команды может найти вас по этому номеру.' : '⚠️ Не удалось распознать номер.', { reply_markup: { remove_keyboard: true } });
   }
   if (!text) {
     return void await tg.sendMessage(chatId, 'Пока понимаю только текст 🙂');

@@ -34,7 +34,7 @@ CORPORATE_LIMITS_JSON=<private-corporate-limit-matrix>
 
 ## Основные команды бота
 
-`/start`, `/new`, `/chats`, `/model`, `/usage`, `/plans`, `/corporate`, `/team`, `/team_add`, `/team_remove`, `/buy`, `/download`, `/help`.
+`/start`, `/new`, `/chats`, `/model`, `/usage`, `/plans`, `/corporate`, `/team`, `/team_add`, `/team_remove`, `/phone`, `/buy`, `/download`, `/help`.
 
 ## Clop Code
 
