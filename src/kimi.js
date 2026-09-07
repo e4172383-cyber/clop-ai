@@ -4,10 +4,11 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { MAX_CONTEXT_MESSAGES, REQUEST_TIMEOUT_MS } from './config.js';
-import { home as kimiHome, isReady as isKimiReady, save as saveKimiAuth } from './kimiauth.js';
+import { home as kimiHome, isReady as isKimiReady, save as saveKimiAuth, sessionInfo as kimiSessionInfo } from './kimiauth.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const KIMI_ENTRY = path.join(ROOT, 'node_modules', '@moonshot-ai', 'kimi-code', 'dist', 'main.mjs');
+let providerProbe = { at: 0, result: null };
 
 function transcript(chat, prompt) {
   const history = chat.messages.slice(-MAX_CONTEXT_MESSAGES);
@@ -77,6 +78,8 @@ function publicError(value) {
 export async function ask({ chat, modelCli, kimiEffort, prompt, onDelta, signal, client = 'chat' }) {
   if (signal?.aborted) return { ok: false, error: 'aborted', durationMs: 0 };
   if (!isKimiReady()) return { ok: false, error: 'Вход Kimi не настроен. Администратору нужно повторно подключить Kimi Code.', durationMs: 0 };
+  const health = await healthCheck();
+  if (!health.ok) return { ok: false, error: health.version || 'Kimi временно недоступен. Лимит не списан.', durationMs: 0 };
   const started = Date.now();
   const fullPrompt = transcript(chat, prompt);
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clop-kimi-job-'));
@@ -158,10 +161,28 @@ export async function ask({ chat, modelCli, kimiEffort, prompt, onDelta, signal,
 
 export async function healthCheck() {
   const authReady = isKimiReady();
-  return {
-    ok: fs.existsSync(KIMI_ENTRY) && authReady,
-    version: !fs.existsSync(KIMI_ENTRY)
-      ? 'Kimi Code не найден'
-      : authReady ? 'Kimi Code готов' : 'Требуется вход в Kimi Code',
-  };
+  if (!fs.existsSync(KIMI_ENTRY) || !authReady) {
+    return {
+      ok: false,
+      version: !fs.existsSync(KIMI_ENTRY) ? 'Kimi Code не найден' : 'Требуется вход в Kimi Code',
+    };
+  }
+  if (providerProbe.result && Date.now() - providerProbe.at < 60_000) return providerProbe.result;
+  const session = kimiSessionInfo();
+  let result;
+  try {
+    const response = await fetch(`${session.baseUrl}/usages`, {
+      headers: { authorization: `Bearer ${session.accessToken}`, accept: 'application/json', 'user-agent': 'kimi-code-cli/0.41.0' },
+      signal: AbortSignal.timeout(10_000),
+    });
+    const body = await response.text();
+    if (response.ok) result = { ok: true, version: 'Kimi Code готов' };
+    else if (response.status === 429 && /insufficient balance|resource_exhausted|quota_exceeded|credits used up/i.test(body)) {
+      result = { ok: false, version: 'Кредиты аккаунта Kimi закончились. Лимит Clop не списан.' };
+    } else result = { ok: false, version: `Kimi временно недоступен (HTTP ${response.status}). Лимит не списан.` };
+  } catch {
+    result = { ok: false, version: 'Не удалось связаться с Kimi. Лимит не списан.' };
+  }
+  providerProbe = { at: Date.now(), result };
+  return result;
 }

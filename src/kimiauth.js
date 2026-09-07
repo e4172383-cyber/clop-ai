@@ -37,6 +37,24 @@ export function isReady(dir = home()) {
   }
 }
 
+export function sessionInfo(dir = home()) {
+  if (!isReady(dir)) return null;
+  try {
+    const credentialsDir = path.join(dir, 'credentials');
+    for (const entry of fs.readdirSync(credentialsDir, { withFileTypes: true })) {
+      if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+      const value = JSON.parse(fs.readFileSync(path.join(credentialsDir, entry.name), 'utf8'));
+      if (typeof value?.access_token !== 'string' || value.access_token.length <= 20) continue;
+      const config = fs.readFileSync(path.join(dir, 'config.toml'), 'utf8');
+      const baseUrl = config.match(/base_url\s*=\s*"([^"]+)"/)?.[1]
+        || (fs.readFileSync(path.join(dir, 'region'), 'utf8').trim() === 'global'
+          ? 'https://api.kimi.ai/coding/v1' : 'https://api.kimi.com/coding/v1');
+      return { accessToken: value.access_token, baseUrl: baseUrl.replace(/\/+$/, '') };
+    }
+  } catch {}
+  return null;
+}
+
 function safeRelative(rel) {
   return rel && !path.isAbsolute(rel) && !rel.split(/[\\/]+/).includes('..');
 }
