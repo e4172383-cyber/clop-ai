@@ -4,7 +4,7 @@ export const MIN_TOPUP_STARS = 86;
 export const MAX_TOPUP_STARS = 43_000;
 
 export const API_PRICES = Object.freeze({
-  'gpt-astra': { title: 'GPT-6 Astra', input: 10, cachedInput: 1, cacheWrite: 12.5, output: 50 },
+  'gpt-astra': { title: 'GPT-6 Astra', input: 2.5, cachedInput: .25, cacheWrite: 3.125, output: 12.5, discountPercent: 75 },
   'gpt-sol': { title: 'GPT 5.6 Sol', input: 4, cachedInput: .4, output: 20 },
   'gpt-terra': { title: 'GPT 5.6 Terra', input: 2, cachedInput: .2, output: 12 },
   'gpt-luna': { title: 'GPT 5.6 Luna', input: .2, cachedInput: .02, output: 1.2 },

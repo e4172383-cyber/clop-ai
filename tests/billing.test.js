@@ -9,8 +9,9 @@ test('pay as you go charges regular, cached and cache-write tokens at their own 
     cache_creation_input_tokens: 100_000,
     output_tokens: 100_000,
   });
-  // 700k * $10 + 200k * $1 + 100k * $12.50 + 100k * $50 = $13.45
-  assert.equal(charge, 13_450_000);
+  // После скидки 75%: 700k * $2.50 + 200k * $0.25
+  // + 100k * $3.125 + 100k * $12.50 = $3.3625.
+  assert.equal(charge, 3_362_500);
 });
 
 test('86 Telegram Stars equal one dollar of API balance', () => {

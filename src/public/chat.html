@@ -2654,7 +2654,7 @@ async function loadKeys() {
   apiState.keys = r.keys; apiState.max = r.max; apiState.baseUrl = r.baseUrl || ''; apiState.billing = r.billing || null; apiState.bot = r.bot || '';
   if (apiState.billing) {
     document.getElementById('apiBalance').textContent = `Баланс: $${Number(apiState.billing.balanceUsd || 0).toFixed(2)}`;
-    document.getElementById('apiPrices').innerHTML = '<b>Цена за 1 млн токенов</b><br>' + Object.values(apiState.billing.prices || {}).map(p => `${escapeHtml(p.title)}: вход $${p.input} · ${p.cachedInput != null ? `кэш $${p.cachedInput} · ` : ''}${p.cacheWrite != null ? `запись кэша $${p.cacheWrite} · ` : ''}выход $${p.output}`).join('<br>');
+    document.getElementById('apiPrices').innerHTML = '<b>Цена за 1 млн токенов</b><br>' + Object.values(apiState.billing.prices || {}).map(p => `${escapeHtml(p.title)}${p.discountPercent ? ` · скидка −${Number(p.discountPercent)}%` : ''}: вход $${p.input} · ${p.cachedInput != null ? `кэш $${p.cachedInput} · ` : ''}${p.cacheWrite != null ? `запись кэша $${p.cacheWrite} · ` : ''}выход $${p.output}`).join('<br>');
     const pricedModels = Object.entries(apiState.billing.prices || {})
       .filter(([id]) => id !== 'gpt-image-2-5')
       .map(([id, price]) => ({ id, title: price.title || id }));
