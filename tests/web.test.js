@@ -20,6 +20,9 @@ process.env.TOKEN_LIMITS_JSON = JSON.stringify(Object.fromEntries(TEST_PLAN_KEYS
     { short: SYNTHETIC_TOKEN_LIMIT, long: SYNTHETIC_TOKEN_LIMIT },
   ])),
 ])));
+process.env.CORPORATE_LIMITS_JSON = JSON.stringify(Object.fromEntries(['corp1', 'corp2', 'corp3', 'corp4'].map((plan) => [
+  plan, { short: SYNTHETIC_TOKEN_LIMIT, long: SYNTHETIC_TOKEN_LIMIT * 10 },
+])));
 
 
 // bot.js, который импортирует web.js, держит служебный четырёхминутный timer.
@@ -122,6 +125,18 @@ test('serves only the fixed workspace stylesheet publicly with safe headers', as
   const protectedResponse = await fetch(baseUrl + '/');
   assert.equal(protectedResponse.status, 401, 'the dashboard remains protected by Basic Auth');
   await protectedResponse.text();
+});
+
+test('/chat/api/plans publishes corporate prices and seats without exposing token pools', async () => {
+  const response = await authed('/chat/api/plans');
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.deepEqual(body.plans.filter((p) => p.key.startsWith('corp')).map((p) => [p.key, p.stars]), [
+    ['corp1', 499], ['corp2', 999], ['corp3', 1799], ['corp4', 2999],
+  ]);
+  assert.equal(JSON.stringify(body).includes('short'), false);
+  assert.equal(JSON.stringify(body).includes('long'), false);
+  assert.equal(body.plans.some((p) => Object.hasOwn(p, 'limits')), false);
 });
 
 test('serves the public desktop release page and resumable installers without dashboard auth', async () => {

@@ -1,5 +1,5 @@
 import { Redis } from '@upstash/redis';
-import { DEFAULT_MODEL, DEFAULT_EFFORT, DAY, PLANS, PROMO_PRO_UNTIL } from './config.js';
+import { DEFAULT_MODEL, DEFAULT_EFFORT, DAY, PLANS, PROMO_PRO_UNTIL, corporatePlan } from './config.js';
 
 const PAID_PLAN_KEYS = new Set(Object.keys(PLANS).filter((k) => k !== 'free'));
 const USAGE_RETENTION = 60 * DAY;
@@ -13,19 +13,19 @@ if (!hasRedis) {
   console.warn('[store] UPSTASH_REDIS_REST_URL/TOKEN не заданы — данные будут жить только в памяти процесса и потеряются при рестарте.');
 }
 
-let db = { users: {}, updatedAt: 0 };
+let db = { users: {}, teams: {}, updatedAt: 0 };
 let saveTimer = null;
 
 export async function load() {
   if (redis) {
     try {
       const v = await redis.get(STORE_KEY);
-      if (v && typeof v === 'object') { db = v; if (!db.users) db.users = {}; return db; }
+      if (v && typeof v === 'object') { db = v; if (!db.users) db.users = {}; if (!db.teams) db.teams = {}; return db; }
     } catch (e) {
       console.error('[store] load failed', e.message);
     }
   }
-  db = { users: {}, updatedAt: 0 };
+  db = { users: {}, teams: {}, updatedAt: 0 };
   return db;
 }
 
@@ -53,6 +53,11 @@ export function findUserByUsername(username) {
   const uname = String(username || '').replace(/^@/, '').toLowerCase();
   if (!uname) return null;
   return allUsers().find((u) => (u.username || '').toLowerCase() === uname) || null;
+}
+export function findUserByPhone(phone) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (!digits) return null;
+  return allUsers().find((u) => String(u.phone || '').replace(/\D/g, '') === digits) || null;
 }
 export function findUser(id) { return db.users[String(id)] || null; }
 
@@ -98,6 +103,109 @@ export function getUser(from) {
 export function displayName(u) {
   const n = [u.firstName, u.lastName].filter(Boolean).join(' ').trim();
   return n || (u.username ? '@' + u.username : 'ID ' + u.id);
+}
+
+export function markStarted(u) {
+  if (!u.startedAt) u.startedAt = Date.now();
+  u.lastSeen = Date.now();
+  saveSoon();
+}
+
+export function savePhone(u, phone) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (digits.length < 7) return false;
+  u.phone = digits;
+  saveSoon();
+  return true;
+}
+
+export function findUserByIdentifier(identifier) {
+  const value = String(identifier || '').trim();
+  if (!value) return null;
+  if (value.startsWith('@')) return findUserByUsername(value);
+  const digits = value.replace(/\D/g, '');
+  if (/^\d+$/.test(value) && db.users[value]) return findUser(value);
+  return findUserByPhone(digits) || (/^\d+$/.test(value) ? findUser(value) : findUserByUsername(value));
+}
+
+export function activeTeamFor(u, now = Date.now()) {
+  const team = u?.teamId && db.teams?.[u.teamId];
+  if (!team || Number(team.until || 0) <= now || !team.members?.includes(String(u.id))) return null;
+  return corporatePlan(team.tier) ? team : null;
+}
+
+export function ownedTeam(u) {
+  return Object.values(db.teams || {}).find((team) => team.ownerId === String(u.id)) || null;
+}
+
+export function grantCorporatePlan(owner, tier, days, payment) {
+  const plan = corporatePlan(tier);
+  if (!plan) throw new Error('Корпоративные тарифы временно недоступны');
+  let team = ownedTeam(owner);
+  const now = Date.now();
+  if (!team) {
+    team = { id: 't' + now.toString(36) + Math.random().toString(36).slice(2, 7), ownerId: String(owner.id), tier, until: 0, members: [String(owner.id)], memberSince: { [String(owner.id)]: now }, invites: [], payments: [], createdAt: now };
+    db.teams[team.id] = team;
+  }
+  if (!team.members.includes(String(owner.id))) team.members.unshift(String(owner.id));
+  if (!team.memberSince) team.memberSince = {};
+  if (!team.memberSince[String(owner.id)]) team.memberSince[String(owner.id)] = now;
+  const base = team.tier === tier && team.until > now ? team.until : now;
+  team.tier = tier;
+  team.until = base + days * DAY;
+  if (payment) team.payments.push({ ...payment, ts: now });
+  owner.teamId = team.id;
+  saveSoon();
+  return team;
+}
+
+export function inviteToTeam(owner, target, now = Date.now()) {
+  const team = activeTeamFor(owner, now);
+  if (!team || team.ownerId !== String(owner.id)) return { ok: false, error: 'У вас нет активного корпоративного тарифа.' };
+  const plan = corporatePlan(team.tier);
+  if (!target?.startedAt) return { ok: false, error: 'Пользователь ещё не нажал /start в боте.' };
+  if (String(target.id) === String(owner.id)) return { ok: false, error: 'Вы уже состоите в этой команде.' };
+  if (activeTeamFor(target, now)) return { ok: false, error: 'Пользователь уже состоит в активной команде.' };
+  if (team.members.length >= plan.maxUsers) return { ok: false, error: `В команде уже максимум участников: ${plan.maxUsers}.` };
+  const previous = team.invites.find((x) => x.userId === String(target.id) && x.status === 'pending' && x.expiresAt > now);
+  if (previous) return { ok: true, invite: previous, reused: true, team };
+  const invite = { id: 'i' + now.toString(36) + Math.random().toString(36).slice(2, 7), userId: String(target.id), status: 'pending', createdAt: now, expiresAt: now + 7 * DAY };
+  team.invites.push(invite);
+  saveSoon();
+  return { ok: true, invite, team };
+}
+
+export function respondToTeamInvite(user, inviteId, accept, now = Date.now()) {
+  const team = Object.values(db.teams || {}).find((x) => x.invites?.some((i) => i.id === inviteId && i.userId === String(user.id)));
+  const invite = team?.invites?.find((i) => i.id === inviteId && i.userId === String(user.id));
+  if (!team || !invite || invite.status !== 'pending' || invite.expiresAt <= now) return { ok: false, error: 'Приглашение устарело или уже обработано.' };
+  if (!accept) { invite.status = 'declined'; invite.respondedAt = now; saveSoon(); return { ok: true, accepted: false, team }; }
+  const plan = corporatePlan(team.tier);
+  if (!plan || team.until <= now) return { ok: false, error: 'Корпоративный тариф уже закончился.' };
+  if (activeTeamFor(user, now)) return { ok: false, error: 'Вы уже состоите в активной команде.' };
+  if (team.members.length >= plan.maxUsers) return { ok: false, error: 'В команде больше нет свободных мест.' };
+  team.members.push(String(user.id));
+  if (!team.memberSince) team.memberSince = {};
+  team.memberSince[String(user.id)] = now;
+  user.teamId = team.id;
+  invite.status = 'accepted';
+  invite.respondedAt = now;
+  saveSoon();
+  return { ok: true, accepted: true, team };
+}
+
+export function removeTeamMember(owner, targetId) {
+  const team = activeTeamFor(owner);
+  const id = String(targetId);
+  if (!team || team.ownerId !== String(owner.id)) return { ok: false, error: 'У вас нет активной команды.' };
+  if (id === team.ownerId) return { ok: false, error: 'Владелец не может удалить себя из команды.' };
+  if (!team.members.includes(id)) return { ok: false, error: 'Пользователь не состоит в вашей команде.' };
+  team.members = team.members.filter((x) => x !== id);
+  if (team.memberSince) delete team.memberSince[id];
+  const target = findUser(id);
+  if (target?.teamId === team.id) delete target.teamId;
+  saveSoon();
+  return { ok: true, team };
 }
 
 export function newChat(u, title) {

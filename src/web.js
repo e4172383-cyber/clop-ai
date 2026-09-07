@@ -4,7 +4,7 @@ import { BILLING_VERSION } from './token-accounting.js';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { WEB_PORT, WEB_HOST, PUBLIC_URL, MODELS, PLANS, PROVIDERS, DEFAULT_MODEL, DEFAULT_EFFORT, EFFORTS, DAY, BOT_NAME, freeGoActive, FREE_GO_UNTIL, FREE_GO_PLAN, MODEL_PROMO, modelPromoActive } from './config.js';
+import { WEB_PORT, WEB_HOST, PUBLIC_URL, MODELS, PLANS, PROVIDERS, DEFAULT_MODEL, DEFAULT_EFFORT, EFFORTS, DAY, BOT_NAME, freeGoActive, FREE_GO_UNTIL, FREE_GO_PLAN, MODEL_PROMO, modelPromoActive, CORPORATE_PLANS, corporatePlansReady } from './config.js';
 import * as store from './store.js';
 import * as sites from './sites.js';
 import * as desk from './desktop.js';
@@ -1287,15 +1287,15 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
         const cur = planOf(u);
         return sendJson(res, 200, {
           ok: true,
-          current: cur.key,
-          proUntil: u.proUntil || 0,
+          current: cur.corporateKey || cur.key,
+          proUntil: store.activeTeamFor(u)?.until || u.proUntil || 0,
           // Акция отдаётся сайту отдельным полем: он покажет баннер и не
           // будет предлагать купить то, что сейчас и так открыто всем
           promo: freeGoActive() ? { plan: FREE_GO_PLAN, until: FREE_GO_UNTIL } : null,
           bot: getBotUsername(),
           // Конкретные лимиты в токенах наружу не отдаём — на сайте они не
           // показываются, и светить их в ответе API незачем
-          plans: Object.values(PLANS).map((p) => ({
+          plans: [...Object.values(PLANS), ...(corporatePlansReady() ? Object.values(CORPORATE_PLANS) : [])].map((p) => ({
             key: p.key, title: p.title, stars: p.stars, days: p.days, perks: p.perks,
           })),
         });

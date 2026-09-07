@@ -1,5 +1,6 @@
-import { PLANS, FREE_GO_PLAN, freeGoActive, WINDOWS, EFFORTS, DEFAULT_EFFORT, MODELS, PROVIDERS, IMAGE_DAILY_LIMITS, DAY } from './config.js';
+import { PLANS, FREE_GO_PLAN, freeGoActive, WINDOWS, EFFORTS, DEFAULT_EFFORT, MODELS, PROVIDERS, IMAGE_DAILY_LIMITS, DAY, corporatePlan } from './config.js';
 import { eventBillable } from './token-accounting.js';
+import * as store from './store.js';
 
 // Модели, чей расход не считается против лимита тарифа (Haiku — навсегда)
 const UNLIMITED_MODELS = new Set(Object.keys(MODELS).filter((k) => MODELS[k].unlimited));
@@ -8,11 +9,24 @@ const UNLIMITED_MODELS = new Set(Object.keys(MODELS).filter((k) => MODELS[k].unl
 const PAID_PLANS = new Set(Object.keys(PLANS).filter((k) => k !== 'free'));
 
 export function planOf(u) {
+  const team = store.activeTeamFor(u);
+  if (team) {
+    const corporate = corporatePlan(team.tier);
+    const base = PLANS[corporate.capabilityPlan];
+    return { ...base, title: corporate.title, emoji: corporate.emoji, corporateKey: corporate.key, teamId: team.id };
+  }
   if (PAID_PLANS.has(u.plan) && (!u.proUntil || u.proUntil > Date.now())) return PLANS[u.plan];
   // Пока идёт акция, бесплатные аккаунты работают на GO целиком: те же
   // модели, лимиты и выбор силы мышления. Купленные тарифы не понижаем.
   if (freeGoActive()) return PLANS[FREE_GO_PLAN];
   return PLANS.free;
+}
+
+export function corporateStateOf(u, now = Date.now()) {
+  const team = store.activeTeamFor(u, now);
+  if (!team) return null;
+  const plan = corporatePlan(team.tier);
+  return plan ? { team, plan } : null;
 }
 
 // Доступные уровни силы мышления с учётом и тарифа, и модели: некоторые
@@ -54,6 +68,49 @@ export function usedIn(u, windowMs, provider, now = Date.now()) {
   return sum;
 }
 
+function combinedUsed(user, windowMs, now, joinedAt = 0) {
+  const from = Math.max(now - windowMs, Number(joinedAt || 0));
+  let sum = 0;
+  for (const e of user.usage || []) {
+    if (Number(e.ts || 0) < from || UNLIMITED_MODELS.has(e.model) || e.offerBonus === true) continue;
+    const provider = MODELS[e.model]?.provider;
+    if (provider) sum += eventBillable(e, provider);
+  }
+  return sum;
+}
+
+function corporateUsageEvents(team, windowMs, now, onlyUserId = null) {
+  const ids = onlyUserId ? [String(onlyUserId)] : team.members;
+  const events = [];
+  for (const id of ids) {
+    const from = Math.max(now - windowMs, Number(team.memberSince?.[id] || team.createdAt || 0));
+    const member = store.findUser(id);
+    for (const e of member?.usage || []) {
+      if (Number(e.ts || 0) < from || UNLIMITED_MODELS.has(e.model) || e.offerBonus === true) continue;
+      if (MODELS[e.model]?.provider) events.push(e);
+    }
+  }
+  return events.sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0));
+}
+
+function corporateWindowState(u, key, now) {
+  const state = corporateStateOf(u, now);
+  if (!state) return null;
+  const win = WINDOWS[key];
+  const isShort = key === 'short';
+  const used = isShort
+    ? combinedUsed(u, win.ms, now, state.team.memberSince?.[String(u.id)] || state.team.createdAt)
+    : state.team.members.reduce((sum, id) => sum + combinedUsed(store.findUser(id) || { usage: [] }, win.ms, now, state.team.memberSince?.[id] || state.team.createdAt), 0);
+  const limit = state.plan.limits[key];
+  const events = corporateUsageEvents(state.team, win.ms, now, isShort ? u.id : null);
+  const percent = Math.min(100, Math.round((used / limit) * 100));
+  return {
+    key, provider: 'corporate', title: isShort ? '5 часов · ваш лимит' : '7 дней · вся команда', shortTitle: win.shortTitle,
+    percent, left: Math.max(0, 100 - percent), exceeded: used >= limit,
+    resetAt: events.length ? Number(events[0].ts || now) + win.ms : now,
+  };
+}
+
 // Когда окно освободится настолько, что запрос снова пройдёт
 export function resetAt(u, windowMs, provider, now = Date.now()) {
   const inWindow = countableUsage(u, windowMs, provider, now).sort((a, b) => a.ts - b.ts);
@@ -62,6 +119,8 @@ export function resetAt(u, windowMs, provider, now = Date.now()) {
 }
 
 export function windowState(u, key, provider, now = Date.now()) {
+  const corporate = corporateWindowState(u, key, now);
+  if (corporate) return corporate;
   const plan = planOf(u);
   const win = WINDOWS[key];
   const limit = plan.limits[provider][key];

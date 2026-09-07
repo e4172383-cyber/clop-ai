@@ -30,6 +30,8 @@ services:
         sync: false
       - key: TOKEN_LIMITS_JSON
         sync: false
+      - key: CORPORATE_LIMITS_JSON
+        sync: false
       - key: SELF_URL
         value: https://clop-ai.onrender.com
       - key: WEB_SESSION_SECRET

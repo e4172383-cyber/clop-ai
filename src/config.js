@@ -324,6 +324,44 @@ export const PLANS = {
   },
 };
 
+// Корпоративные квоты также приходят только из приватной конфигурации Render.
+// В репозитории остаются цены, вместимость и возможности тарифа, но не размеры
+// внутренних токен-пулов.
+function parseCorporateLimits(raw) {
+  if (!raw) return null;
+  try {
+    const value = JSON.parse(raw);
+    for (const key of ['corp1', 'corp2', 'corp3', 'corp4']) {
+      for (const window of ['short', 'long']) {
+        if (!Number.isSafeInteger(value?.[key]?.[window]) || value[key][window] <= 0) {
+          throw new Error(`${key}.${window}`);
+        }
+      }
+    }
+    return value;
+  } catch (error) {
+    console.error('[config] CORPORATE_LIMITS_JSON invalid:', error.message);
+    return null;
+  }
+}
+
+const CORPORATE_LIMITS = parseCorporateLimits(process.env.CORPORATE_LIMITS_JSON);
+
+export const CORPORATE_PLANS = Object.freeze({
+  corp1: { key: 'corp1', title: 'Корпоративный · 1 тир', emoji: '🏢', stars: 499, days: 30, maxUsers: 5, capabilityPlan: 'go', perks: ['До 5 пользователей', 'Общий недельный пул команды', 'Отдельное 5-часовое окно каждого'] },
+  corp2: { key: 'corp2', title: 'Корпоративный · 2 тир', emoji: '🏬', stars: 999, days: 30, maxUsers: 7, capabilityPlan: 'pro', perks: ['До 7 пользователей', 'Расширенный недельный пул команды', 'Отдельное 5-часовое окно каждого'] },
+  corp3: { key: 'corp3', title: 'Корпоративный · 3 тир', emoji: '🏙', stars: 1799, days: 30, maxUsers: 10, capabilityPlan: 'max', perks: ['До 10 пользователей', 'Большой недельный пул команды', 'Отдельное 5-часовое окно каждого'] },
+  corp4: { key: 'corp4', title: 'Бизнес · 4 тир', emoji: '🌐', stars: 2999, days: 30, maxUsers: 15, capabilityPlan: 'coderplus', perks: ['До 15 пользователей', 'Максимальный недельный пул команды', 'Отдельное 5-часовое окно каждого'] },
+});
+
+export function corporatePlan(key) {
+  const plan = CORPORATE_PLANS[key];
+  if (!plan || !CORPORATE_LIMITS) return null;
+  return { ...plan, limits: { short: CORPORATE_LIMITS[key].short, long: CORPORATE_LIMITS[key].long } };
+}
+
+export const corporatePlansReady = () => Boolean(CORPORATE_LIMITS);
+
 export const MAX_CONTEXT_MESSAGES = 24;
 export const MAX_CHATS = 30;
 export const REQUEST_TIMEOUT_MS = 5 * MINUTE;

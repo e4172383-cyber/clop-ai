@@ -1,4 +1,4 @@
-import { BOT_NAME, PUBLIC_URL, MODELS, PLANS, PROVIDERS, EFFORTS, DEFAULT_MODEL, MAX_CHATS, OPUS_FREE_PROMO_UNTIL, FREE_GO_UNTIL, freeGoActive, MODEL_PROMO, modelPromoActive, modelInPromo, IMAGE_GENERATORS, ADMIN_IDS } from './config.js';
+import { BOT_NAME, PUBLIC_URL, MODELS, PLANS, PROVIDERS, EFFORTS, DEFAULT_MODEL, MAX_CHATS, OPUS_FREE_PROMO_UNTIL, FREE_GO_UNTIL, freeGoActive, MODEL_PROMO, modelPromoActive, modelInPromo, IMAGE_GENERATORS, ADMIN_IDS, CORPORATE_PLANS, corporatePlan, corporatePlansReady } from './config.js';
 import * as tg from './telegram.js';
 import * as store from './store.js';
 import { planOf, effortOf, allowedEffortOptions, checkLimits, checkAllLimits, bar, humanLeft, imageLimitState } from './limits.js';
@@ -136,6 +136,7 @@ function mainKb(u) {
       [{ text: `🤖 Модель: ${m.heavy ? '⚠️ ' : ''}${m.short}`, callback_data: 'model' }, { text: `🧠 Мышление: ${effortLabel}`, callback_data: 'effort' }],
       ...(m.provider === 'gpt' ? [[{ text: `⚡ Быстро: ${u.fast ? 'ВКЛ' : 'ВЫКЛ'} · расход ×1,2`, callback_data: 'fast_toggle' }]] : []),
       [{ text: '📊 Лимиты', callback_data: 'usage' }, { text: '💎 Тарифы', callback_data: 'plans' }],
+      [{ text: '🏢 Моя команда', callback_data: 'team' }],
       ...(showOffer ? [[{ text: offer.claimed ? '🎁 Бонус GPT активен' : '🎁 Получить 10 млн токенов', callback_data: 'offer_claim' }]] : []),
       [{ text: '🖼 Сгенерировать (бета)', callback_data: 'imagegen' }],
       [{ text: '🌐 Чат на сайте (бета)', url: 'https://clop-ai.onrender.com/chat' }],
@@ -193,9 +194,11 @@ function usageText(u) {
   const plan = planOf(u);
   const all = checkAllLimits(u);
   const offer = offerState(u);
+  const activeTeam = store.activeTeamFor(u);
+  const planUntil = activeTeam?.until || u.proUntil || 0;
   const lines = [
     `📊 *Использование*`,
-    `Тариф: ${plan.emoji} *${plan.title}*${plan.key !== 'free' && u.proUntil ? ` (до ${dt(u.proUntil)})` : ''}`,
+    `Тариф: ${plan.emoji} *${plan.title}*${planUntil ? ` (до ${dt(planUntil)})` : ''}`,
     '',
   ];
   if (offer?.claimed && Date.now() < offer.until) {
@@ -210,9 +213,19 @@ function usageText(u) {
     lines.push(`Доступны до *${dt(offer.until)} по Киеву*`);
     lines.push('');
   }
-  // Все доступные модели сейчас работают из единого GPT-пула. Этот же пул
-  // используют сайт и личный API.
-  for (const provKey of ['gpt', 'kimi']) {
+  if (activeTeam) {
+    lines.push('🏢 *Корпоративный пул*');
+    for (const s of all.gpt.states) {
+      lines.push(`${s.title}`);
+      lines.push(`${bar(s.percent)} ${s.percent}%`);
+      lines.push(s.exceeded
+        ? `⛔️ лимит исчерпан · обновится через ${humanLeft(s.resetAt - Date.now())}`
+        : `осталось ${s.left}%${s.percent > 0 ? ` · окно сдвинется через ${humanLeft(s.resetAt - Date.now())}` : ''}`);
+    }
+    lines.push('');
+  }
+  // Для личных тарифов GPT и Kimi расходуются из отдельных пулов.
+  for (const provKey of activeTeam ? [] : ['gpt', 'kimi']) {
     const prov = PROVIDERS[provKey];
     lines.push(`${prov.emoji} *${prov.title}*`);
     for (const s of all[provKey].states) {
@@ -241,7 +254,8 @@ function usageText(u) {
 
 
 function plansText(u) {
-  const cur = planOf(u).key;
+  const currentPlan = planOf(u);
+  const cur = currentPlan.corporateKey || currentPlan.key;
   const block = (p) => [
     `${p.emoji} *${p.title}*${p.key === cur ? ' — ваш тариф' : ''}${p.stars ? ` — ${p.stars} ⭐️ / ${p.days} дней` : ' — 0 ⭐️'}`,
     ...p.perks.map((x) => `• ${x}`),
@@ -373,6 +387,9 @@ function helpText() {
     '/usage — лимиты в процентах',
     '/image описание — сразу сгенерировать и прикрепить изображение',
     '/plans — тарифы',
+    '/team — корпоративная команда',
+    '/team_add @username — пригласить участника',
+    '/team_remove @username — удалить участника',
     '/buy — купить Pro',
     '/myapi — получить свой личный API-ключ (можно сбросить/перевыпустить кнопкой)',
     '/download — скачать Clop Code для Windows или Linux',
@@ -480,11 +497,13 @@ async function clearLegacyKeyboard(u, chatId) {
 /* ---------------- payments ---------------- */
 
 async function sendPlanInvoice(chatId, planKey) {
-  const p = PLANS[planKey];
+  const p = PLANS[planKey] || corporatePlan(planKey);
+  if (!p) throw new Error('Тариф временно недоступен');
+  const description = p.perks?.join('. ') || `Корпоративный доступ до ${p.maxUsers} пользователей. Общий недельный пул и отдельное 5-часовое окно каждого участника.`;
   await tg.api('sendInvoice', {
     chat_id: chatId,
     title: `${BOT_NAME} ${p.title} — ${p.days} дней`,
-    description: p.perks.join('. ') + '.',
+    description: description + '.',
     payload: `${planKey}_${p.days}`,
     provider_token: '',
     currency: 'XTR',
@@ -834,6 +853,40 @@ async function onCommand(u, chatId, cmd, rawText = '') {
     case '/plans':
     case '/pro':
       return void await tg.sendMessage(chatId, plansText(u), { reply_markup: plansKb(u) });
+    case '/corporate':
+      return void await tg.sendMessage(chatId, corporatePlansText(u), { reply_markup: corporatePlansKb(u) });
+    case '/team':
+      return void await tg.sendMessage(chatId, teamText(u), { reply_markup: teamKb(u) });
+    case '/team_add': {
+      const identifier = rawText.trim().replace(/^\/\S+\s*/u, '').trim();
+      if (!identifier) return void await tg.sendMessage(chatId, 'Укажите username, Telegram ID или сохранённый номер. Например: `/team_add @username`.', { reply_markup: teamKb(u) });
+      const target = store.findUserByIdentifier(identifier);
+      if (!target) return void await tg.sendMessage(chatId, 'Пользователь не найден. Он должен нажать /start; для поиска по номеру — ещё и поделиться контактом с ботом.', { reply_markup: teamKb(u) });
+      const result = store.inviteToTeam(u, target);
+      if (!result.ok) return void await tg.sendMessage(chatId, `⚠️ ${result.error}`, { reply_markup: teamKb(u) });
+      try {
+        await tg.sendMessage(Number(target.id), [
+          '🏢 *Приглашение в корпоративную команду*', '',
+          `${store.displayName(u)} приглашает вас в *${corporatePlan(result.team.tier).title}* Clop ai.`,
+          'После принятия у вас будут общие корпоративные лимиты команды во всех приложениях Clop.',
+        ].join('\n'), { reply_markup: { inline_keyboard: [[
+          { text: '✅ Принять', callback_data: 'team_accept:' + result.invite.id },
+          { text: '❌ Отказаться', callback_data: 'team_decline:' + result.invite.id },
+        ]] } });
+      } catch {
+        return void await tg.sendMessage(chatId, '⚠️ Telegram не разрешил отправить приглашение. Попросите пользователя снова открыть бота и нажать /start.', { reply_markup: teamKb(u) });
+      }
+      return void await tg.sendMessage(chatId, `✅ Приглашение отправлено пользователю ${store.displayName(target)}. Место займётся после его согласия.`, { reply_markup: teamKb(u) });
+    }
+    case '/team_remove': {
+      const identifier = rawText.trim().replace(/^\/\S+\s*/u, '').trim();
+      const target = store.findUserByIdentifier(identifier);
+      if (!identifier || !target) return void await tg.sendMessage(chatId, 'Укажите участника: `/team_remove @username` или его Telegram ID.', { reply_markup: teamKb(u) });
+      const result = store.removeTeamMember(u, target.id);
+      if (!result.ok) return void await tg.sendMessage(chatId, `⚠️ ${result.error}`, { reply_markup: teamKb(u) });
+      await tg.sendMessage(Number(target.id), `ℹ️ ${store.displayName(u)} удалил вас из корпоративной команды Clop ai.`).catch(() => {});
+      return void await tg.sendMessage(chatId, `✅ ${store.displayName(target)} удалён из команды.`, { reply_markup: teamKb(u) });
+    }
     case '/buy':
       return void await tg.sendMessage(chatId, plansText(u), { reply_markup: plansKb(u) });
     case '/download':
@@ -897,13 +950,83 @@ function devicesKb(u) {
 }
 
 function plansKb(u) {
-  const cur = planOf(u).key;
+  const currentPlan = planOf(u);
+  const cur = currentPlan.corporateKey || currentPlan.key;
   const rows = Object.values(PLANS)
     .filter((p) => p.key !== 'free')
     .map((p) => [{
       text: `${cur === p.key ? '🔁 Продлить' : `${p.emoji} Купить`} ${p.title} — ${p.stars} ⭐️`,
       callback_data: 'buy_' + p.key,
     }]);
+  if (corporatePlansReady()) rows.push([{ text: '🏢 Корпоративные тарифы', callback_data: 'corporate_plans' }]);
+  return backKb(rows);
+}
+
+function corporatePlansText(u) {
+  const active = store.activeTeamFor(u);
+  const lines = [
+    '🏢 *Корпоративные тарифы*',
+    '',
+    'У команды общий недельный пул. У каждого участника есть отдельное 5-часовое окно. Остаток виден только в процентах.',
+    '',
+  ];
+  for (const p of Object.values(CORPORATE_PLANS)) {
+    lines.push(`${p.emoji} *${p.title}*${active?.tier === p.key ? ' — ваша команда' : ''}`);
+    lines.push(`• ${p.stars} ⭐️ / ${p.days} дней`);
+    lines.push(`• До ${p.maxUsers} пользователей, включая владельца`);
+    lines.push('• Общий расход в боте, сайте, приложении и личном API');
+    lines.push('');
+  }
+  lines.push('_После покупки добавляйте участников командой /team_add. Приглашённый сам принимает или отклоняет приглашение._');
+  return lines.join('\n');
+}
+
+function teamText(u) {
+  const team = store.activeTeamFor(u);
+  if (!team) return [
+    '🏢 *Моя команда*', '',
+    'Активной корпоративной подписки пока нет.',
+    'Откройте корпоративные тарифы, выберите подходящий тир и оплатите звёздами Telegram.',
+  ].join('\n');
+  const plan = corporatePlan(team.tier);
+  const owner = store.findUser(team.ownerId);
+  const lines = [
+    `🏢 *${plan.title}*`,
+    `Действует до *${dt(team.until)}*`,
+    `Владелец: *${owner ? store.displayName(owner) : 'ID ' + team.ownerId}*`,
+    `Участники: *${team.members.length}/${plan.maxUsers}*`,
+    '',
+  ];
+  for (const id of team.members) {
+    const member = store.findUser(id);
+    lines.push(`• ${id === team.ownerId ? '👑 ' : ''}${member ? store.displayName(member) : 'ID ' + id}`);
+  }
+  if (team.ownerId === String(u.id)) {
+    lines.push('', '*Управление*');
+    lines.push('/team_add @username — пригласить по username');
+    lines.push('/team_add 123456789 — пригласить по Telegram ID');
+    lines.push('/team_add +380… — пригласить по сохранённому номеру');
+    lines.push('/team_remove @username — удалить участника');
+    lines.push('', 'Пользователь должен заранее нажать /start. По номеру он также должен поделиться контактом с ботом.');
+  }
+  return lines.join('\n');
+}
+
+function teamKb(u) {
+  const rows = [[{ text: '🏢 Корпоративные тарифы', callback_data: 'corporate_plans' }]];
+  if (store.activeTeamFor(u)?.ownerId === String(u.id)) {
+    rows.unshift([{ text: '➕ Как добавить участника', callback_data: 'team_add_help' }]);
+  }
+  return backKb(rows);
+}
+
+function corporatePlansKb(u) {
+  const team = store.activeTeamFor(u);
+  const rows = Object.values(CORPORATE_PLANS).map((p) => [{
+    text: `${team?.tier === p.key ? '🔁 Продлить' : `${p.emoji} Купить`} ${p.title} — ${p.stars} ⭐️`,
+    callback_data: 'buy_' + p.key,
+  }]);
+  rows.push([{ text: '👥 Управление командой', callback_data: 'team' }]);
   return backKb(rows);
 }
 
@@ -1034,6 +1157,23 @@ async function onCallback(u, q) {
     return void await edit(await sitesText(u), await sitesKb(u));
   }
   if (data === 'plans') { await tg.answerCallback(q.id); return void await edit(plansText(u), plansKb(u)); }
+  if (data === 'corporate_plans') { await tg.answerCallback(q.id); return void await edit(corporatePlansText(u), corporatePlansKb(u)); }
+  if (data === 'team') { await tg.answerCallback(q.id); return void await edit(teamText(u), teamKb(u)); }
+  if (data === 'team_add_help') {
+    await tg.answerCallback(q.id);
+    return void await edit('➕ *Добавление участника*\n\nОтправьте отдельным сообщением одну из команд:\n`/team_add @username`\n`/team_add 123456789`\n`/team_add +380…`\n\nПользователь должен заранее нажать /start. Для поиска по номеру он должен поделиться своим контактом с ботом.', teamKb(u));
+  }
+  if (data.startsWith('team_accept:') || data.startsWith('team_decline:')) {
+    const accept = data.startsWith('team_accept:');
+    const inviteId = data.slice(data.indexOf(':') + 1);
+    const result = store.respondToTeamInvite(u, inviteId, accept);
+    if (!result.ok) return void await tg.answerCallback(q.id, result.error, true);
+    await store.save();
+    await tg.answerCallback(q.id, accept ? 'Вы присоединились к команде' : 'Приглашение отклонено');
+    const owner = store.findUser(result.team.ownerId);
+    if (owner) await tg.sendMessage(Number(owner.id), `${accept ? '✅' : '❌'} ${store.displayName(u)} ${accept ? 'принял(а)' : 'отклонил(а)'} приглашение в вашу команду.`).catch(() => {});
+    return void await edit(accept ? `✅ Вы присоединились к *${corporatePlan(result.team.tier).title}*. Лимиты и доступ синхронизированы с ботом, сайтом, приложениями и API.` : '❌ Вы отказались от приглашения.', mainKb(u));
+  }
   if (data === 'model') { await tg.answerCallback(q.id); return void await edit(modelText(u), modelKb(u)); }
   if (data === 'effort') { await tg.answerCallback(q.id); return void await edit(effortText(u), effortKb(u)); }
   if (data === 'fast_toggle') {
@@ -1117,7 +1257,7 @@ async function onCallback(u, q) {
     return void await edit(chatsListText(u), chatsKb(u));
   }
 
-  if (data.startsWith('buy_') && PLANS[data.slice(4)]) {
+  if (data.startsWith('buy_') && (PLANS[data.slice(4)] || corporatePlan(data.slice(4)))) {
     await tg.answerCallback(q.id);
     return void await sendPlanInvoice(chatId, data.slice(4));
   }
@@ -1395,17 +1535,20 @@ export async function handleUpdate(update) {
 
   if (msg.successful_payment) {
     const sp = msg.successful_payment;
-    const planKey = PLANS[sp.invoice_payload?.split('_')[0]] ? sp.invoice_payload.split('_')[0] : 'pro';
-    const plan = PLANS[planKey];
-    store.grantPlan(u, planKey, plan.days, {
+    const requestedKey = sp.invoice_payload?.split('_')[0];
+    const plan = PLANS[requestedKey] || corporatePlan(requestedKey) || PLANS.pro;
+    const planKey = plan.key;
+    const payment = {
       stars: sp.total_amount, currency: sp.currency, payload: sp.invoice_payload,
       chargeId: sp.telegram_payment_charge_id,
-    });
+    };
+    if (corporatePlan(planKey)) store.grantCorporatePlan(u, planKey, plan.days, payment);
+    else store.grantPlan(u, planKey, plan.days, payment);
     return void await tg.sendMessage(chatId, [
       `🎉 *Оплата прошла. ${plan.title} активирован!*`,
       '',
-      `Доступ до ${dt(u.proUntil)}.`,
-      `Теперь доступны: ${plan.perks[0]}.`,
+      `Доступ до ${dt(corporatePlan(planKey) ? store.activeTeamFor(u).until : u.proUntil)}.`,
+      corporatePlan(planKey) ? 'Управление участниками: /team' : `Теперь доступны: ${plan.perks[0]}.`,
     ].join('\n'), { reply_markup: mainKb(u) });
   }
 
@@ -1420,6 +1563,11 @@ export async function handleUpdate(update) {
   }
 
   const text = (msg.text || msg.caption || '').trim();
+  if (msg.contact) {
+    if (String(msg.contact.user_id || '') !== String(u.id)) return void await tg.sendMessage(chatId, 'Отправьте именно свой контакт, чтобы сохранить ваш номер для приглашений в команду.');
+    const ok = store.savePhone(u, msg.contact.phone_number);
+    return void await tg.sendMessage(chatId, ok ? '✅ Номер сохранён. Теперь владелец корпоративной команды может найти вас по этому номеру.' : '⚠️ Не удалось распознать номер.');
+  }
   if (!text) {
     return void await tg.sendMessage(chatId, 'Пока понимаю только текст 🙂');
   }
@@ -1429,6 +1577,7 @@ export async function handleUpdate(update) {
     return void await handleSupport(u, chatId, text);
   }
   if (text.startsWith('/')) {
+    if (/^\/start(?:\s|$)/i.test(text)) store.markStarted(u);
     // Вход на сайт-чат через Telegram: диплинк t.me/bot?start=weblogin_<code> —
     // привязываем код к этому аккаунту, сайт по коду откроет ту же сессию
     // (тот же store.js, те же лимиты — не отдельный аккаунт).
@@ -1458,7 +1607,7 @@ export async function handleUpdate(update) {
     const buy = text.match(/^\/start\s+buy_([a-z0-9]+)$/i);
     if (buy) {
       const planKey = buy[1].toLowerCase();
-      const plan = PLANS[planKey];
+      const plan = PLANS[planKey] || corporatePlan(planKey);
       if (!plan || !plan.stars) {
         return void await tg.sendMessage(chatId, '⚠️ Такой тариф не найден. Смотрите /plans.', { reply_markup: mainKb(u) });
       }
