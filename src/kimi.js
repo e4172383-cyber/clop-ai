@@ -4,7 +4,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { MAX_CONTEXT_MESSAGES, REQUEST_TIMEOUT_MS } from './config.js';
-import { home as kimiHome, save as saveKimiAuth, snapshot as kimiAuthSnapshot } from './kimiauth.js';
+import { home as kimiHome, isReady as isKimiReady, save as saveKimiAuth } from './kimiauth.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const KIMI_ENTRY = path.join(ROOT, 'node_modules', '@moonshot-ai', 'kimi-code', 'dist', 'main.mjs');
@@ -63,8 +63,20 @@ function assistantText(obj) {
   return '';
 }
 
+function publicError(value) {
+  const error = String(value || '').trim();
+  if (/\b500\b|server had an error|server_error/i.test(error)) {
+    return 'Сервис Kimi временно вернул серверную ошибку. Лимит не списан — повторите запрос через минуту.';
+  }
+  if (/\b429\b|rate.?limit|quota|balance/i.test(error)) {
+    return 'Kimi временно ограничил запросы. Лимит Clop не списан — попробуйте немного позже.';
+  }
+  return error || 'Kimi не вернул ответ';
+}
+
 export async function ask({ chat, modelCli, kimiEffort, prompt, onDelta, signal, client = 'chat' }) {
   if (signal?.aborted) return { ok: false, error: 'aborted', durationMs: 0 };
+  if (!isKimiReady()) return { ok: false, error: 'Вход Kimi не настроен. Администратору нужно повторно подключить Kimi Code.', durationMs: 0 };
   const started = Date.now();
   const fullPrompt = transcript(chat, prompt);
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'clop-kimi-job-'));
@@ -90,10 +102,11 @@ export async function ask({ chat, modelCli, kimiEffort, prompt, onDelta, signal,
       KIMI_MODEL_THINKING_EFFORT: kimiEffort,
       KIMI_CODE_NO_AUTO_UPDATE: '1',
       KIMI_DISABLE_CRON: '1',
+      KIMI_LOOP_MAX_ATTEMPTS_PER_STEP: '2',
       NO_COLOR: '1',
     };
     const child = spawn(process.execPath, args, { cwd: workDir, env, windowsHide: true });
-    let buf = '', stderr = '', finalText = '', done = false;
+    let buf = '', stderr = '', finalText = '', lastApiError = '', done = false;
     const finish = async (result) => {
       if (done) return;
       done = true;
@@ -110,8 +123,10 @@ export async function ask({ chat, modelCli, kimiEffort, prompt, onDelta, signal,
     const handle = (line) => {
       if (!line.trim()) return;
       try {
-        const text = assistantText(JSON.parse(line));
+        const event = JSON.parse(line);
+        const text = assistantText(event);
         if (text) finalText = text;
+        if (event?.error_message) lastApiError = event.error_message;
       } catch {}
     };
     const timer = setTimeout(() => {
@@ -129,7 +144,10 @@ export async function ask({ chat, modelCli, kimiEffort, prompt, onDelta, signal,
     child.on('error', (e) => finish({ ok: false, error: `exec: ${e.message}`, durationMs: Date.now() - started }));
     child.on('close', (code) => {
       if (buf.trim()) handle(buf);
-      if (code !== 0 || !finalText.trim()) return finish({ ok: false, error: stderr.trim().slice(-1200) || `exit ${code}`, durationMs: Date.now() - started });
+      if (code !== 0 || !finalText.trim()) {
+        const detail = lastApiError || stderr.trim().slice(-1200) || `exit ${code}`;
+        return finish({ ok: false, error: publicError(detail), durationMs: Date.now() - started });
+      }
       try { onDelta?.(finalText); } catch {}
       const usage = exactUsage(workDir);
       const input = roughTokens(fullPrompt), output = roughTokens(finalText);
@@ -139,10 +157,11 @@ export async function ask({ chat, modelCli, kimiEffort, prompt, onDelta, signal,
 }
 
 export async function healthCheck() {
-  let authReady = false;
-  try { authReady = Boolean(process.env.KIMI_AUTH_B64 || kimiAuthSnapshot()); } catch {}
+  const authReady = isKimiReady();
   return {
     ok: fs.existsSync(KIMI_ENTRY) && authReady,
-    version: fs.existsSync(KIMI_ENTRY) ? 'Kimi Code готов' : 'Kimi Code не найден',
+    version: !fs.existsSync(KIMI_ENTRY)
+      ? 'Kimi Code не найден'
+      : authReady ? 'Kimi Code готов' : 'Требуется вход в Kimi Code',
   };
 }

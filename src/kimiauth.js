@@ -10,6 +10,33 @@ export const home = () => process.env.KIMI_CODE_HOME || path.join(os.tmpdir(), '
 const hash = (value) => crypto.createHash('sha256').update(value).digest('hex');
 let lastSaved = null;
 
+function hasOAuthCredentials(dir) {
+  const credentialsDir = path.join(dir, 'credentials');
+  if (!fs.existsSync(credentialsDir)) return false;
+  try {
+    return fs.readdirSync(credentialsDir, { withFileTypes: true }).some((entry) => {
+      if (!entry.isFile() || !entry.name.endsWith('.json')) return false;
+      try {
+        const value = JSON.parse(fs.readFileSync(path.join(credentialsDir, entry.name), 'utf8'));
+        return typeof value?.access_token === 'string' && value.access_token.length > 20;
+      } catch {
+        return false;
+      }
+    });
+  } catch {
+    return false;
+  }
+}
+
+export function isReady(dir = home()) {
+  try {
+    const config = path.join(dir, 'config.toml');
+    return fs.existsSync(config) && fs.statSync(config).size > 0 && hasOAuthCredentials(dir);
+  } catch {
+    return false;
+  }
+}
+
 function safeRelative(rel) {
   return rel && !path.isAbsolute(rel) && !rel.split(/[\\/]+/).includes('..');
 }
