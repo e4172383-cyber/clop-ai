@@ -9,11 +9,12 @@
   for (const id of [
     'app', 'workspaceCrumb', 'workspaceName', 'connectionStatus', 'updateButton', 'sidebar', 'newChatButton',
     'railNewChatButton', 'chatRailButton', 'sidebarArtifactsButton', 'guestLoginPrompt',
-    'chatSearch', 'chatGroups', 'chatList', 'accountButton', 'userAvatar', 'accountName',
-    'accountPlan', 'chatTitle', 'chatSubtitle', 'modeSwitch',
+    'chatSearch', 'chatGroups', 'chatList', 'chatsTop', 'chatsBottom', 'accountButton', 'userAvatar', 'accountName',
+    'accountPlan', 'chatTitle', 'chatSubtitle', 'modeSwitch', 'emptyTitle', 'emptyNote',
     'toggleInspector', 'conversation', 'emptyState', 'messageList', 'terminalPanel',
     'terminalRailButton', 'terminalOutput', 'terminalForm', 'terminalInput', 'clearTerminal',
-    'closeTerminal', 'attachmentStrip', 'composerForm', 'promptInput', 'attachButton',
+    'closeTerminal', 'modeCompanion', 'modeCompanionIcon', 'modeCompanionTitle', 'modeCompanionDescription',
+    'modeCompanionAction', 'modeQuickActions', 'attachmentStrip', 'composerForm', 'promptInput', 'attachButton',
     'modelButton', 'modelLabel', 'effortButton', 'effortLabel', 'fastToggle', 'composerHint',
     'sendButton', 'stopButton', 'inspector', 'closeInspector', 'filesPane', 'activityPane',
     'activityBadge', 'folderName', 'folderPath', 'chooseFolderButton', 'refreshFiles',
@@ -26,7 +27,7 @@
     'fullModeAcknowledge', 'confirmFullMode', 'settingsButton', 'settingsModal',
     'settingsTitle', 'settingsAccount', 'settingsAvatar', 'settingsAccountName', 'settingsPlan',
     'themeSelect', 'animationsSetting', 'enterSendsSetting', 'approvalModeSetting', 'modelSelect', 'effortSelect',
-    'fastSetting', 'maxStepsSetting', 'maxStepsValue', 'shellTimeoutSetting', 'emptyLoginButton',
+    'fastSetting', 'shellTimeoutSetting', 'emptyLoginButton',
     'settingsModeName', 'settingsModeDescription', 'changeModeButton', 'openBackups',
     'openTermsSettings', 'openWebsite', 'logoutButton', 'toastStack',
   ]) elements[id] = byId(id);
@@ -54,8 +55,46 @@
     workspace: ['Рабочая папка', 'Чтение и подтверждённые изменения внутри папки'],
     full: ['Полный доступ', 'Файлы вне папки доступны после необходимых подтверждений'],
   };
+  const modeProfiles = {
+    chat: {
+      icon: '●', title: 'Чат без доступа к компьютеру',
+      description: 'Обсуждение, объяснения и идеи. Файлы на компьютере не изменяются.',
+      emptyTitle: 'О чём поговорим?',
+      emptyNote: 'Задавайте вопросы, прикрепляйте материалы и получайте ответы без изменений на компьютере.',
+      placeholder: 'Напишите сообщение или задайте вопрос…', action: 'Подключить папку',
+      prompts: [
+        ['Объяснить', 'Объясни простыми словами: '],
+        ['Придумать', 'Предложи несколько идей для '],
+        ['Проверить текст', 'Проверь и улучши этот текст: '],
+      ],
+    },
+    workspace: {
+      icon: '◆', title: 'Работа в папке проекта',
+      description: 'Clop видит проект, создаёт файлы и сообщает точный путь результата.',
+      emptyTitle: 'Что сделаем в проекте?',
+      emptyNote: 'Выберите папку и опишите готовый результат — Clop изучит файлы, внесёт изменения и проверит работу.',
+      placeholder: 'Опишите, что создать или исправить в проекте…', action: 'Выбрать папку',
+      prompts: [
+        ['Создать файл', 'Создай готовый файл в выбранной папке, проверь его и сообщи точный путь: '],
+        ['Исправить ошибку', 'Найди причину ошибки в проекте, исправь её и проверь результат: '],
+        ['Запустить проект', 'Проверь проект, запусти его и исправь найденные проблемы'],
+      ],
+    },
+    full: {
+      icon: '✦', title: 'Работа на компьютере',
+      description: 'Clop может работать с файлами и приложениями; ход действий виден справа.',
+      emptyTitle: 'Что сделать на компьютере?',
+      emptyNote: 'Опишите конечный результат. Clop будет показывать действия, созданные файлы и их точные пути.',
+      placeholder: 'Опишите готовый результат на компьютере…', action: 'Показать действия',
+      prompts: [
+        ['Сделать на ПК', 'Сделай это на компьютере самостоятельно, проверь результат и сообщи точный путь: '],
+        ['Открыть и настроить', 'Открой нужное приложение и настрой: '],
+        ['Проверить систему', 'Проверь на компьютере причину проблемы и исправь её: '],
+      ],
+    },
+  };
   const toolNames = {
-    list: 'Просмотр папки', read: 'Чтение файла', write: 'Изменение файла', shell: 'Команда Windows',
+    thinking: 'Работа модели', list: 'Просмотр папки', read: 'Чтение файла', write: 'Изменение файла', shell: 'Команда системы',
     screenshot: 'Снимок экрана', click: 'Щелчок мышью', type: 'Ввод текста', key: 'Нажатие клавиши',
     attachment: 'Отправка вложений', 'response-file': 'Файл от ИИ', restore: 'Восстановление копии', external: 'Открытие ссылки',
   };
@@ -67,7 +106,7 @@
     loggedIn: false,
     user: null,
     settings: {
-      workDir: '', theme: 'dark', animations: true, enterSends: true, approvalMode: 'smart', maxSteps: 12,
+      workDir: '', theme: 'dark', animations: true, enterSends: true, approvalMode: 'smart',
       shellTimeout: 90, model: '', effort: 'low', fast: false,
     },
     mode: 'chat',
@@ -310,7 +349,7 @@
 
   function updateConnection() {
     if (state.busy) {
-      const label = state.step ? `Шаг ${state.step.step} из ${state.step.maxSteps}` : 'Clop работает';
+      const label = state.liveAction || 'Clop работает';
       setConnection(label, 'busy');
     } else {
       setConnection(state.loggedIn ? 'Готов' : 'Локальный режим');
@@ -526,9 +565,6 @@
     elements.approvalModeSetting.value = settings.approvalMode || 'smart';
     elements.fastToggle.checked = Boolean(settings.fast);
     elements.fastSetting.checked = Boolean(settings.fast);
-    elements.maxStepsSetting.value = String(settings.maxSteps || 12);
-    elements.maxStepsValue.value = String(settings.maxSteps || 12);
-    elements.maxStepsValue.textContent = String(settings.maxSteps || 12);
     elements.shellTimeoutSetting.value = String(settings.shellTimeout || 90);
     elements.composerHint.textContent = settings.enterSends === false ? 'Ctrl Enter — отправить' : 'Enter — отправить';
     const copy = modeCopy[state.mode] || modeCopy.chat;
@@ -945,8 +981,7 @@
       const duration = formatDuration(message.durationMs);
       const model = cleanStoredString(message.model, 240);
       const modelName = availableModels().find((item) => item.key === model)?.title || model;
-      const steps = Number.isFinite(Number(message.steps)) ? Math.max(0, Math.round(Number(message.steps))) : 0;
-      if (modelName || tokens !== null || duration || steps) {
+      if (modelName || tokens !== null || duration) {
         const runMeta = node('div', 'message-run-metadata');
         if (modelName) {
           article.dataset.model = model;
@@ -960,7 +995,6 @@
           article.dataset.durationMs = String(Number(message.durationMs));
           runMeta.append(node('span', 'message-run-stat message-run-duration', duration));
         }
-        if (steps > 1) runMeta.append(node('span', 'message-run-stat message-run-steps', `${steps} шагов`));
         main.append(runMeta);
       }
     }
@@ -976,7 +1010,7 @@
     article.append(node('div', 'message-avatar', 'C'));
     const main = node('div', 'message-main');
     const meta = node('div', 'message-meta');
-    const status = node('span', 'ai-live-status', state.step ? `шаг ${state.step.step}/${state.step.maxSteps}` : 'думает');
+    const status = node('span', 'ai-live-status', state.liveAction ? 'выполняет' : 'думает');
     const elapsed = node('time', 'ai-live-elapsed', formatElapsed(busyElapsed()));
     elapsed.dataset.busyElapsed = '';
     elapsed.setAttribute('aria-label', `Прошло ${formatElapsed(busyElapsed())}`);
@@ -987,12 +1021,11 @@
     content.append(dots);
     const card = node('div', 'step-card ai-live-step');
     card.dataset.step = String(state.step?.step || 0);
-    card.dataset.maxSteps = String(state.step?.maxSteps || state.settings.maxSteps || 0);
     const stepState = node('span', 'step-state', '…');
     const copy = node('span', 'ai-live-copy');
     copy.append(node('strong', 'ai-live-action', state.liveAction || (state.step ? 'Готовлю следующий ответ' : 'Анализирую запрос')));
     if (state.liveActionDetail) copy.append(node('small', 'ai-live-detail', state.liveActionDetail));
-    copy.append(node('small', 'ai-live-progress', state.step ? `Шаг ${state.step.step} из ${state.step.maxSteps}` : 'Подготовка первого шага'));
+    copy.append(node('small', 'ai-live-progress', state.step ? `Операция ${state.step.step} · работа продолжается автоматически` : 'Подготовка'));
     card.append(stepState, copy);
     content.append(card);
     main.append(meta, content);
@@ -1125,7 +1158,7 @@
     elements.chatTitle.textContent = state.currentChat?.title || 'Новый чат';
     const queuedCount = state.messageQueue.filter(queueItemBelongsToCurrent).length;
     if (state.busy && (!state.busyChatId || state.busyChatId === state.currentChat?.id)) {
-      const progress = state.liveAction || (state.step ? `Выполняется шаг ${state.step.step} из ${state.step.maxSteps}` : 'Clop готовит ответ…');
+      const progress = state.liveAction || (state.step ? `Выполняется операция ${state.step.step}` : 'Clop готовит ответ…');
       const running = `${progress} · ${formatElapsed(busyElapsed())}`;
       elements.chatSubtitle.textContent = queuedCount ? `${running} · в очереди ${queuedCount}` : running;
     } else if (queuedCount) {
@@ -1639,9 +1672,57 @@
   function applyMode() {
     elements.app.dataset.mode = state.mode;
     all('[data-mode]', elements.modeSwitch).forEach((button) => button.classList.toggle('active', button.dataset.mode === state.mode));
+    renderModeExperience();
     renderFolder();
     renderSettings();
     if (state.mode === 'chat') closePreview();
+  }
+
+  function renderModeExperience() {
+    const profile = modeProfiles[state.mode] || modeProfiles.chat;
+    const workDir = state.settings.workDir || '';
+    elements.modeCompanionIcon.textContent = profile.icon;
+    elements.modeCompanionTitle.textContent = state.mode === 'workspace' && workDir
+      ? `Папка: ${folderBaseName(workDir)}`
+      : profile.title;
+    elements.modeCompanionDescription.textContent = state.mode === 'workspace' && workDir
+      ? `Все изменения будут сделаны внутри ${workDir}`
+      : profile.description;
+    elements.modeCompanionAction.textContent = state.mode === 'workspace' && workDir ? 'Сменить папку' : profile.action;
+    elements.promptInput.placeholder = profile.placeholder;
+    elements.emptyTitle.textContent = profile.emptyTitle;
+    elements.emptyNote.textContent = profile.emptyNote;
+    elements.modeQuickActions.replaceChildren();
+    for (const [label, prompt] of profile.prompts) {
+      const button = node('button', 'mode-quick-action');
+      button.type = 'button';
+      button.textContent = label;
+      button.dataset.prompt = prompt;
+      button.addEventListener('click', () => {
+        const current = elements.promptInput.value.trim();
+        elements.promptInput.value = current ? `${prompt}${current}` : prompt;
+        rememberDraft();
+        resizeComposer();
+        elements.promptInput.focus();
+        elements.promptInput.setSelectionRange(elements.promptInput.value.length, elements.promptInput.value.length);
+      });
+      elements.modeQuickActions.append(button);
+    }
+    elements.terminalRailButton.disabled = state.mode === 'chat';
+    elements.terminalRailButton.title = state.mode === 'chat' ? 'Терминал доступен в режимах «Папка» и «Полный»' : 'Терминал';
+    if (state.mode === 'chat') setTerminalOpen(false);
+  }
+
+  function runModeCompanionAction() {
+    if (state.mode === 'chat') {
+      requestMode('workspace');
+      return;
+    }
+    if (state.mode === 'workspace') {
+      chooseFolder();
+      return;
+    }
+    selectInspectorTab('activity');
   }
 
   async function setMode(mode) {
@@ -2213,7 +2294,7 @@
         setBusy(Boolean(event.value), event.chatId || '', event.startedAt);
         break;
       case 'step':
-        state.step = { step: Number(event.step) || 1, maxSteps: Number(event.maxSteps) || state.settings.maxSteps };
+        state.step = { step: Number(event.step) || 1 };
         updateConnection();
         renderMessages(true);
         break;
@@ -2339,7 +2420,14 @@
     elements.updateButton.addEventListener('click', async () => {
       elements.updateButton.disabled = true;
       elements.updateButton.textContent = 'Скачиваю…';
-      try { await api.installUpdate(); }
+      try {
+        const result = await api.installUpdate();
+        if (result?.downloaded) {
+          elements.updateButton.disabled = false;
+          elements.updateButton.textContent = 'Скачано';
+          toast('Обновление скачано. Распакуйте архив из папки загрузок.', 'success', 7000);
+        }
+      }
       catch (error) {
         elements.updateButton.disabled = false;
         elements.updateButton.textContent = 'Обновить';
@@ -2368,7 +2456,23 @@
       }
     });
     elements.stopButton.addEventListener('click', stop);
+    const scrollChats = (position) => elements.chatGroups.scrollTo({
+      top: position === 'top' ? 0 : elements.chatGroups.scrollHeight,
+      behavior: state.settings.animations === false ? 'auto' : 'smooth',
+    });
+    elements.chatsTop.addEventListener('click', () => scrollChats('top'));
+    elements.chatsBottom.addEventListener('click', () => scrollChats('bottom'));
+    elements.chatGroups.addEventListener('keydown', (event) => {
+      if (!['Home', 'End', 'PageUp', 'PageDown'].includes(event.key)) return;
+      event.preventDefault();
+      if (event.key === 'Home' || event.key === 'End') return scrollChats(event.key === 'Home' ? 'top' : 'bottom');
+      elements.chatGroups.scrollBy({
+        top: (event.key === 'PageUp' ? -1 : 1) * Math.max(160, elements.chatGroups.clientHeight * .8),
+        behavior: state.settings.animations === false ? 'auto' : 'smooth',
+      });
+    });
     elements.attachButton.addEventListener('click', attachFiles);
+    elements.modeCompanionAction.addEventListener('click', runModeCompanionAction);
     all('.starter').forEach((button) => button.addEventListener('click', () => {
       elements.promptInput.value = button.dataset.prompt || '';
       rememberDraft();
@@ -2386,8 +2490,6 @@
     elements.modelSelect.addEventListener('change', () => saveSetting({ model: elements.modelSelect.value }));
     elements.effortSelect.addEventListener('change', () => saveSetting({ effort: elements.effortSelect.value }));
     elements.fastSetting.addEventListener('change', () => saveSetting({ fast: elements.fastSetting.checked }));
-    elements.maxStepsSetting.addEventListener('input', () => { elements.maxStepsValue.textContent = elements.maxStepsSetting.value; });
-    elements.maxStepsSetting.addEventListener('change', () => saveSetting({ maxSteps: Number(elements.maxStepsSetting.value) }));
     elements.shellTimeoutSetting.addEventListener('change', () => saveSetting({ shellTimeout: Number(elements.shellTimeoutSetting.value) }));
 
     all('[data-mode]', elements.modeSwitch).forEach((button) => button.addEventListener('click', () => requestMode(button.dataset.mode)));
@@ -2525,9 +2627,90 @@
     systemTheme.addEventListener('change', () => { if (state.settings.theme === 'system') applyTheme(); });
   }
 
+  function installCreationHub() {
+    const nav = node('nav', 'creation-nav');
+    nav.setAttribute('aria-label', 'Создание и инструменты');
+    const tabs = node('div', 'creation-tabs');
+    const work = node('button', '', 'Работа');
+    const chat = node('button', '', 'Чат');
+    work.type = chat.type = 'button';
+    work.onclick = () => { requestMode('workspace'); };
+    chat.onclick = () => { requestMode('chat'); };
+    tabs.append(work, chat);
+    elements.sidebar.querySelector('.sidebar-head').prepend(tabs);
+    const add = (title, action) => {
+      const button = node('button', 'creation-nav-item', title);
+      button.type = 'button';
+      button.onclick = action;
+      nav.append(button);
+      return button;
+    };
+    add('◎  Мой Clop', () => openSettings('general'));
+    const gallery = node('div', 'creation-gallery');
+    const recommendation = node('button', 'creation-recommendation hidden');
+    recommendation.type = 'button';
+    let recommended = null;
+    recommendation.onclick = () => {
+      const current = ClopCreation.strongest(state.user?.models || [], state.user?.planKey);
+      if (!current || current.key !== recommended?.key) return toast('Обновите профиль: доступность модели изменилась.');
+      saveSetting({model: current.key});
+    };
+    elements.emptyState.append(recommendation, gallery);
+    const grid = elements.emptyState.querySelector('.starter-grid');
+    const heading = elements.emptyState.querySelector('.starter-heading');
+    const symbols = ['✧','▤','⌕','▣','▧','▦','◇','⌘'];
+    let selected = '';
+    Object.entries(ClopCreation.sections).forEach(([key, section], index) => {
+      const button = add(`${symbols[index]}  ${section[0]}`, async () => {
+        if (state.busy) return toast('Сначала дождитесь ответа или остановите текущую задачу.');
+        if (state.currentChat?.messages?.length) await newChat();
+        selected = key;
+        nav.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === button));
+        grid.classList.add('hidden');
+        heading.textContent = 'ПРИМЕРЫ ДЛЯ БЫСТРОГО СТАРТА';
+        elements.emptyTitle.textContent = section[0];
+        elements.emptyNote.textContent = section[1];
+        elements.promptInput.placeholder = `Опишите задачу · ${section[0]}`;
+        gallery.replaceChildren();
+        section[2].forEach((title, i) => {
+          const card = node('button', `creation-card creation-art-${(index + i) % 6}`);
+          card.type = 'button';
+          const art = node('span', 'creation-art');
+          art.append(node('span', 'creation-art-symbol', symbols[index]), node('span', 'creation-art-lines', ''));
+          card.append(art, node('strong', '', title), node('small', '', 'Использовать пример ↗'));
+          card.onclick = () => {
+            const instruction = selected === 'cluster'
+              ? 'Разбей задачу на этапы: планирование, реализация, проверка. Выполни этапы и покажи результат. '
+              : '';
+            elements.promptInput.value = `${instruction}Создай: ${title}. ${section[1]} Уточни необходимые исходные данные. Если нужен файл, создай его в выбранной рабочей папке и укажи путь.`;
+            rememberDraft(); resizeComposer(); elements.promptInput.focus();
+          };
+          gallery.append(card);
+        });
+        recommended = ClopCreation.strongest(state.user?.models || [], state.user?.planKey);
+        recommendation.classList.toggle('hidden', key !== 'cluster');
+        recommendation.disabled = !recommended;
+        recommendation.textContent = recommended ? `Рекомендуем ${recommended.title} · Выбрать модель →` : 'Войдите и обновите профиль, чтобы увидеть рекомендацию по тарифу';
+        if (key === 'cluster') elements.emptyNote.textContent += ' Этапы выполняет выбранная модель.';
+        setInspector(false);
+      });
+    });
+    add('▱  Открыть проект', chooseFolder);
+    add('↗  Файлы и артефакты', () => setInspector(true, 'files'));
+    add('◷  Ход работы', () => setInspector(true, 'activity'));
+    elements.sidebar.querySelector('.search-wrap').before(nav);
+    elements.newChatButton.addEventListener('click', () => {
+      gallery.replaceChildren(); recommendation.classList.add('hidden');
+      grid.classList.remove('hidden'); heading.textContent = 'БЫСТРЫЙ СТАРТ';
+      nav.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+      renderModeExperience();
+    });
+  }
+
   async function initialise() {
     insertRuntimeRules();
     bindEvents();
+    installCreationHub();
     renderOnboarding();
     renderAccount();
     renderSettings();

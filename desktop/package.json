@@ -1,8 +1,8 @@
 {
   "name": "clop-code",
-  "version": "2.0.8",
+  "version": "2.1.1",
   "productName": "Clop Code",
-  "description": "Clop Code — AI workspace for Windows with Telegram sign-in",
+  "description": "Clop Code — AI workspace for Windows and Linux with Telegram sign-in",
   "author": "Clop",
   "license": "UNLICENSED",
   "private": true,
@@ -39,14 +39,18 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "build/icon.ico",
       "requestedExecutionLevel": "asInvoker"
     },
     "linux": {
-      "target": ["tar.xz"],
+      "target": [
+        "tar.xz"
+      ],
       "category": "Development",
       "icon": "build/icon.png",
       "executableName": "clop-code",

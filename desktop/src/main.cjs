@@ -23,7 +23,10 @@ const {
   defaults,
   cleanSettings,
   parseAction,
+  requiresComputerAction,
+  looksLikeCodeDelivery,
   needsActionRecovery,
+  codeFallbackAction,
   resolveTarget,
   approvalDecision,
 } = require('./policy.cjs');
@@ -56,6 +59,9 @@ const MAX_SHELL_OUTPUT = 1_000_000;
 const APPROVAL_TIMEOUT_MS = 5 * 60 * 1_000;
 const REQUEST_TIMEOUT_MS = 45_000;
 const CHAT_TIMEOUT_MS = 10 * 60 * 1_000;
+// Пользователь не выбирает искусственный предел шагов. Этот высокий аварийный
+// потолок защищает только от зациклившейся модели; обычная задача идёт до конца.
+const MAX_AUTONOMOUS_ACTIONS = 200;
 const CSP = [
   "default-src 'self'",
   "script-src 'self'",
@@ -601,6 +607,14 @@ function recordAction(tool, status, summary, chatId = '') {
   return entry;
 }
 
+function updateAction(entry, status, summary) {
+  if (!entry) return;
+  entry.status = status;
+  entry.summary = String(summary || entry.summary).slice(0, 2_000);
+  saveActionLog();
+  emit('action-log', { entry: publicLog(entry), logs: actionLog.slice(-100).reverse().map(publicLog) });
+}
+
 function ensureAgreement() {
   if (settings.agreementVersion !== AGREEMENT_VERSION) {
     throw new Error('Сначала примите актуальные условия использования.');
@@ -772,7 +786,7 @@ function resolveForMode(requestedPath) {
 
 function approvalSummary(tool, action, target) {
   const labels = {
-    list: 'Просмотр папки', read: 'Чтение файла', write: 'Изменение файла', shell: 'Команда Windows',
+    list: 'Просмотр папки', read: 'Чтение файла', write: 'Изменение файла', shell: 'Команда системы',
     screenshot: 'Снимок экрана', click: 'Щелчок мышью', type: 'Ввод текста', key: 'Нажатие клавиши',
     external: 'Открытие внешней ссылки', restore: 'Восстановление резервной копии', attachment: 'Отправка вложений',
   };
@@ -795,7 +809,7 @@ function approvalSummary(tool, action, target) {
     code,
     risk: ['shell', 'write', 'restore'].includes(tool) ? 'Изменяет данные' : 'Требует внимания',
     note: ['click', 'type', 'key'].includes(tool)
-      ? 'Действие будет выполнено в активном приложении Windows.'
+      ? `Действие будет выполнено в активном приложении ${process.platform === 'win32' ? 'Windows' : 'Linux'}.`
       : 'Проверьте содержимое и разрешите только ожидаемое действие.',
   };
 }
@@ -1001,6 +1015,33 @@ function runPowerShell(script) {
   });
 }
 
+function linuxKey(key) {
+  const map = {
+    ENTER: 'Return', TAB: 'Tab', ESC: 'Escape', BACKSPACE: 'BackSpace',
+    UP: 'Up', DOWN: 'Down', LEFT: 'Left', RIGHT: 'Right',
+    'CTRL+A': 'ctrl+a', 'CTRL+C': 'ctrl+c', 'CTRL+V': 'ctrl+v', 'CTRL+S': 'ctrl+s', 'ALT+TAB': 'alt+Tab',
+  };
+  return map[key] || key;
+}
+
+function runLinuxInput(action, display) {
+  const common = { timeoutSeconds: 20, command: '[Linux input action]' };
+  if (action.tool === 'click') {
+    return runChild('xdotool', ['mousemove', '--sync', String(display.bounds.x + action.x), String(display.bounds.y + action.y), 'click', '1'], common);
+  }
+  if (action.tool === 'type') {
+    return runChild('xdotool', ['type', '--clearmodifiers', '--delay', '1', '--', action.text], common);
+  }
+  return runChild('xdotool', ['key', '--clearmodifiers', linuxKey(action.key)], common);
+}
+
+function runScreenInput(action, display) {
+  if (process.platform !== 'win32') return runLinuxInput(action, display);
+  if (action.tool === 'click') return runPowerShell(clickScript(display.bounds.x + action.x, display.bounds.y + action.y));
+  if (action.tool === 'type') return runPowerShell(typeScript(action.text));
+  return runPowerShell(keyScript(action.key));
+}
+
 async function screenshotTool() {
   const display = screen.getPrimaryDisplay();
   const width = Math.max(1, Math.round(display.bounds.width));
@@ -1046,11 +1087,13 @@ function actionEventDetail(action, target) {
 async function executeAction(action, chatId) {
   const tool = action.tool;
   let target = null;
+  let logEntry = null;
   try {
     if (['list', 'read', 'write'].includes(tool)) target = resolveForMode(action.path);
     await authorize(tool, action, target);
     const detail = actionEventDetail(action, target);
     emit('action', { status: 'running', tool, path: action.path || '', detail, chatId });
+    logEntry = recordAction(tool, 'running', detail || tool, chatId);
     let outcome;
     if (tool === 'list') {
       const stat = await fsp.stat(target.abs);
@@ -1068,22 +1111,25 @@ async function executeAction(action, chatId) {
     } else if (tool === 'click') {
       const display = screen.getPrimaryDisplay();
       if (action.x >= display.bounds.width || action.y >= display.bounds.height) throw new Error('Координаты находятся за пределами основного экрана.');
-      const result = await runPowerShell(clickScript(display.bounds.x + action.x, display.bounds.y + action.y));
+      const result = await runScreenInput(action, display);
       outcome = { result: { ok: result.ok, tool, x: action.x, y: action.y } };
     } else if (tool === 'type') {
-      const result = await runPowerShell(typeScript(action.text));
+      const result = await runScreenInput(action, screen.getPrimaryDisplay());
       outcome = { result: { ok: result.ok, tool, characters: action.text.length } };
     } else if (tool === 'key') {
-      const result = await runPowerShell(keyScript(action.key));
+      const result = await runScreenInput(action, screen.getPrimaryDisplay());
       outcome = { result: { ok: result.ok, tool, key: action.key } };
     } else {
       throw new Error('Неизвестное действие.');
     }
-    recordAction(tool, 'done', target?.abs || action.command || `${tool}`, chatId);
-    emit('action', { status: 'done', tool, detail, chatId, result: outcome.result });
+    const outcomeStatus = outcome.result?.ok === false ? 'error' : 'done';
+    updateAction(logEntry, outcomeStatus, target?.abs || action.command || detail || `${tool}`);
+    emit('action', { status: outcomeStatus, tool, detail, chatId, result: outcome.result, error: outcome.result?.error });
     return outcome;
   } catch (error) {
-    recordAction(tool, error.message.includes('отклонено') ? 'denied' : 'error', target?.abs || action.path || action.command || tool, chatId);
+    const status = error.message.includes('отклонено') ? 'denied' : 'error';
+    if (logEntry) updateAction(logEntry, status, error.message);
+    else recordAction(tool, status, target?.abs || action.path || action.command || tool, chatId);
     emit('action', { status: 'error', tool, detail: actionEventDetail(action, target), chatId, error: error.message });
     return { result: { ok: false, tool, error: error.message } };
   }
@@ -1091,11 +1137,12 @@ async function executeAction(action, chatId) {
 
 function toolProtocol(userText) {
   const location = settings.workDir || (accessMode === 'full' ? os.homedir() : 'не выбрана');
-  return `<clop_protocol>\nYou are Clop Code running in a Windows desktop application. Access mode: ${accessMode}. Working directory: ${location}.\nWhen a computer action is necessary, reply with exactly one XML block and valid JSON: <clop_action>{"tool":"list","path":"."}</clop_action>. Available tools: list {path}, read {path}, write {path,content}, shell {command}, screenshot {}, click {x,y}, type {text}, key {key}. Allowed keys: ENTER, TAB, ESC, BACKSPACE, UP, DOWN, LEFT, RIGHT, CTRL+A, CTRL+C, CTRL+V, CTRL+S, ALT+TAB. Paths may be absolute only in full mode. A request to create, build, edit, fix, install, open, run, or test something on the computer is incomplete until you perform the needed actions and receive successful clop_result blocks. For file creation, use write; never merely print code or tell the user to save it. If several files are needed, request one action per turn and continue after each result. If access mode is chat, explain that the user must switch mode instead of pretending the work was performed. Never claim an action succeeded before receiving a <clop_result>. The application enforces its own access policy and may deny a step. Request one action at a time. When the task is complete, answer normally without a clop_action block.\n</clop_protocol>\n<user_request>${JSON.stringify(userText)}</user_request>`;
+  const platformName = process.platform === 'win32' ? 'Windows' : process.platform === 'linux' ? 'Linux' : process.platform;
+  return `<clop_protocol>\nYou are Clop Code running in a ${platformName} desktop application. Access mode: ${accessMode}. Working directory: ${location}.\nWhen a computer action is necessary, reply with exactly one XML block and valid JSON: <clop_action>{"tool":"list","path":"."}</clop_action>. Available tools: list {path}, read {path}, write {path,content}, shell {command}, screenshot {}, click {x,y}, type {text}, key {key}. Allowed keys: ENTER, TAB, ESC, BACKSPACE, UP, DOWN, LEFT, RIGHT, CTRL+A, CTRL+C, CTRL+V, CTRL+S, ALT+TAB. Paths may be absolute only in full mode. A request to create, build, edit, fix, install, open, run, or test something on the computer is incomplete until you perform the needed actions and receive successful clop_result blocks. For file creation, use write; never merely print code or tell the user to save it. If several files are needed, request one action per turn and continue after each result. Continue autonomously until the requested work is complete. If access mode is chat, explain that the user must switch mode instead of pretending the work was performed. Never claim an action succeeded before receiving a <clop_result>. The application enforces its own access policy and may deny a step. Request one action at a time. When the task is complete, answer normally without a clop_action block.\n</clop_protocol>\n<user_request>${JSON.stringify(userText)}</user_request>`;
 }
 
-function actionRecoveryPrompt() {
-  return '<clop_protocol_reminder>The task is not complete: the user asked you to create or change something on this computer, but you only returned code or instructions. Do not repeat the code as prose and do not ask the user to save it. Continue now with exactly one clop_action using write or another necessary tool. For multiple files, perform them one at a time and wait for each clop_result.</clop_protocol_reminder>';
+function actionRecoveryPrompt(userText, attempt) {
+  return `<clop_protocol_reminder attempt="${attempt}">The task is not complete. You returned code or save instructions instead of changing the user's computer. Do not repeat any code in chat. Continue now with exactly one clop_action. Use write to create the first required file, then continue one action at a time, verify the result, and finally report the exact path. Original request: ${JSON.stringify(String(userText || ''))}</clop_protocol_reminder>`;
 }
 
 function modelResult(result) {
@@ -1255,19 +1302,32 @@ async function ask(payload = {}, options = {}) {
     let modelDurationMs = 0;
     let completedSteps = 0;
     let actionRecoveryAttempts = 0;
-    for (let step = 0; step < settings.maxSteps; step += 1) {
+    const writtenPaths = [];
+    for (let step = 0; step < MAX_AUTONOMOUS_ACTIONS; step += 1) {
       if (controller.signal.aborted) throw makeAbortError();
-      emit('step', { chatId: chat.id, step: step + 1, maxSteps: settings.maxSteps });
-      const response = await chatStream({
-        text: nextText,
-        clientMessageId: `${clientMessageId}:${step + 1}`,
-        model: selected.model,
-        chatId: chat.remoteChatId || undefined,
-        effort: selected.effort,
-        fast: selected.fast,
-        ...(nextImages?.length ? { images: nextImages } : {}),
-        ...(nextOffice ? { office: nextOffice } : {}),
-      }, controller.signal);
+      emit('step', { chatId: chat.id, step: step + 1 });
+      const thinkingDetail = step ? 'Анализирует результат действия' : 'Анализирует запрос';
+      const thinking = recordAction('thinking', 'running', thinkingDetail, chat.id);
+      emit('action', { status: 'running', tool: 'thinking', detail: thinkingDetail, chatId: chat.id });
+      let response;
+      try {
+        response = await chatStream({
+          text: nextText,
+          clientMessageId: `${clientMessageId}:${step + 1}`,
+          model: selected.model,
+          chatId: chat.remoteChatId || undefined,
+          effort: selected.effort,
+          fast: selected.fast,
+          ...(nextImages?.length ? { images: nextImages } : {}),
+          ...(nextOffice ? { office: nextOffice } : {}),
+        }, controller.signal);
+        updateAction(thinking, 'done', 'Ответ модели получен');
+        emit('action', { status: 'done', tool: 'thinking', detail: 'Ответ модели получен', chatId: chat.id });
+      } catch (error) {
+        updateAction(thinking, 'error', error.message);
+        emit('action', { status: 'error', tool: 'thinking', detail: thinkingDetail, chatId: chat.id, error: error.message });
+        throw error;
+      }
       completedSteps = step + 1;
       runTokens = addTokenUsage(runTokens, response.tokens);
       modelDurationMs += finiteMetric(response.durationMs, 86_400_000) || 0;
@@ -1281,31 +1341,64 @@ async function ask(payload = {}, options = {}) {
         throw new Error(`Ответ модели остановлен: ${error.message}`);
       }
       if (!action) {
-        if (accessMode !== 'chat' && actionRecoveryAttempts < 2 && needsActionRecovery(text, response.text)) {
-          actionRecoveryAttempts += 1;
-          nextText = actionRecoveryPrompt();
-          nextImages = [];
-          nextOffice = undefined;
-          emit('action', {
-            status: 'running',
-            tool: 'write',
-            chatId: chat.id,
-            detail: 'Модель вернула код вместо создания файла — исправляем автоматически',
-          });
-          continue;
+        if (needsActionRecovery(text, response.text)) {
+          // Файл уже реально записан предыдущим действием. В этом случае не
+          // запускаем повторную запись только из-за того, что модель решила
+          // продублировать код в финальном сообщении: ниже код будет скрыт, а
+          // пользователю останется подтверждение с точным путём.
+          if (writtenPaths.length) {
+            finalReply = response;
+            break;
+          }
+          if (accessMode === 'chat') {
+            finalReply = {
+              ...response,
+              text: 'Для создания файла на компьютере переключитесь в режим «Папка» или «Полный». Код в чат не отправлен.',
+            };
+            break;
+          }
+          if (actionRecoveryAttempts < 4) {
+            actionRecoveryAttempts += 1;
+            nextText = actionRecoveryPrompt(text, actionRecoveryAttempts);
+            nextImages = [];
+            nextOffice = undefined;
+            emit('action', {
+              status: 'running',
+              tool: 'write',
+              chatId: chat.id,
+              detail: 'Модель вернула код вместо файла — Clop продолжает создание на компьютере',
+            });
+            continue;
+          }
+          const fallback = codeFallbackAction(text, response.text);
+          if (fallback) {
+            const fallbackOutcome = await executeAction(fallback, chat.id);
+            if (fallbackOutcome.result?.ok && fallbackOutcome.result.path) writtenPaths.push(fallbackOutcome.result.path);
+            nextText = modelResult(fallbackOutcome.result);
+            nextImages = [];
+            nextOffice = undefined;
+            continue;
+          }
         }
         finalReply = response;
         break;
       }
       const outcome = await executeAction(action, chat.id);
+      if (action.tool === 'write' && outcome.result?.ok && outcome.result.path) writtenPaths.push(outcome.result.path);
       nextText = modelResult(outcome.result);
       nextImages = outcome.images || [];
       nextOffice = undefined;
     }
-    if (!finalReply) throw new Error(`Достигнут лимит шагов (${settings.maxSteps}). Продолжите задачу новым сообщением.`);
+    if (!finalReply) throw new Error('Задача зациклилась и была безопасно остановлена. Уточните запрос и продолжите.');
     const extractedReply = extractResponseFiles(finalReply);
     const persistedReply = await persistResponseFiles(extractedReply.files, controller.signal);
     let content = extractedReply.text.trim();
+    if (writtenPaths.length && looksLikeCodeDelivery(content)) content = 'Готово — файлы созданы на компьютере.';
+    if (writtenPaths.length) {
+      const uniquePaths = [...new Set(writtenPaths)];
+      const missingPaths = uniquePaths.filter((createdPath) => !content.includes(createdPath));
+      if (missingPaths.length) content = `${content || 'Готово.'}\n\nСоздано на компьютере:\n${missingPaths.map((createdPath) => `• ${createdPath}`).join('\n')}`;
+    }
     if (!content) content = persistedReply.files.length ? 'Готово — файл прикреплён к ответу.' : 'Готово.';
     if (persistedReply.warnings.length) {
       const warning = persistedReply.warnings.length === 1
@@ -1388,17 +1481,27 @@ function registerIpc() {
     const releases = await apiJson('/releases.json');
     const release = releases?.desktop;
     const current = app.getVersion();
-    return { available: Boolean(release?.version && isNewerVersion(release.version, current)), current, version: release?.version || current };
+    const url = process.platform === 'linux' ? release?.linuxUrl : (release?.windowsUrl || release?.url);
+    return { available: Boolean(release?.version && url && isNewerVersion(release.version, current)), current, version: release?.version || current };
   });
   handle('update-install', async () => {
     const releases = await apiJson('/releases.json');
     const release = releases?.desktop;
-    const expectedPrefix = `${SERVER}/downloads/Clop-Code-Setup-`;
-    if (!release?.url?.startsWith(expectedPrefix) || !release.url.endsWith('.exe')) throw new Error('Сервер обновлений вернул неверный адрес.');
-    const response = await fetchWithTimeout(release.url, {}, 10 * 60 * 1000);
+    const isLinux = process.platform === 'linux';
+    const url = isLinux ? release?.linuxUrl : (release?.windowsUrl || release?.url);
+    const expectedPrefix = isLinux ? `${SERVER}/downloads/Clop-Code-` : `${SERVER}/downloads/Clop-Code-Setup-`;
+    const expectedSuffix = isLinux ? '.tar.xz' : '.exe';
+    if (!url?.startsWith(expectedPrefix) || !url.endsWith(expectedSuffix)) throw new Error('Сервер обновлений вернул неверный адрес.');
+    const response = await fetchWithTimeout(url, {}, 10 * 60 * 1000);
     if (!response.ok || !response.body) throw new Error('Не удалось скачать обновление.');
-    const file = path.join(app.getPath('temp'), `Clop-Code-Setup-${release.version}.exe`);
+    const file = path.join(isLinux ? app.getPath('downloads') : app.getPath('temp'), isLinux
+      ? `Clop-Code-${release.version}-linux-x64.tar.xz`
+      : `Clop-Code-Setup-${release.version}.exe`);
     await pipeline(Readable.fromWeb(response.body), fs.createWriteStream(file));
+    if (isLinux) {
+      shell.showItemInFolder(file);
+      return { ok: true, downloaded: true, file };
+    }
     const installer = spawn(file, [], { detached: true, stdio: 'ignore' });
     installer.unref();
     setTimeout(() => app.quit(), 500);

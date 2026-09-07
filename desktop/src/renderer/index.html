@@ -7,6 +7,7 @@
   <meta name="color-scheme" content="dark light">
   <title>Clop Code</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="creation.css">
 </head>
 <body>
   <div class="app" id="app" data-theme="dark" data-mode="workspace">
@@ -73,7 +74,8 @@
             <input id="chatSearch" type="search" placeholder="Поиск по чатам" autocomplete="off" aria-label="Поиск по чатам">
           </div>
         </div>
-        <div class="chat-groups" id="chatGroups">
+        <div class="chat-scroll-bar"><span>Чаты</span><span class="chat-scroll-actions"><button type="button" id="chatsTop" title="К новым чатам" aria-label="К новым чатам">↑</button><button type="button" id="chatsBottom" title="К старым чатам" aria-label="К старым чатам">↓</button></span></div>
+        <div class="chat-groups" id="chatGroups" tabindex="0" aria-label="Список чатов">
           <section class="chat-group">
             <h2>Сегодня</h2>
             <div class="chat-list" id="chatList">
@@ -99,10 +101,10 @@
             </div>
           </div>
           <div class="toolbar-actions">
-            <div class="mode-switch" id="modeSwitch" aria-label="Режим доступа">
-              <button type="button" data-mode="chat" title="Только диалог, без доступа к компьютеру"><span class="mode-icon">●</span><span>Чат</span></button>
-              <button type="button" data-mode="workspace" class="active" title="Работа внутри выбранной папки"><span class="mode-icon">◆</span><span>Папка</span></button>
-              <button type="button" data-mode="full" title="Доступ ко всему компьютеру в этом сеансе"><span class="mode-icon">✦</span><span>Полный</span></button>
+            <div class="mode-switch" id="modeSwitch" aria-label="Режим работы">
+              <button type="button" data-mode="chat" title="Общение без доступа к компьютеру"><span class="mode-icon">●</span><span class="mode-button-copy"><strong>Чат</strong><small>Общение</small></span></button>
+              <button type="button" data-mode="workspace" class="active" title="Создание и изменение файлов в выбранной папке"><span class="mode-icon">◆</span><span class="mode-button-copy"><strong>Папка</strong><small>Проект</small></span></button>
+              <button type="button" data-mode="full" title="Работа с файлами и приложениями на компьютере"><span class="mode-icon">✦</span><span class="mode-button-copy"><strong>Полный</strong><small>Компьютер</small></span></button>
             </div>
             <button class="icon-button" type="button" id="toggleInspector" aria-label="Показать файлы" title="Файлы и действия">
               <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg>
@@ -115,8 +117,8 @@
             <div class="empty-state" id="emptyState">
               <div class="orb-wrap" aria-hidden="true"><div class="orb"><span>C</span></div><div class="orb-ring"></div></div>
               <p class="eyebrow">ВАШ ИИ ДЛЯ РАБОТЫ</p>
-              <h2>Что создадим сегодня?</h2>
-              <p class="empty-note">Clop может разбираться в коде, работать с файлами и выполнять задачи на компьютере — только с вашим разрешением.</p>
+              <h2 id="emptyTitle">Что создадим сегодня?</h2>
+              <p class="empty-note" id="emptyNote">Clop может разбираться в коде, работать с файлами и выполнять задачи на компьютере — только с вашим разрешением.</p>
               <div class="guest-login-card" id="guestLoginPrompt">
                 <span class="guest-login-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m20.7 4.1-3 15.1c-.2 1.1-.9 1.4-1.8.9l-4.6-3.4-2.2 2.1c-.2.2-.5.5-.9.5l.3-4.7 8.6-7.8c.4-.3-.1-.5-.6-.2L5.9 13.3l-4.6-1.4c-1-.3-1-1 .2-1.5l17.9-6.9c.8-.3 1.6.2 1.3.6Z"/></svg></span>
                 <span class="guest-login-copy"><strong>Войдите через Telegram</strong><small>Ваш тариф, лимиты и история будут доступны на всех устройствах.</small></span>
@@ -164,9 +166,15 @@
           </section>
 
           <div class="composer-zone">
+            <section class="mode-companion" id="modeCompanion" aria-live="polite">
+              <span class="mode-companion-icon" id="modeCompanionIcon" aria-hidden="true">◆</span>
+              <span class="mode-companion-copy"><strong id="modeCompanionTitle">Папка проекта</strong><small id="modeCompanionDescription">Clop создаёт и изменяет файлы внутри выбранной папки</small></span>
+              <button type="button" class="mode-companion-action" id="modeCompanionAction">Выбрать папку</button>
+            </section>
             <div class="attachment-strip" id="attachmentStrip"></div>
             <form class="composer" id="composerForm">
               <textarea id="promptInput" rows="1" maxlength="32000" placeholder="Попросите Clop что-нибудь сделать…" aria-label="Сообщение"></textarea>
+              <div class="mode-quick-actions" id="modeQuickActions" aria-label="Быстрые действия режима"></div>
               <div class="composer-bottom">
                 <div class="composer-tools">
                   <button type="button" class="round-button" id="attachButton" title="Прикрепить файл" aria-label="Прикрепить файл"><svg viewBox="0 0 24 24"><path d="m9 12 5-5a3 3 0 0 1 4 4l-7 7a5 5 0 0 1-7-7l7-7"/></svg></button>
@@ -327,7 +335,7 @@
           </div>
           <div class="settings-pane" data-settings-pane="model">
             <div class="setting-group"><h3>Ответы</h3><div class="setting-row"><div><strong>Модель по умолчанию</strong><small>Используется в новых чатах</small></div><select id="modelSelect"><option value="gpt-5-4-mini">GPT 5.4 Mini</option><option value="gpt-luna">GPT 5.6 Луна</option><option value="gpt-spark">Codex 5.3 Спарк</option><option value="kimi-k2-6">Kimi K2.6</option></select></div><div class="setting-row"><div><strong>Усиление</strong><small>Глубина рассуждения модели</small></div><select id="effortSelect"><option value="low">Низкое</option><option value="medium">Среднее</option><option value="high">Высокое</option></select></div><label class="setting-row"><div><strong>Быстрый режим</strong><small>Выше скорость, расход лимита ×1,2</small></div><input class="switch-input" type="checkbox" id="fastSetting"><span class="switch-ui"></span></label></div>
-            <div class="setting-group"><h3>Агент</h3><div class="setting-row"><div><strong>Подтверждения действий</strong><small>Как Clop запрашивает разрешение перед работой на ПК</small></div><select id="approvalModeSetting"><option value="smart">Авто</option><option value="allow">Разрешать всё</option><option value="ask">Всегда спрашивать</option></select></div><div class="setting-row"><div><strong>Максимум шагов</strong><small>До остановки автономной задачи</small></div><div class="range-value"><input type="range" min="1" max="30" id="maxStepsSetting"><output id="maxStepsValue">12</output></div></div><div class="setting-row"><div><strong>Тайм-аут команды</strong><small>Максимальное ожидание терминала</small></div><div class="number-field"><input type="number" min="5" max="300" id="shellTimeoutSetting"><span>сек.</span></div></div></div>
+            <div class="setting-group"><h3>Агент</h3><div class="setting-row"><div><strong>Подтверждения действий</strong><small>Как Clop запрашивает разрешение перед работой на ПК</small></div><select id="approvalModeSetting"><option value="smart">Авто</option><option value="allow">Разрешать всё</option><option value="ask">Всегда спрашивать</option></select></div><div class="setting-row"><div><strong>Автономное выполнение</strong><small>Clop сам продолжает работу до готового результата</small></div><span class="setting-state">Включено</span></div><div class="setting-row"><div><strong>Тайм-аут команды</strong><small>Максимальное ожидание терминала</small></div><div class="number-field"><input type="number" min="5" max="300" id="shellTimeoutSetting"><span>сек.</span></div></div></div>
           </div>
           <div class="settings-pane" data-settings-pane="privacy">
             <div class="setting-group"><h3>Текущий доступ</h3><div class="permission-overview"><div class="permission-mode-icon"><svg viewBox="0 0 24 24"><path d="M3.5 7A2 2 0 0 1 5.5 5h4l2 2h7A2 2 0 0 1 20.5 9v8.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2Z"/></svg></div><div><strong id="settingsModeName">Рабочая папка</strong><small id="settingsModeDescription">Чтение внутри выбранной папки</small></div><button type="button" class="button secondary small-button" id="changeModeButton">Изменить</button></div></div>
@@ -343,6 +351,7 @@
 
     <div class="toast-stack" id="toastStack" aria-live="polite"></div>
   </div>
+  <script src="creation.js" defer></script>
   <script src="app.js" defer></script>
 </body>
 </html>

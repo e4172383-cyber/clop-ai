@@ -8,7 +8,10 @@ const {
   defaults,
   cleanSettings,
   parseAction,
+  requiresComputerAction,
+  looksLikeCodeDelivery,
   needsActionRecovery,
+  codeFallbackAction,
   resolveTarget,
   decision,
   approvalDecision,
@@ -56,6 +59,21 @@ test('needsActionRecovery catches code returned instead of creating the requeste
   ), true);
   assert.equal(needsActionRecovery('Объясни, как устроен HTML', '```html\n<div>пример</div>\n```'), false);
   assert.equal(needsActionRecovery('Создай план проекта', 'Готов подробный план без исходного кода.'), false);
+  assert.equal(needsActionRecovery('Сделай сайт на ПК', '<html><style>body{color:red}</style><body>Готово</body></html>'), true);
+  assert.equal(requiresComputerAction('Создай HTML файл с игрой'), true);
+  assert.equal(looksLikeCodeDelivery('Готово. Путь: C:\\site\\index.html'), false);
+});
+
+test('codeFallbackAction turns a refused HTML delivery into a local write action', () => {
+  assert.deepEqual(codeFallbackAction(
+    'Создай сайт на компьютере',
+    'Сохраните как `aquarium.html`\n```html\n<!doctype html><title>Аквариум</title>\n```',
+  ), {
+    tool: 'write',
+    path: 'aquarium.html',
+    content: '<!doctype html><title>Аквариум</title>',
+  });
+  assert.equal(codeFallbackAction('Покажи пример HTML', '```html\n<div>пример</div>\n```'), null);
 });
 
 test('resolveTarget keeps normal paths inside and detects traversal', () => {
@@ -162,7 +180,7 @@ test('cleanSettings accepts safe values, clamps numbers, and preserves protected
   assert.equal(cleaned.fast, true);
   assert.equal(cleaned.approvalMode, 'ask');
   assert.equal(cleaned.theme, 'system');
-  assert.equal(cleaned.maxSteps, 30);
+  assert.equal(Object.hasOwn(cleaned, 'maxSteps'), false);
   assert.equal(cleaned.shellTimeout, 5);
   assert.equal(cleaned.model, 'gpt-5-4-mini');
   assert.equal(cleaned.effort, 'high');
@@ -176,7 +194,7 @@ test('cleanSettings supports Extra High when the selected model offers it', () =
 });
 
 test('cleanSettings ignores invalid types and values', () => {
-  const previous = { ...defaults, theme: 'light', model: 'gpt-5-5', effort: 'medium', maxSteps: 8 };
+  const previous = { ...defaults, theme: 'light', model: 'gpt-5-5', effort: 'medium' };
   const cleaned = cleanSettings({
     animations: 'false',
     theme: 'neon',
