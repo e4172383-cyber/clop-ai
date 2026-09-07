@@ -18,13 +18,14 @@ const fsp = fs.promises;
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
-const { Readable } = require('node:stream');
+const { Readable, Transform } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
 const {
   defaults,
   cleanSettings,
   parseAction,
   requiresComputerAction,
+  isUnnecessaryClarification,
   looksLikeCodeDelivery,
   needsActionRecovery,
   codeFallbackAction,
@@ -46,6 +47,7 @@ const TERMS_FILE = path.join(__dirname, '..', 'TERMS.txt');
 const RENDERER_FILE = path.join(__dirname, 'renderer', 'index.html');
 const PRELOAD_FILE = path.join(__dirname, 'preload.cjs');
 const AGENT_FILE = path.join(__dirname, 'renderer', 'agent.html');
+const AGENT_TASKS_FILE = path.join(__dirname, 'renderer', 'agent-tasks.html');
 const AGENT_PRELOAD_FILE = path.join(__dirname, 'agent-preload.cjs');
 const SMOKE_TEST = process.argv.includes('--smoke-test');
 const MAX_HISTORY_MESSAGES = 500;
@@ -81,6 +83,8 @@ const CSP = [
 
 let mainWindow = null;
 let agentWindow = null;
+let agentTasksWindow = null;
+let agentDrag = null;
 let agentCursorTimer = null;
 let agentNetworkTimer = null;
 let agentOnline = false;
@@ -93,6 +97,7 @@ let authFile = '';
 let backupsDir = '';
 let backupIndexFile = '';
 let responseFilesDir = '';
+let qualityLogFile = '';
 let settings = { ...defaults };
 let chats = [];
 let actionLog = [];
@@ -252,6 +257,7 @@ function cleanStoredChat(raw) {
           ? { modelDurationMs: finiteMetric(message.modelDurationMs, 86_400_000) } : {}),
         ...(message.role === 'assistant' && finiteMetric(message.steps, 1_000) !== null
           ? { steps: finiteMetric(message.steps, 1_000) } : {}),
+        ...(message.role === 'user' && message.hint === true ? { hint: true } : {}),
       }))
     : [];
   return {
@@ -274,8 +280,15 @@ function initialiseStorage() {
   backupsDir = path.join(dataDir, 'backups');
   backupIndexFile = path.join(backupsDir, 'index.json');
   responseFilesDir = path.join(dataDir, 'response-files');
+  qualityLogFile = path.join(dataDir, 'ai-quality.jsonl');
   fs.mkdirSync(backupsDir, { recursive: true });
   fs.mkdirSync(responseFilesDir, { recursive: true });
+  try {
+    if (fs.existsSync(qualityLogFile) && fs.statSync(qualityLogFile).size > 5 * 1024 * 1024) {
+      fs.renameSync(qualityLogFile, `${qualityLogFile}.previous`);
+    }
+    fs.closeSync(fs.openSync(qualityLogFile, 'a', 0o600));
+  } catch { /* the app remains usable if local diagnostics cannot be opened */ }
 
   const storedSettings = readJson(settingsFile, {});
   settings = cleanSettings(storedSettings, defaults);
@@ -322,6 +335,26 @@ function saveHistory() {
 
 function saveActionLog() {
   writeJson(logFile, actionLog.slice(-MAX_ACTION_LOG));
+}
+
+function qualitySnippet(value, max = 2_000) {
+  return String(value || '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').slice(0, max);
+}
+
+function logQuality(kind, detail = {}) {
+  if (!qualityLogFile) return;
+  const record = {
+    ts: new Date().toISOString(),
+    version: app.getVersion(),
+    kind: qualitySnippet(kind, 80),
+    chatId: qualitySnippet(detail.chatId, 120),
+    model: qualitySnippet(detail.model || settings.model, 120),
+    request: qualitySnippet(detail.request),
+    response: qualitySnippet(detail.response),
+    error: qualitySnippet(detail.error),
+    action: qualitySnippet(detail.action),
+  };
+  try { fs.appendFileSync(qualityLogFile, `${JSON.stringify(record)}\n`, { encoding: 'utf8', mode: 0o600 }); } catch {}
 }
 
 function saveBackupIndex() {
@@ -615,14 +648,72 @@ function showMainWindow() {
 
 function positionAgent() {
   if (!agentWindow || agentWindow.isDestroyed()) return;
-  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-  const { x, y, width, height } = display.workArea;
-  agentWindow.setPosition(x + width - 142, y + height - 142, false);
+  const saved = settings.agentPosition;
+  const display = saved
+    ? screen.getDisplayNearestPoint({ x: saved.x + 58, y: saved.y + 58 })
+    : screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  const area = display.workArea;
+  const desiredX = saved?.x ?? (area.x + area.width - 142);
+  const desiredY = saved?.y ?? (area.y + area.height - 142);
+  const x = Math.max(area.x, Math.min(area.x + area.width - 116, desiredX));
+  const y = Math.max(area.y, Math.min(area.y + area.height - 116, desiredY));
+  agentWindow.setPosition(Math.round(x), Math.round(y), false);
+  positionAgentTasks();
 }
 
 function sendAgent(channel, value) {
   if (!agentWindow || agentWindow.isDestroyed() || agentWindow.webContents.isDestroyed()) return;
   agentWindow.webContents.send(channel, value);
+}
+
+function agentTaskItems() {
+  if (!currentRun) return [];
+  const items = actionLog.filter((entry) => entry.chatId === currentRun.chatId && entry.ts >= currentRun.startedAt)
+    .slice(-30).map(publicLog);
+  return items.length ? items : [{ id: 'thinking', ts: currentRun.startedAt, tool: 'thinking', status: 'running', summary: 'Анализирует запрос' }];
+}
+
+function positionAgentTasks() {
+  if (!agentTasksWindow || agentTasksWindow.isDestroyed() || !agentWindow || agentWindow.isDestroyed()) return;
+  const agent = agentWindow.getBounds();
+  const area = screen.getDisplayMatching(agent).workArea;
+  const width = 344;
+  const height = 196;
+  const x = Math.max(area.x, Math.min(area.x + area.width - width, agent.x + agent.width - width));
+  const above = agent.y - height - 8;
+  const y = above >= area.y ? above : Math.min(area.y + area.height - height, agent.y + agent.height + 8);
+  agentTasksWindow.setBounds({ x: Math.round(x), y: Math.round(y), width, height }, false);
+}
+
+function syncAgentTasks() {
+  if (!agentTasksWindow || agentTasksWindow.isDestroyed()) return;
+  const tasks = agentTaskItems();
+  if (!currentRun || settings.agentVisible === false) {
+    agentTasksWindow.hide();
+    return;
+  }
+  positionAgentTasks();
+  agentTasksWindow.webContents.send('agent-tasks', { tasks });
+  agentTasksWindow.showInactive();
+}
+
+function createAgentTasksWindow() {
+  if (SMOKE_TEST || agentTasksWindow && !agentTasksWindow.isDestroyed()) return;
+  agentTasksWindow = new BrowserWindow({
+    width: 344, height: 196, show: false, transparent: true, backgroundColor: '#00000000', frame: false,
+    resizable: false, maximizable: false, minimizable: false, fullscreenable: false, alwaysOnTop: true,
+    skipTaskbar: true, focusable: false, hasShadow: false, autoHideMenuBar: true, title: 'Clop Agent Tasks',
+    webPreferences: { preload: AGENT_PRELOAD_FILE, sandbox: true, contextIsolation: true, nodeIntegration: false, devTools: !app.isPackaged },
+  });
+  agentTasksWindow.setAlwaysOnTop(true, 'floating');
+  agentTasksWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  agentTasksWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  agentTasksWindow.webContents.on('will-navigate', (event, url) => {
+    if (url !== agentTasksWindow.webContents.getURL()) event.preventDefault();
+  });
+  agentTasksWindow.webContents.once('did-finish-load', syncAgentTasks);
+  agentTasksWindow.on('closed', () => { agentTasksWindow = null; });
+  agentTasksWindow.loadFile(AGENT_TASKS_FILE);
 }
 
 async function checkAgentNetwork() {
@@ -690,6 +781,7 @@ function createAgentWindow() {
   });
   agentWindow.on('closed', () => { agentWindow = null; });
   agentWindow.loadFile(AGENT_FILE);
+  createAgentTasksWindow();
   startAgentUpdates();
 }
 
@@ -697,7 +789,10 @@ function syncAgentVisibility() {
   if (SMOKE_TEST) return;
   if (!agentWindow || agentWindow.isDestroyed()) createAgentWindow();
   if (!agentWindow || agentWindow.isDestroyed()) return;
-  if (settings.agentVisible === false) agentWindow.hide();
+  if (settings.agentVisible === false) {
+    agentWindow.hide();
+    agentTasksWindow?.hide();
+  }
   else {
     positionAgent();
     agentWindow.showInactive();
@@ -710,6 +805,7 @@ function recordAction(tool, status, summary, chatId = '') {
   if (actionLog.length > MAX_ACTION_LOG) actionLog = actionLog.slice(-MAX_ACTION_LOG);
   saveActionLog();
   emit('action-log', { entry: publicLog(entry), logs: actionLog.slice(-100).reverse().map(publicLog) });
+  syncAgentTasks();
   return entry;
 }
 
@@ -719,6 +815,7 @@ function updateAction(entry, status, summary) {
   entry.summary = String(summary || entry.summary).slice(0, 2_000);
   saveActionLog();
   emit('action-log', { entry: publicLog(entry), logs: actionLog.slice(-100).reverse().map(publicLog) });
+  syncAgentTasks();
 }
 
 function ensureAgreement() {
@@ -1229,6 +1326,7 @@ async function executeAction(action, chatId) {
       throw new Error('Неизвестное действие.');
     }
     const outcomeStatus = outcome.result?.ok === false ? 'error' : 'done';
+    if (outcomeStatus === 'error') logQuality('tool-result-error', { chatId, action: JSON.stringify(action), error: outcome.result?.error || 'tool returned ok=false' });
     updateAction(logEntry, outcomeStatus, target?.abs || action.command || detail || `${tool}`);
     emit('action', { status: outcomeStatus, tool, detail, chatId, result: outcome.result, error: outcome.result?.error });
     return outcome;
@@ -1237,6 +1335,7 @@ async function executeAction(action, chatId) {
     if (logEntry) updateAction(logEntry, status, error.message);
     else recordAction(tool, status, target?.abs || action.path || action.command || tool, chatId);
     emit('action', { status: 'error', tool, detail: actionEventDetail(action, target), chatId, error: error.message });
+    logQuality('tool-exception', { chatId, action: JSON.stringify(action), error: error.message });
     return { result: { ok: false, tool, error: error.message } };
   }
 }
@@ -1247,8 +1346,53 @@ function toolProtocol(userText) {
   return `<clop_protocol>\nROLE: You are the execution engine inside the Clop Code desktop application on ${platformName}. You are not a web chat and you are not merely advising the user. The desktop application executes every clop_action you emit on the user's computer.\nACCESS: mode=${accessMode}; active working directory=${location}. In workspace mode, the active directory is the user's current project and is the default target. Do not ask the user to upload or resend files that you can inspect with list/read. Do not claim that the source task is missing before inspecting the active directory and relevant chat context.\nBEHAVIOR: For any clear request to create, change, fix, optimize, install, open, run, or test something, start doing it immediately. Inspect the project, make the required edits, run suitable checks, fix failures, and continue autonomously until the requested result exists on the computer. Prefer the most reasonable implementation from the current project and conversation. Ask one concise question only if two materially different targets remain after inspection and choosing one would risk destructive work. Never answer a computer task with plans, sample code, save-it-yourself instructions, a paraphrase of the request, or filler.\nACTIONS: Reply with exactly one XML block containing valid JSON whenever the next computer step is needed: <clop_action>{"tool":"list","path":"."}</clop_action>. Available tools: list {path}, read {path}, write {path,content}, shell {command}, screenshot {}, click {x,y}, type {text}, key {key}. Allowed keys: ENTER, TAB, ESC, BACKSPACE, UP, DOWN, LEFT, RIGHT, CTRL+A, CTRL+C, CTRL+V, CTRL+S, ALT+TAB. Paths may be absolute only in full mode. Use one action per turn, wait for its clop_result, then request the next action. Use write for files instead of printing their contents in chat. Never claim success before successful results and verification.\nFINISH: When the work is complete, return only a short Russian result: what was completed, the exact changed path(s), and the verification result. In chat mode, state briefly that the user must switch to Folder or Full mode because tools are disabled.\n</clop_protocol>\n<user_request>${JSON.stringify(userText)}</user_request>`;
 }
 
-function actionRecoveryPrompt(userText, attempt) {
-  return `<clop_protocol_reminder attempt="${attempt}">You are still inside Clop Code with working computer tools. Your previous reply did not perform the clear desktop task and is discarded without charging the user. Do not repeat it, explain it, ask for files already present in the active project, or return code in chat. Continue immediately with exactly one clop_action. If you have not inspected the project, use list/read now; otherwise perform the next write or shell step. Continue through verification before a brief final result. Original request: ${JSON.stringify(String(userText || ''))}</clop_protocol_reminder>`;
+function initialWorkspaceContext(userText) {
+  if (accessMode === 'chat' || !requiresComputerAction(userText)) return '';
+  let directory = settings.workDir;
+  if (accessMode === 'full') {
+    const explicit = /["«']([a-z]:\\[^"»'\r\n]+)["»']/iu.exec(String(userText || ''))?.[1];
+    if (explicit && fs.existsSync(explicit) && fs.statSync(explicit).isDirectory()) directory = explicit;
+  }
+  if (!directory || !fs.existsSync(directory) || !fs.statSync(directory).isDirectory()) return '';
+  try {
+    const inventory = listDirectorySync(directory, '.');
+    return `\n<clop_workspace_snapshot>${JSON.stringify({ directory, inventory })}</clop_workspace_snapshot>\nThe desktop app has already inspected the task's project directory. Use this real inventory, then read the relevant files and perform every requested change. Do not ask the user what to change.`;
+  } catch {
+    return '';
+  }
+}
+
+function takeHints(run) {
+  const hints = Array.isArray(run?.hints) ? run.hints.splice(0) : [];
+  return hints.map((item) => String(item.text || '').trim()).filter(Boolean);
+}
+
+function hintPrompt(hints, previous = '') {
+  return `<clop_hint>Пользователь добавил уточнение во время выполнения. Немедленно учти его в текущей задаче: ${JSON.stringify(hints.join('\n'))}. ${previous ? `Черновик предыдущего шага: ${JSON.stringify(String(previous).slice(0, 20_000))}` : ''}</clop_hint>`;
+}
+
+function addRunHint(payload = {}) {
+  if (!currentRun) throw new Error('Сейчас нет активного ответа. Сообщение оставлено в очереди.');
+  const text = String(payload.text || '').trim();
+  if (!text) throw new Error('Подсказка пустая.');
+  if (text.length > 20_000) throw new Error('Подсказка слишком длинная.');
+  if (payload.chatId && payload.chatId !== currentRun.chatId) throw new Error('Подсказка относится к другому чату.');
+  const chat = chats.find((item) => item.id === currentRun.chatId);
+  if (!chat) throw new Error('Активный чат не найден.');
+  const message = { role: 'user', content: text, ts: Date.now(), clientMessageId: id('hint-'), hint: true };
+  currentRun.hints.push({ text, ts: message.ts });
+  chat.messages.push(message);
+  chat.messages = chat.messages.slice(-MAX_HISTORY_MESSAGES);
+  chat.updatedAt = Date.now();
+  saveHistory();
+  emit('message', { chatId: chat.id, message, chat });
+  emit('hint', { chatId: chat.id, count: currentRun.hints.length });
+  recordAction('thinking', 'running', 'Получил подсказку пользователя', chat.id);
+  return { ok: true, message };
+}
+
+function actionRecoveryPrompt(userText, attempt, rejectedReply = '') {
+  return `<clop_protocol_reminder attempt="${attempt}">You are still inside Clop Code with working computer tools. The user's message already contains the task. Your previous reply is discarded without charging the user${isUnnecessaryClarification(userText, rejectedReply) ? ' because it asked the user to repeat requirements that were already provided' : ''}. Do not repeat it, explain it, ask what to change, ask for files already present, or return code in chat. Treat every concrete requirement in the original message as accepted work. Continue immediately with exactly one clop_action. If you have not inspected the active project, use list on "." now, then read the relevant files; otherwise perform the next write or shell step. Continue through verification before a brief final result. Original request: ${JSON.stringify(String(userText || ''))}</clop_protocol_reminder>`;
 }
 
 function modelResult(result) {
@@ -1392,15 +1536,17 @@ async function ask(payload = {}, options = {}) {
   }
 
   const controller = new AbortController();
-  const run = { controller, chatId: chat.id, stopped: false, startedAt: Date.now() };
+  const run = { controller, chatId: chat.id, stopped: false, startedAt: Date.now(), hints: [] };
   currentRun = run;
   emit('busy', { value: true, chatId: chat.id, startedAt: run.startedAt });
+  syncAgentTasks();
   let sentAttachments = [];
   const runStartedAt = run.startedAt;
   try {
     const prepared = await readSelectedAttachments(attachmentIds);
     sentAttachments = prepared.chosen;
     let nextText = toolProtocol(text || 'Проанализируй выбранное вложение.');
+    nextText += initialWorkspaceContext(text);
     let nextImages = prepared.images;
     let nextOffice = prepared.office;
     let finalReply = null;
@@ -1412,6 +1558,8 @@ async function ask(payload = {}, options = {}) {
     const writtenPaths = [];
     for (let step = 0; step < MAX_AUTONOMOUS_ACTIONS; step += 1) {
       if (controller.signal.aborted) throw makeAbortError();
+      const queuedHints = takeHints(run);
+      if (queuedHints.length) nextText = `${nextText}\n\n${hintPrompt(queuedHints)}`;
       emit('step', { chatId: chat.id, step: step + 1 });
       const thinkingDetail = step ? 'Анализирует результат действия' : 'Анализирует запрос';
       const thinking = recordAction('thinking', 'running', thinkingDetail, chat.id);
@@ -1445,16 +1593,25 @@ async function ask(payload = {}, options = {}) {
       }
       let action;
       try { action = parseAction(response.text); } catch (error) {
+        logQuality('malformed-model-action', { chatId: chat.id, request: text, response: response.text, error: error.message });
         throw new Error(`Ответ модели остановлен: ${error.message}`);
+      }
+      const arrivedHints = takeHints(run);
+      if (arrivedHints.length) {
+        nextText = hintPrompt(arrivedHints, response.text);
+        nextImages = [];
+        nextOffice = undefined;
+        continue;
       }
       if (!action) {
         const unfinishedComputerTask = accessMode !== 'chat'
           && requiresComputerAction(text)
-          && successfulComputerActions === 0;
+          && (successfulComputerActions === 0 || isUnnecessaryClarification(text, response.text));
         if (unfinishedComputerTask) {
+          logQuality('no-action-for-computer-task', { chatId: chat.id, request: text, response: response.text });
           if (actionRecoveryAttempts < 4) {
             actionRecoveryAttempts += 1;
-            nextText = actionRecoveryPrompt(text, actionRecoveryAttempts);
+            nextText = actionRecoveryPrompt(text, actionRecoveryAttempts, response.text);
             nextImages = [];
             nextOffice = undefined;
             emit('action', {
@@ -1468,6 +1625,7 @@ async function ask(payload = {}, options = {}) {
           throw new Error('Модель не выполнила ни одного действия. Лимит за пустые ответы не списан — повторите запрос.');
         }
         if (needsActionRecovery(text, response.text)) {
+          logQuality('code-delivered-instead-of-action', { chatId: chat.id, request: text, response: response.text });
           // Файл уже реально записан предыдущим действием. В этом случае не
           // запускаем повторную запись только из-за того, что модель решила
           // продублировать код в финальном сообщении: ниже код будет скрыт, а
@@ -1485,7 +1643,7 @@ async function ask(payload = {}, options = {}) {
           }
           if (actionRecoveryAttempts < 4) {
             actionRecoveryAttempts += 1;
-            nextText = actionRecoveryPrompt(text, actionRecoveryAttempts);
+            nextText = actionRecoveryPrompt(text, actionRecoveryAttempts, response.text);
             nextImages = [];
             nextOffice = undefined;
             emit('action', {
@@ -1518,7 +1676,10 @@ async function ask(payload = {}, options = {}) {
       nextImages = outcome.images || [];
       nextOffice = undefined;
     }
-    if (!finalReply) throw new Error('Задача зациклилась и была безопасно остановлена. Уточните запрос и продолжите.');
+    if (!finalReply) {
+      logQuality('agent-loop-limit', { chatId: chat.id, request: text, error: 'maximum autonomous actions reached' });
+      throw new Error('Задача зациклилась и была безопасно остановлена. Уточните запрос и продолжите.');
+    }
     const extractedReply = extractResponseFiles(finalReply);
     const persistedReply = await persistResponseFiles(extractedReply.files, controller.signal);
     let content = extractedReply.text.trim();
@@ -1573,11 +1734,13 @@ async function ask(payload = {}, options = {}) {
       return { ok: false, stopped: true };
     }
     emit('error', { message: error.message, chatId: chat.id });
+    logQuality('request-failed', { chatId: chat.id, request: text, error: error.message });
     throw error;
   } finally {
     for (const item of sentAttachments) attachments.delete(item.id);
     if (currentRun === run) currentRun = null;
     emit('busy', { value: false, chatId: chat.id });
+    syncAgentTasks();
     emit('attachments', { attachments: [...attachments.values()].map(publicAttachment) });
   }
 }
@@ -1606,22 +1769,54 @@ function handle(channel, fn) {
 }
 
 function registerIpc() {
+  const isAgentSender = (event) => [agentWindow, agentTasksWindow]
+    .some((window) => window && !window.isDestroyed() && event.sender === window.webContents);
   ipcMain.on('agent-open-main', (event) => {
-    if (!agentWindow || event.sender !== agentWindow.webContents) return;
+    if (!isAgentSender(event)) return;
     showMainWindow();
   });
   ipcMain.on('agent-menu', (event) => {
     if (!agentWindow || event.sender !== agentWindow.webContents) return;
     Menu.buildFromTemplate([
       { label: 'Открыть Clop Code', click: showMainWindow },
+      { label: 'Открыть журнал проблем ИИ', click: () => { if (qualityLogFile) shell.showItemInFolder(qualityLogFile); } },
       { type: 'separator' },
       { label: 'Выйти', click: () => { isQuitting = true; app.quit(); } },
     ]).popup({ window: agentWindow });
+  });
+  ipcMain.on('agent-drag-start', (event, point = {}) => {
+    if (!agentWindow || event.sender !== agentWindow.webContents) return;
+    if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return;
+    agentDrag = { point: { x: point.x, y: point.y }, bounds: agentWindow.getBounds() };
+  });
+  ipcMain.on('agent-drag-move', (event, point = {}) => {
+    if (!agentWindow || event.sender !== agentWindow.webContents || !agentDrag) return;
+    if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return;
+    const wanted = {
+      x: Math.round(agentDrag.bounds.x + point.x - agentDrag.point.x),
+      y: Math.round(agentDrag.bounds.y + point.y - agentDrag.point.y),
+    };
+    const display = screen.getDisplayNearestPoint({ x: wanted.x + 58, y: wanted.y + 58 });
+    const area = display.workArea;
+    agentWindow.setPosition(
+      Math.max(area.x, Math.min(area.x + area.width - 116, wanted.x)),
+      Math.max(area.y, Math.min(area.y + area.height - 116, wanted.y)),
+      false,
+    );
+    positionAgentTasks();
+  });
+  ipcMain.on('agent-drag-end', (event) => {
+    if (!agentWindow || event.sender !== agentWindow.webContents || !agentDrag) return;
+    agentDrag = null;
+    const [x, y] = agentWindow.getPosition();
+    settings = cleanSettings({ agentPosition: { x, y } }, settings);
+    saveSettings();
   });
   ipcMain.handle('agent-state', (event) => {
     if (!agentWindow || event.sender !== agentWindow.webContents) throw new Error('Недоверенный источник IPC.');
     return { online: agentOnline };
   });
+  handle('hint', async (payload = {}) => addRunHint(payload));
   handle('update-check', async () => {
     const releases = await apiJson('/releases.json');
     const release = releases?.desktop;
@@ -1642,7 +1837,35 @@ function registerIpc() {
     const file = path.join(isLinux ? app.getPath('downloads') : app.getPath('temp'), isLinux
       ? `Clop-Code-${release.version}-linux-x64.tar.xz`
       : `Clop-Code-Setup-${release.version}.exe`);
-    await pipeline(Readable.fromWeb(response.body), fs.createWriteStream(file));
+    const totalBytes = Math.max(0, Number(response.headers.get('content-length')) || 0);
+    let receivedBytes = 0;
+    let lastEmitAt = 0;
+    const startedAt = Date.now();
+    emit('update-progress', { phase: 'downloading', receivedBytes, totalBytes, speedBytesPerSecond: 0, etaSeconds: null, percent: 0 });
+    const meter = new Transform({
+      transform(chunk, _encoding, callback) {
+        receivedBytes += chunk.length;
+        const now = Date.now();
+        if (now - lastEmitAt >= 180 || (totalBytes && receivedBytes >= totalBytes)) {
+          lastEmitAt = now;
+          const elapsedSeconds = Math.max(0.2, (now - startedAt) / 1_000);
+          const speedBytesPerSecond = receivedBytes / elapsedSeconds;
+          const etaSeconds = totalBytes && speedBytesPerSecond > 0 ? Math.max(0, (totalBytes - receivedBytes) / speedBytesPerSecond) : null;
+          const percent = totalBytes ? Math.min(100, receivedBytes / totalBytes * 100) : 0;
+          emit('update-progress', { phase: 'downloading', receivedBytes, totalBytes, speedBytesPerSecond, etaSeconds, percent });
+        }
+        callback(null, chunk);
+      },
+    });
+    try {
+      await pipeline(Readable.fromWeb(response.body), meter, fs.createWriteStream(file));
+    } catch (error) {
+      try { fs.unlinkSync(file); } catch {}
+      emit('update-progress', { phase: 'error' });
+      throw error;
+    }
+    emit('update-progress', { phase: isLinux ? 'downloaded' : 'installing', receivedBytes, totalBytes: totalBytes || receivedBytes,
+      speedBytesPerSecond: 0, etaSeconds: 0, percent: 100 });
     if (isLinux) {
       shell.showItemInFolder(file);
       return { ok: true, downloaded: true, file };
@@ -1653,8 +1876,8 @@ function registerIpc() {
     return { ok: true };
   });
   handle('state', async () => {
-    if (token && !account) {
-      try { await refreshAccount(); } catch { /* state remains usable offline */ }
+    if (token) {
+      try { await refreshAccount(true); } catch { /* state remains usable offline */ }
     }
     return summaryState();
   });
@@ -2012,6 +2235,7 @@ function createWindow() {
     mainWindow = null;
     if (settings.agentVisible === false) {
       if (agentWindow && !agentWindow.isDestroyed()) agentWindow.destroy();
+      if (agentTasksWindow && !agentTasksWindow.isDestroyed()) agentTasksWindow.destroy();
       app.quit();
     }
   });
@@ -2059,6 +2283,7 @@ if (!hasLock) {
     isQuitting = true;
     clearInterval(agentCursorTimer);
     clearInterval(agentNetworkTimer);
+    if (agentTasksWindow && !agentTasksWindow.isDestroyed()) agentTasksWindow.destroy();
     rejectAllApprovals();
     stopChild();
   });

@@ -9,6 +9,7 @@ const {
   cleanSettings,
   parseAction,
   requiresComputerAction,
+  isUnnecessaryClarification,
   looksLikeCodeDelivery,
   needsActionRecovery,
   codeFallbackAction,
@@ -68,6 +69,13 @@ test('needsActionRecovery catches code returned instead of creating the requeste
 
 test('a natural-language project request requires real desktop actions', () => {
   assert.equal(requiresComputerAction('Сделай в темах iOS стеклянную тему и добавь функцию Full Optimization для мода Minecraft'), true);
+});
+
+test('clear desktop task with path and changes must not get a redundant question', () => {
+  const request = 'Переделать GUI в клиенте: вместо glass добавить iOS glass, сделать Full Optimization, модули watermark и музыкальный плеер. Путь C:\\Users\\me\\Desktop\\Average Client';
+  assert.equal(requiresComputerAction(request), true);
+  assert.equal(isUnnecessaryClarification(request, 'Что именно нужно исправить или добавить в Average Client?'), true);
+  assert.equal(isUnnecessaryClarification(request, 'Открыл проект и начал менять тему.'), false);
 });
 
 test('codeFallbackAction turns a refused HTML delivery into a local write action', () => {

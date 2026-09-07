@@ -1,0 +1,19 @@
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: transparent; }
+body { padding: 8px; font: 13px/1.35 "Segoe UI", sans-serif; color: #f6eee8; user-select: none; }
+.panel { height: 100%; padding: 12px; border: 1px solid rgba(255,255,255,.12); border-radius: 19px; background: linear-gradient(145deg, rgba(35,32,29,.96), rgba(20,19,18,.94)); box-shadow: 0 16px 42px rgba(0,0,0,.48), inset 0 1px rgba(255,255,255,.08); backdrop-filter: blur(20px); }
+header { display: flex; align-items: center; gap: 8px; height: 24px; margin: 0 2px 8px; }
+header strong { font-size: 12px; letter-spacing: .01em; }
+header small { margin-left: auto; color: #a99d95; }
+.live { width: 8px; height: 8px; border-radius: 50%; background: #f48643; box-shadow: 0 0 0 5px rgba(244,134,67,.11); animation: pulse 1.5s ease-in-out infinite; }
+.tasks { max-height: 132px; overflow-y: auto; padding-right: 3px; scrollbar-width: thin; scrollbar-color: #6f5140 transparent; }
+.task { display: grid; grid-template-columns: 22px 1fr; gap: 9px; min-height: 42px; padding: 8px 7px; border-radius: 12px; color: #d6cbc4; }
+.task + .task { border-top: 1px solid rgba(255,255,255,.055); }
+.icon { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 8px; background: rgba(244,134,67,.12); color: #f69a61; font-size: 12px; }
+.task strong { display: block; overflow: hidden; color: #f5ece6; font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.task small { display: block; overflow: hidden; margin-top: 2px; color: #978c84; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.task.done .icon { color: #74d99b; background: rgba(75,190,118,.12); }
+.task.error .icon { color: #ff7b72; background: rgba(255,90,82,.12); }
+@keyframes pulse { 50% { transform: scale(.72); opacity: .55; } }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; } }

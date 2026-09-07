@@ -7,7 +7,7 @@
 
   const elements = {};
   for (const id of [
-    'app', 'workspaceCrumb', 'workspaceName', 'connectionStatus', 'updateButton', 'sidebar', 'newChatButton', 'botBuilderButton',
+    'app', 'workspaceCrumb', 'workspaceName', 'connectionStatus', 'updateButton', 'updateButtonLabel', 'updateButtonMeta', 'sidebar', 'newChatButton', 'botBuilderButton',
     'railNewChatButton', 'chatRailButton', 'sidebarArtifactsButton', 'guestLoginPrompt',
     'chatSearch', 'chatGroups', 'chatList', 'chatsTop', 'chatsBottom', 'accountButton', 'userAvatar', 'accountName',
     'accountPlan', 'chatTitle', 'chatSubtitle', 'modeSwitch', 'emptyTitle', 'emptyNote',
@@ -376,6 +376,46 @@
     if (bytes < 1024) return `${bytes} Б`;
     if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} КБ`;
     return `${(bytes / (1024 ** 2)).toFixed(1)} МБ`;
+  }
+
+  function formatEta(seconds) {
+    const value = Math.max(0, Math.ceil(Number(seconds) || 0));
+    if (value < 60) return `${value} сек`;
+    return `${Math.floor(value / 60)} мин ${value % 60} сек`;
+  }
+
+  function renderUpdateProgress(progress = {}) {
+    const phase = progress.phase || 'downloading';
+    if (phase === 'error') {
+      delete elements.updateButton.dataset.downloading;
+      elements.updateButton.style.removeProperty('--download-progress');
+      elements.updateButton.disabled = false;
+      elements.updateButtonLabel.textContent = 'Обновить';
+      elements.updateButtonMeta.classList.add('hidden');
+      return;
+    }
+    const percent = Math.max(0, Math.min(100, Number(progress.percent) || 0));
+    elements.updateButton.dataset.downloading = 'true';
+    elements.updateButton.style.setProperty('--download-progress', `${percent}%`);
+    elements.updateButton.disabled = true;
+    elements.updateButtonMeta.classList.remove('hidden');
+    if (phase === 'installing') {
+      elements.updateButtonLabel.textContent = 'Устанавливаю…';
+      elements.updateButtonMeta.textContent = 'Загрузка завершена · приложение перезапустится';
+      return;
+    }
+    if (phase === 'downloaded') {
+      elements.updateButtonLabel.textContent = 'Скачано';
+      elements.updateButtonMeta.textContent = '100% · архив открыт в папке загрузок';
+      return;
+    }
+    elements.updateButtonLabel.textContent = `Обновление · ${Math.round(percent)}%`;
+    const amount = progress.totalBytes
+      ? `${formatBytes(progress.receivedBytes)} / ${formatBytes(progress.totalBytes)}`
+      : formatBytes(progress.receivedBytes);
+    const speed = progress.speedBytesPerSecond > 0 ? `${formatBytes(progress.speedBytesPerSecond)}/с` : 'считаю скорость';
+    const eta = Number.isFinite(progress.etaSeconds) ? `осталось ${formatEta(progress.etaSeconds)}` : 'считаю время';
+    elements.updateButtonMeta.textContent = `${amount} · ${speed} · ${eta}`;
   }
 
   function folderBaseName(value) {
@@ -1078,6 +1118,12 @@
       status.append(retry);
     } else if (item.status === 'queued') {
       status.append(document.createTextNode('Будет отправлено автоматически после текущего ответа. '));
+      if (state.busy && item.text && !(item.attachments || []).length && queueItemBelongsToCurrent(item)) {
+        const hint = node('button', 'text-link queue-hint-button', 'Передать как подсказку');
+        hint.type = 'button';
+        hint.addEventListener('click', () => sendQueuedAsHint(item.id));
+        status.append(hint);
+      }
     } else {
       status.append(document.createTextNode('Передаём сообщение в чат…'));
     }
@@ -1142,6 +1188,23 @@
     persistMessageQueue();
     renderMessages(true);
     queueMicrotask(drainMessageQueue);
+  }
+
+  async function sendQueuedAsHint(id) {
+    const index = state.messageQueue.findIndex((item) => item.id === id);
+    if (index < 0 || !state.busy) return;
+    const [item] = state.messageQueue.splice(index, 1);
+    persistMessageQueue();
+    renderMessages(true);
+    try {
+      await api.hint({ text: item.text, chatId: item.chatId || state.busyChatId });
+      toast('Подсказка передана текущему агенту.', 'success');
+    } catch (error) {
+      state.messageQueue.splice(index, 0, item);
+      persistMessageQueue();
+      renderMessages(true);
+      toast(errorText(error), 'error');
+    }
   }
 
   function renderMessages(scroll = false) {
@@ -2297,6 +2360,9 @@
       case 'busy':
         setBusy(Boolean(event.value), event.chatId || '', event.startedAt);
         break;
+      case 'update-progress':
+        renderUpdateProgress(event);
+        break;
       case 'step':
         state.step = { step: Number(event.step) || 1 };
         updateConnection();
@@ -2423,18 +2489,16 @@
   function bindEvents() {
     elements.updateButton.addEventListener('click', async () => {
       elements.updateButton.disabled = true;
-      elements.updateButton.textContent = 'Скачиваю…';
+      renderUpdateProgress({ phase: 'downloading', percent: 0, receivedBytes: 0, totalBytes: 0 });
       try {
         const result = await api.installUpdate();
         if (result?.downloaded) {
-          elements.updateButton.disabled = false;
-          elements.updateButton.textContent = 'Скачано';
+          renderUpdateProgress({ phase: 'downloaded', percent: 100 });
           toast('Обновление скачано. Распакуйте архив из папки загрузок.', 'success', 7000);
         }
       }
       catch (error) {
-        elements.updateButton.disabled = false;
-        elements.updateButton.textContent = 'Обновить';
+        renderUpdateProgress({ phase: 'error' });
         toast(errorText(error), 'error');
       }
     });
@@ -2736,6 +2800,8 @@
     try {
       hydrate(await api.state());
       updateConnection();
+      window.setInterval(() => refreshAccount(false), 60_000);
+      window.addEventListener('focus', () => refreshAccount(false));
       const update = await api.checkUpdate().catch(() => null);
       if (update?.available) elements.updateButton.classList.remove('hidden');
     } catch (error) {

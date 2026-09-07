@@ -21,7 +21,28 @@
     agent.style.setProperty('--eye-y', `${(dy * scale).toFixed(2)}px`);
   });
   api.onNetwork(({ online }) => setOnline(Boolean(online)));
-  agent.addEventListener('click', () => api.open());
+  let dragStart = null;
+  let dragged = false;
+  agent.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    dragStart = { x: event.screenX, y: event.screenY };
+    dragged = false;
+    agent.setPointerCapture(event.pointerId);
+    api.dragStart(dragStart);
+  });
+  agent.addEventListener('pointermove', (event) => {
+    if (!dragStart) return;
+    if (Math.hypot(event.screenX - dragStart.x, event.screenY - dragStart.y) > 4) dragged = true;
+    api.dragMove({ x: event.screenX, y: event.screenY });
+  });
+  agent.addEventListener('pointerup', (event) => {
+    if (!dragStart) return;
+    try { agent.releasePointerCapture(event.pointerId); } catch {}
+    api.dragEnd();
+    dragStart = null;
+    if (!dragged) api.open();
+  });
+  agent.addEventListener('pointercancel', () => { dragStart = null; api.dragEnd(); });
   agent.addEventListener('contextmenu', (event) => { event.preventDefault(); api.menu(); });
   api.state().then(({ online }) => setOnline(Boolean(online))).catch(() => setOnline(false));
 })();

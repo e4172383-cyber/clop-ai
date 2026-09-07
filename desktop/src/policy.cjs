@@ -1,11 +1,16 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const ACTIONS = new Set(['list', 'read', 'write', 'shell', 'screenshot', 'click', 'type', 'key']);
-const defaults = Object.freeze({ workDir: '', theme: 'dark', animations: true, enterSends: true, agentVisible: true, approvalMode: 'smart', shellTimeout: 90, model: '', effort: 'low', fast: false, agreementVersion: '', agreementAt: 0 });
+const defaults = Object.freeze({ workDir: '', theme: 'dark', animations: true, enterSends: true, agentVisible: true, agentPosition: null, approvalMode: 'smart', shellTimeout: 90, model: '', effort: 'low', fast: false, agreementVersion: '', agreementAt: 0 });
 function cleanSettings(input = {}, previous = defaults) {
   const out = { ...previous };
   for (const k of ['animations', 'enterSends', 'agentVisible', 'fast']) if (typeof input[k] === 'boolean') out[k] = input[k];
   if (['dark', 'light', 'system'].includes(input.theme)) out.theme = input.theme;
+  if (input.agentPosition === null) out.agentPosition = null;
+  else if (input.agentPosition && Number.isInteger(input.agentPosition.x) && Number.isInteger(input.agentPosition.y)
+    && Math.abs(input.agentPosition.x) <= 100_000 && Math.abs(input.agentPosition.y) <= 100_000) {
+    out.agentPosition = { x: input.agentPosition.x, y: input.agentPosition.y };
+  }
   if (['smart', 'allow', 'ask'].includes(input.approvalMode)) out.approvalMode = input.approvalMode;
   for (const [k, min, max] of [['shellTimeout', 5, 300]]) if (Number.isFinite(input[k])) out[k] = Math.min(max, Math.max(min, Math.floor(input[k])));
   if (typeof input.model === 'string' && /^[a-z0-9-]{0,60}$/.test(input.model)) out.model = input.model;
@@ -30,10 +35,15 @@ function parseAction(text) {
 }
 function requiresComputerAction(userText) {
   const request = String(userText || '');
-  const creationIntent = /(?:созд(?:ай|ать|а[йт]е)|сдел(?:ай|ать|а[йт]е)|добав(?:ь|ить|ьте)|собер(?:и|ите|ать)|разработ(?:ай|ать|айте)|напиш(?:и|ите)|сгенерир(?:уй|уйте)|передел(?:ай|айте)|измени(?:ть|те)|исправ(?:ь|ить|ьте)|оптимиз(?:ируй|ировать|ируйте)|установ(?:и|ить|ите)|create|add|build|implement|write|save|edit|fix|optimize|install)/iu.test(request);
+  const creationIntent = /(?:созд(?:ай|ать|а[йт]е)|сдел(?:ай|ать|а[йт]е)|добав(?:ь|ить|ьте)|собер(?:и|ите|ать)|разработ(?:ай|ать|айте)|напиш(?:и|ите)|сгенерир(?:уй|уйте)|передел(?:ай|ать|айте)|измен(?:и|ить|ите)|исправ(?:ь|ить|ьте)|оптимиз(?:ируй|ировать|ируйте)|установ(?:и|ить|ите)|create|add|build|implement|write|save|edit|fix|optimize|install)/iu.test(request);
   const computerArtifact = /(?:файл|папк|сайт|страниц|приложен|проект|игр|код|функц|мод(?:\s|$)|тем[ауеы]|интерфейс|оптимиз|hud|html|css|javascript|typescript|python|скрипт|репозитор|file|folder|website|page|app|project|game|code|function|module|theme|interface|optimiz|script|repository)/iu.test(request);
   const explanationOnly = /^(?:объясни|расскажи|покажи\s+пример|как\s+(?:работает|устроен|написать|создать)|what\s+is|explain|show\s+an?\s+example)\b/iu.test(request.trim());
   return creationIntent && computerArtifact && !explanationOnly;
+}
+function isUnnecessaryClarification(userText, responseText) {
+  if (!requiresComputerAction(userText)) return false;
+  const response = String(responseText || '');
+  return /(?:что\s+(?:именно|конкретно)\s+(?:нужно\s+)?(?:исправить|добавить|изменить|сделать)|уточните?\s*,?\s*что\s+(?:нужно\s+)?(?:исправить|добавить|изменить|сделать)|какую\s+(?:ошибку|задачу)\s+(?:нужно\s+)?(?:исправить|выполнить)|what\s+(?:exactly|specifically)\s+should\s+i\s+(?:fix|add|change|do))/iu.test(response);
 }
 function looksLikeCodeDelivery(responseText) {
   const response = String(responseText || '');
@@ -104,4 +114,4 @@ function approvalDecision(mode, tool, target = {}, approvalMode = 'smart', optio
   if (options.alwaysAsk || (target.outside && mode === 'full') || options.targetExists) verdict = 'ask';
   return verdict;
 }
-module.exports = { defaults, cleanSettings, parseAction, requiresComputerAction, looksLikeCodeDelivery, needsActionRecovery, codeFallbackAction, resolveTarget, decision, approvalDecision, sensitive };
+module.exports = { defaults, cleanSettings, parseAction, requiresComputerAction, isUnnecessaryClarification, looksLikeCodeDelivery, needsActionRecovery, codeFallbackAction, resolveTarget, decision, approvalDecision, sensitive };
