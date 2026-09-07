@@ -62,6 +62,8 @@ async function startBot() {
         { command: 'plans', description: 'Тарифы' },
         { command: 'corporate', description: 'Корпоративные тарифы' },
         { command: 'team', description: 'Моя корпоративная команда' },
+        { command: 'team_add', description: 'Пригласить участника' },
+        { command: 'team_remove', description: 'Удалить участника' },
         { command: 'phone', description: 'Сохранить номер для приглашения' },
         { command: 'buy', description: 'Купить тариф' },
         { command: 'myapi', description: 'Мой личный API-ключ' },
