@@ -1,10 +1,10 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const ACTIONS = new Set(['list', 'read', 'write', 'shell', 'screenshot', 'click', 'type', 'key']);
-const defaults = Object.freeze({ workDir: '', theme: 'dark', animations: true, enterSends: true, approvalMode: 'smart', shellTimeout: 90, model: '', effort: 'low', fast: false, agreementVersion: '', agreementAt: 0 });
+const defaults = Object.freeze({ workDir: '', theme: 'dark', animations: true, enterSends: true, agentVisible: true, approvalMode: 'smart', shellTimeout: 90, model: '', effort: 'low', fast: false, agreementVersion: '', agreementAt: 0 });
 function cleanSettings(input = {}, previous = defaults) {
   const out = { ...previous };
-  for (const k of ['animations', 'enterSends', 'fast']) if (typeof input[k] === 'boolean') out[k] = input[k];
+  for (const k of ['animations', 'enterSends', 'agentVisible', 'fast']) if (typeof input[k] === 'boolean') out[k] = input[k];
   if (['dark', 'light', 'system'].includes(input.theme)) out.theme = input.theme;
   if (['smart', 'allow', 'ask'].includes(input.approvalMode)) out.approvalMode = input.approvalMode;
   for (const [k, min, max] of [['shellTimeout', 5, 300]]) if (Number.isFinite(input[k])) out[k] = Math.min(max, Math.max(min, Math.floor(input[k])));
@@ -30,8 +30,8 @@ function parseAction(text) {
 }
 function requiresComputerAction(userText) {
   const request = String(userText || '');
-  const creationIntent = /(?:созд(?:ай|ать|а[йт]е)|сдел(?:ай|ать|а[йт]е)|собер(?:и|ите|ать)|разработ(?:ай|ать|айте)|напиш(?:и|ите)|сгенерир(?:уй|уйте)|передел(?:ай|айте)|измени(?:ть|те)|исправ(?:ь|ить|ьте)|установ(?:и|ить|ите)|create|build|implement|write|save|edit|fix|install)/iu.test(request);
-  const computerArtifact = /(?:файл|папк|сайт|страниц|приложен|проект|игр|код|html|css|javascript|typescript|python|скрипт|репозитор|file|folder|website|page|app|project|game|code|script|repository)/iu.test(request);
+  const creationIntent = /(?:созд(?:ай|ать|а[йт]е)|сдел(?:ай|ать|а[йт]е)|добав(?:ь|ить|ьте)|собер(?:и|ите|ать)|разработ(?:ай|ать|айте)|напиш(?:и|ите)|сгенерир(?:уй|уйте)|передел(?:ай|айте)|измени(?:ть|те)|исправ(?:ь|ить|ьте)|оптимиз(?:ируй|ировать|ируйте)|установ(?:и|ить|ите)|create|add|build|implement|write|save|edit|fix|optimize|install)/iu.test(request);
+  const computerArtifact = /(?:файл|папк|сайт|страниц|приложен|проект|игр|код|функц|мод(?:\s|$)|тем[ауеы]|интерфейс|оптимиз|hud|html|css|javascript|typescript|python|скрипт|репозитор|file|folder|website|page|app|project|game|code|function|module|theme|interface|optimiz|script|repository)/iu.test(request);
   const explanationOnly = /^(?:объясни|расскажи|покажи\s+пример|как\s+(?:работает|устроен|написать|создать)|what\s+is|explain|show\s+an?\s+example)\b/iu.test(request.trim());
   return creationIntent && computerArtifact && !explanationOnly;
 }

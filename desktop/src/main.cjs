@@ -6,6 +6,7 @@ const {
   desktopCapturer,
   dialog,
   ipcMain,
+  Menu,
   safeStorage,
   screen,
   session,
@@ -44,6 +45,8 @@ const SERVER = 'https://clop-ai.onrender.com';
 const TERMS_FILE = path.join(__dirname, '..', 'TERMS.txt');
 const RENDERER_FILE = path.join(__dirname, 'renderer', 'index.html');
 const PRELOAD_FILE = path.join(__dirname, 'preload.cjs');
+const AGENT_FILE = path.join(__dirname, 'renderer', 'agent.html');
+const AGENT_PRELOAD_FILE = path.join(__dirname, 'agent-preload.cjs');
 const SMOKE_TEST = process.argv.includes('--smoke-test');
 const MAX_HISTORY_MESSAGES = 500;
 const MAX_ACTION_LOG = 1_000;
@@ -77,6 +80,11 @@ const CSP = [
 ].join('; ');
 
 let mainWindow = null;
+let agentWindow = null;
+let agentCursorTimer = null;
+let agentNetworkTimer = null;
+let agentOnline = false;
+let isQuitting = false;
 let dataDir = '';
 let settingsFile = '';
 let historyFile = '';
@@ -596,6 +604,104 @@ function summaryState() {
 function emit(type, data = {}) {
   if (!mainWindow || mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) return;
   mainWindow.webContents.send('event', { type, ...data });
+}
+
+function showMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) createWindow();
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+function positionAgent() {
+  if (!agentWindow || agentWindow.isDestroyed()) return;
+  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  const { x, y, width, height } = display.workArea;
+  agentWindow.setPosition(x + width - 142, y + height - 142, false);
+}
+
+function sendAgent(channel, value) {
+  if (!agentWindow || agentWindow.isDestroyed() || agentWindow.webContents.isDestroyed()) return;
+  agentWindow.webContents.send(channel, value);
+}
+
+async function checkAgentNetwork() {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5_000);
+    const response = await fetch(`${SERVER}/health`, { cache: 'no-store', signal: controller.signal });
+    clearTimeout(timeout);
+    agentOnline = response.ok;
+  } catch {
+    agentOnline = false;
+  }
+  sendAgent('agent-network', { online: agentOnline });
+}
+
+function startAgentUpdates() {
+  clearInterval(agentCursorTimer);
+  clearInterval(agentNetworkTimer);
+  agentCursorTimer = setInterval(() => {
+    if (!agentWindow || agentWindow.isDestroyed() || !agentWindow.isVisible()) return;
+    sendAgent('agent-cursor', { point: screen.getCursorScreenPoint(), bounds: agentWindow.getBounds() });
+  }, 34);
+  agentCursorTimer.unref?.();
+  checkAgentNetwork();
+  agentNetworkTimer = setInterval(checkAgentNetwork, 10_000);
+  agentNetworkTimer.unref?.();
+}
+
+function createAgentWindow() {
+  if (SMOKE_TEST || agentWindow && !agentWindow.isDestroyed()) return;
+  agentWindow = new BrowserWindow({
+    width: 116,
+    height: 116,
+    show: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    frame: false,
+    resizable: false,
+    maximizable: false,
+    minimizable: false,
+    fullscreenable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    focusable: true,
+    hasShadow: false,
+    autoHideMenuBar: true,
+    title: 'Clop Agent',
+    webPreferences: {
+      preload: AGENT_PRELOAD_FILE,
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+      devTools: !app.isPackaged,
+    },
+  });
+  agentWindow.setAlwaysOnTop(true, 'floating');
+  agentWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  agentWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  agentWindow.webContents.on('will-navigate', (event, url) => {
+    if (url !== agentWindow.webContents.getURL()) event.preventDefault();
+  });
+  agentWindow.once('ready-to-show', () => {
+    positionAgent();
+    if (settings.agentVisible !== false) agentWindow.showInactive();
+  });
+  agentWindow.on('closed', () => { agentWindow = null; });
+  agentWindow.loadFile(AGENT_FILE);
+  startAgentUpdates();
+}
+
+function syncAgentVisibility() {
+  if (SMOKE_TEST) return;
+  if (!agentWindow || agentWindow.isDestroyed()) createAgentWindow();
+  if (!agentWindow || agentWindow.isDestroyed()) return;
+  if (settings.agentVisible === false) agentWindow.hide();
+  else {
+    positionAgent();
+    agentWindow.showInactive();
+  }
 }
 
 function recordAction(tool, status, summary, chatId = '') {
@@ -1138,11 +1244,11 @@ async function executeAction(action, chatId) {
 function toolProtocol(userText) {
   const location = settings.workDir || (accessMode === 'full' ? os.homedir() : 'не выбрана');
   const platformName = process.platform === 'win32' ? 'Windows' : process.platform === 'linux' ? 'Linux' : process.platform;
-  return `<clop_protocol>\nYou are Clop Code running in a ${platformName} desktop application. Access mode: ${accessMode}. Working directory: ${location}.\nWhen a computer action is necessary, reply with exactly one XML block and valid JSON: <clop_action>{"tool":"list","path":"."}</clop_action>. Available tools: list {path}, read {path}, write {path,content}, shell {command}, screenshot {}, click {x,y}, type {text}, key {key}. Allowed keys: ENTER, TAB, ESC, BACKSPACE, UP, DOWN, LEFT, RIGHT, CTRL+A, CTRL+C, CTRL+V, CTRL+S, ALT+TAB. Paths may be absolute only in full mode. A request to create, build, edit, fix, install, open, run, or test something on the computer is incomplete until you perform the needed actions and receive successful clop_result blocks. For file creation, use write; never merely print code or tell the user to save it. If several files are needed, request one action per turn and continue after each result. Continue autonomously until the requested work is complete. If access mode is chat, explain that the user must switch mode instead of pretending the work was performed. Never claim an action succeeded before receiving a <clop_result>. The application enforces its own access policy and may deny a step. Request one action at a time. When the task is complete, answer normally without a clop_action block.\n</clop_protocol>\n<user_request>${JSON.stringify(userText)}</user_request>`;
+  return `<clop_protocol>\nROLE: You are the execution engine inside the Clop Code desktop application on ${platformName}. You are not a web chat and you are not merely advising the user. The desktop application executes every clop_action you emit on the user's computer.\nACCESS: mode=${accessMode}; active working directory=${location}. In workspace mode, the active directory is the user's current project and is the default target. Do not ask the user to upload or resend files that you can inspect with list/read. Do not claim that the source task is missing before inspecting the active directory and relevant chat context.\nBEHAVIOR: For any clear request to create, change, fix, optimize, install, open, run, or test something, start doing it immediately. Inspect the project, make the required edits, run suitable checks, fix failures, and continue autonomously until the requested result exists on the computer. Prefer the most reasonable implementation from the current project and conversation. Ask one concise question only if two materially different targets remain after inspection and choosing one would risk destructive work. Never answer a computer task with plans, sample code, save-it-yourself instructions, a paraphrase of the request, or filler.\nACTIONS: Reply with exactly one XML block containing valid JSON whenever the next computer step is needed: <clop_action>{"tool":"list","path":"."}</clop_action>. Available tools: list {path}, read {path}, write {path,content}, shell {command}, screenshot {}, click {x,y}, type {text}, key {key}. Allowed keys: ENTER, TAB, ESC, BACKSPACE, UP, DOWN, LEFT, RIGHT, CTRL+A, CTRL+C, CTRL+V, CTRL+S, ALT+TAB. Paths may be absolute only in full mode. Use one action per turn, wait for its clop_result, then request the next action. Use write for files instead of printing their contents in chat. Never claim success before successful results and verification.\nFINISH: When the work is complete, return only a short Russian result: what was completed, the exact changed path(s), and the verification result. In chat mode, state briefly that the user must switch to Folder or Full mode because tools are disabled.\n</clop_protocol>\n<user_request>${JSON.stringify(userText)}</user_request>`;
 }
 
 function actionRecoveryPrompt(userText, attempt) {
-  return `<clop_protocol_reminder attempt="${attempt}">The task is not complete. You returned code or save instructions instead of changing the user's computer. Do not repeat any code in chat. Continue now with exactly one clop_action. Use write to create the first required file, then continue one action at a time, verify the result, and finally report the exact path. Original request: ${JSON.stringify(String(userText || ''))}</clop_protocol_reminder>`;
+  return `<clop_protocol_reminder attempt="${attempt}">You are still inside Clop Code with working computer tools. Your previous reply did not perform the clear desktop task and is discarded without charging the user. Do not repeat it, explain it, ask for files already present in the active project, or return code in chat. Continue immediately with exactly one clop_action. If you have not inspected the project, use list/read now; otherwise perform the next write or shell step. Continue through verification before a brief final result. Original request: ${JSON.stringify(String(userText || ''))}</clop_protocol_reminder>`;
 }
 
 function modelResult(result) {
@@ -1302,6 +1408,7 @@ async function ask(payload = {}, options = {}) {
     let modelDurationMs = 0;
     let completedSteps = 0;
     let actionRecoveryAttempts = 0;
+    let successfulComputerActions = 0;
     const writtenPaths = [];
     for (let step = 0; step < MAX_AUTONOMOUS_ACTIONS; step += 1) {
       if (controller.signal.aborted) throw makeAbortError();
@@ -1341,6 +1448,25 @@ async function ask(payload = {}, options = {}) {
         throw new Error(`Ответ модели остановлен: ${error.message}`);
       }
       if (!action) {
+        const unfinishedComputerTask = accessMode !== 'chat'
+          && requiresComputerAction(text)
+          && successfulComputerActions === 0;
+        if (unfinishedComputerTask) {
+          if (actionRecoveryAttempts < 4) {
+            actionRecoveryAttempts += 1;
+            nextText = actionRecoveryPrompt(text, actionRecoveryAttempts);
+            nextImages = [];
+            nextOffice = undefined;
+            emit('action', {
+              status: 'running',
+              tool: 'thinking',
+              chatId: chat.id,
+              detail: 'Модель не выполнила действие — Clop автоматически продолжает задачу без списания этого ответа',
+            });
+            continue;
+          }
+          throw new Error('Модель не выполнила ни одного действия. Лимит за пустые ответы не списан — повторите запрос.');
+        }
         if (needsActionRecovery(text, response.text)) {
           // Файл уже реально записан предыдущим действием. В этом случае не
           // запускаем повторную запись только из-за того, что модель решила
@@ -1384,6 +1510,9 @@ async function ask(payload = {}, options = {}) {
         break;
       }
       const outcome = await executeAction(action, chat.id);
+      if (outcome.result?.ok && action.tool !== 'list' && action.tool !== 'read' && action.tool !== 'screenshot') {
+        successfulComputerActions += 1;
+      }
       if (action.tool === 'write' && outcome.result?.ok && outcome.result.path) writtenPaths.push(outcome.result.path);
       nextText = modelResult(outcome.result);
       nextImages = outcome.images || [];
@@ -1477,6 +1606,22 @@ function handle(channel, fn) {
 }
 
 function registerIpc() {
+  ipcMain.on('agent-open-main', (event) => {
+    if (!agentWindow || event.sender !== agentWindow.webContents) return;
+    showMainWindow();
+  });
+  ipcMain.on('agent-menu', (event) => {
+    if (!agentWindow || event.sender !== agentWindow.webContents) return;
+    Menu.buildFromTemplate([
+      { label: 'Открыть Clop Code', click: showMainWindow },
+      { type: 'separator' },
+      { label: 'Выйти', click: () => { isQuitting = true; app.quit(); } },
+    ]).popup({ window: agentWindow });
+  });
+  ipcMain.handle('agent-state', (event) => {
+    if (!agentWindow || event.sender !== agentWindow.webContents) throw new Error('Недоверенный источник IPC.');
+    return { online: agentOnline };
+  });
   handle('update-check', async () => {
     const releases = await apiJson('/releases.json');
     const release = releases?.desktop;
@@ -1523,6 +1668,7 @@ function registerIpc() {
     }
     settings = next;
     saveSettings();
+    if (Object.hasOwn(patch, 'agentVisible')) syncAgentVisibility();
     try {
       if (token && ['model', 'effort', 'fast'].some((key) => Object.hasOwn(patch, key))) {
         const synced = await apiJson('/desk/profile', {
@@ -1855,9 +2001,19 @@ function createWindow() {
   mainWindow.webContents.on('will-redirect', (event) => event.preventDefault());
   mainWindow.webContents.on('will-attach-webview', (event) => event.preventDefault());
   mainWindow.once('ready-to-show', () => { if (!SMOKE_TEST) mainWindow.show(); });
+  mainWindow.on('close', (event) => {
+    if (!isQuitting && !SMOKE_TEST && settings.agentVisible !== false) {
+      event.preventDefault();
+      mainWindow.hide();
+    }
+  });
   mainWindow.on('closed', () => {
     stopEverything();
     mainWindow = null;
+    if (settings.agentVisible === false) {
+      if (agentWindow && !agentWindow.isDestroyed()) agentWindow.destroy();
+      app.quit();
+    }
   });
   mainWindow.loadFile(RENDERER_FILE);
 
@@ -1889,6 +2045,7 @@ if (!hasLock) {
     secureSession();
     registerIpc();
     createWindow();
+    createAgentWindow();
   }).catch((error) => {
     console.error(error);
     app.exit(1);
@@ -1897,8 +2054,11 @@ if (!hasLock) {
     event.preventDefault();
     callback(false);
   });
-  app.on('window-all-closed', () => app.quit());
+  app.on('window-all-closed', () => { if (SMOKE_TEST || settings.agentVisible === false) app.quit(); });
   app.on('before-quit', () => {
+    isQuitting = true;
+    clearInterval(agentCursorTimer);
+    clearInterval(agentNetworkTimer);
     rejectAllApprovals();
     stopChild();
   });

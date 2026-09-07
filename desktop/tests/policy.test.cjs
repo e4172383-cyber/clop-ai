@@ -61,7 +61,13 @@ test('needsActionRecovery catches code returned instead of creating the requeste
   assert.equal(needsActionRecovery('Создай план проекта', 'Готов подробный план без исходного кода.'), false);
   assert.equal(needsActionRecovery('Сделай сайт на ПК', '<html><style>body{color:red}</style><body>Готово</body></html>'), true);
   assert.equal(requiresComputerAction('Создай HTML файл с игрой'), true);
+  assert.equal(requiresComputerAction('Добавь ИИ и сделай стеклянную тему интерфейса'), true);
+  assert.equal(requiresComputerAction('Оптимизируй мод для Minecraft'), true);
   assert.equal(looksLikeCodeDelivery('Готово. Путь: C:\\site\\index.html'), false);
+});
+
+test('a natural-language project request requires real desktop actions', () => {
+  assert.equal(requiresComputerAction('Сделай в темах iOS стеклянную тему и добавь функцию Full Optimization для мода Minecraft'), true);
 });
 
 test('codeFallbackAction turns a refused HTML delivery into a local write action', () => {

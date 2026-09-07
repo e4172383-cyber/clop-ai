@@ -26,13 +26,16 @@
     'approvalCode', 'approvalNote', 'denyAction', 'allowAction', 'fullModeModal',
     'fullModeAcknowledge', 'confirmFullMode', 'settingsButton', 'settingsModal',
     'settingsTitle', 'settingsAccount', 'settingsAvatar', 'settingsAccountName', 'settingsPlan',
-    'themeSelect', 'animationsSetting', 'enterSendsSetting', 'approvalModeSetting', 'modelSelect', 'effortSelect',
+    'themeSelect', 'animationsSetting', 'agentVisibleSetting', 'enterSendsSetting', 'approvalModeSetting', 'modelSelect', 'effortSelect',
     'fastSetting', 'shellTimeoutSetting', 'emptyLoginButton',
     'settingsModeName', 'settingsModeDescription', 'changeModeButton', 'openBackups',
     'openTermsSettings', 'openWebsite', 'openBotBuilder', 'logoutButton', 'toastStack',
   ]) elements[id] = byId(id);
 
   const fallbackModels = [
+    { key: 'clop-3-1-pulsar', title: 'Clop 3.1 Pulsar', provider: 'clop', description: 'Самая мощная модель Clop 3.1 — от GO', available: false, plans: ['go', 'pro', 'max', 'max20', 'coderplus'] },
+    { key: 'clop-3-1-opus', title: 'Clop 3.1 Opus', provider: 'clop', description: 'Тщательная модель Clop 3.1', available: true, plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'] },
+    { key: 'clop-3-1-haiku', title: 'Clop 3.1 Haiku', provider: 'clop', description: 'Быстрая модель Clop 3.1', available: true, plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'] },
     { key: 'gpt-5-4-mini', title: 'GPT 5.4 Mini', provider: 'gpt', description: 'Быстрая компактная GPT-модель', available: true, plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'] },
     { key: 'gpt-luna', title: 'GPT 5.6 Луна', provider: 'gpt', description: 'Быстрая GPT-модель', available: true, plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'] },
     { key: 'gpt-spark', title: 'Codex 5.3 Спарк', provider: 'gpt', description: 'GPT-модель для кода', available: true, plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'] },
@@ -106,7 +109,7 @@
     loggedIn: false,
     user: null,
     settings: {
-      workDir: '', theme: 'dark', animations: true, enterSends: true, approvalMode: 'smart',
+      workDir: '', theme: 'dark', animations: true, agentVisible: true, enterSends: true, approvalMode: 'smart',
       shellTimeout: 90, model: '', effort: 'low', fast: false,
     },
     mode: 'chat',
@@ -561,6 +564,7 @@
     const settings = state.settings;
     elements.themeSelect.value = settings.theme || 'dark';
     elements.animationsSetting.checked = settings.animations !== false;
+    elements.agentVisibleSetting.checked = settings.agentVisible !== false;
     elements.enterSendsSetting.checked = settings.enterSends !== false;
     elements.approvalModeSetting.value = settings.approvalMode || 'smart';
     elements.fastToggle.checked = Boolean(settings.fast);
@@ -2485,6 +2489,7 @@
     elements.fastToggle.addEventListener('change', () => saveSetting({ fast: elements.fastToggle.checked }));
     elements.themeSelect.addEventListener('change', () => saveSetting({ theme: elements.themeSelect.value }));
     elements.animationsSetting.addEventListener('change', () => saveSetting({ animations: elements.animationsSetting.checked }));
+    elements.agentVisibleSetting.addEventListener('change', () => saveSetting({ agentVisible: elements.agentVisibleSetting.checked }));
     elements.enterSendsSetting.addEventListener('change', () => saveSetting({ enterSends: elements.enterSendsSetting.checked }));
     elements.approvalModeSetting.addEventListener('change', () => saveSetting({ approvalMode: elements.approvalModeSetting.value }));
     elements.modelSelect.addEventListener('change', () => saveSetting({ model: elements.modelSelect.value }));

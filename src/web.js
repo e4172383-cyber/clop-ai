@@ -151,13 +151,13 @@ const DESKTOP_DOWNLOADS = new Set([
   'Clop-Code-Setup-2.0.10.exe',
   'Clop-Code-Setup-2.0.11.exe',
   'Clop-Code-Setup-2.1.1.exe',
-  'Clop-Code-Setup-2.2.0.exe',
+  'Clop-Code-Setup-2.3.0.exe',
   'Clop-Code-2.0.6-linux-x64.tar.xz',
   'Clop-Code-2.0.9-linux-x64.tar.xz',
   'Clop-Code-2.0.10-linux-x64.tar.xz',
   'Clop-Code-2.0.11-linux-x64.tar.xz',
   'Clop-Code-2.1.1-linux-x64.tar.xz',
-  'Clop-Code-2.2.0-linux-x64.tar.xz',
+  'Clop-Code-2.3.0-linux-x64.tar.xz',
   'Clop-AI-Mobile-1.0.0.apk',
   'Clop-AI-Mobile-1.0.1.apk',
   'Clop-AI-Mobile-1.0.2.apk',
@@ -475,10 +475,10 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
     if (url.pathname === '/releases.json' && req.method === 'GET') {
       return sendJson(res, 200, {
         desktop: {
-          version: '2.2.0',
-          url: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-Setup-2.2.0.exe`,
-          windowsUrl: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-Setup-2.2.0.exe`,
-          linuxUrl: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-2.2.0-linux-x64.tar.xz`,
+          version: '2.3.0',
+          url: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-Setup-2.3.0.exe`,
+          windowsUrl: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-Setup-2.3.0.exe`,
+          linuxUrl: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-2.3.0-linux-x64.tar.xz`,
         },
         android: { version: '1.0.4', url: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-AI-Mobile-1.0.4.apk` },
       });
@@ -943,11 +943,24 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
                 ? `Файл «${extracted.truncated}» не был завершён моделью. Попросите продолжить.`
                 : `Готово — создано файлов: ${extracted.files.length}.`))
               : r.text;
-            store.pushMessage(chat, 'assistant', r.text, { tokens: r.tokens.total, model: model.key, effort: effortKey });
-            if (!model.unlimited) {
-              const measuredBillable = Number.isFinite(r.tokens.billable)
-                ? r.tokens.billable
-                : (Number(r.tokens.input || 0) + Number(r.tokens.output || 0) || Number(r.tokens.total || 0));
+            // Ответ desktop-агенту должен содержать действие, если клиент
+            // явно запросил работу в папке или полный доступ. Пустая отписка
+            // возвращается приложению для автоматического повтора, но квоту
+            // пользователя не расходует.
+            const expectsAction = /<clop_protocol_reminder\b/i.test(prompt)
+              || (/<clop_protocol>/i.test(prompt) && /(?:Access mode:\s*|\bmode=)(?:workspace|full)\b/i.test(prompt));
+            const issuedAction = /<clop_action>\s*\{[\s\S]*?\}\s*<\/clop_action>/i.test(r.text);
+            const chargeResponse = !expectsAction || issuedAction;
+            if (chargeResponse) {
+              store.pushMessage(chat, 'assistant', r.text, { tokens: r.tokens.total, model: model.key, effort: effortKey });
+            }
+            const measuredBillable = Number.isFinite(r.tokens.billable)
+              ? r.tokens.billable
+              : (Number(r.tokens.input || 0) + Number(r.tokens.output || 0) || Number(r.tokens.total || 0));
+            const billableForLimit = chargeResponse
+              ? Math.round(measuredBillable * (model.limitMultiplier ?? 1) * (fast ? 1.2 : 1))
+              : 0;
+            if (!model.unlimited && chargeResponse) {
               const offerBonus = addOfferUsage(u, model.key, measuredBillable);
               store.addUsage(u, {
                 ts: Date.now(), chatId: chat.id, model: model.key, effort: effortKey, plan: plan.key,
@@ -955,7 +968,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
                 cacheWrite: r.tokens.cacheWrite, cacheRead: r.tokens.cacheRead,
                 promptTokens: r.tokens.promptTokens,
                 total: r.tokens.total,
-                billable: Math.round(measuredBillable * (model.limitMultiplier ?? 1) * (fast ? 1.2 : 1)),
+                billable: billableForLimit,
                 billingVersion: BILLING_VERSION, offerBonus,
                 costUsd: r.costUsd, durationMs: r.durationMs, source: 'desktop',
               });
@@ -966,7 +979,14 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
               ok: true, text: displayText, files: outputFiles,
               output_files: outputFiles, truncatedFile: extracted.truncated,
               chatId: chat.id, model: model.key,
-              tokens: r.tokens.total, durationMs: r.durationMs,
+              tokens: {
+                input: r.tokens.promptTokens || 0,
+                output: r.tokens.output || 0,
+                total: billableForLimit,
+                billable: billableForLimit,
+              },
+              quotaCharged: chargeResponse,
+              durationMs: r.durationMs,
             });
           } catch (e) {
             return finish({ ok: false, error: String(e.message || e).slice(0, 300) });
@@ -1693,6 +1713,34 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
         await store.save();
         notifyUser(u.id, `🎁 Вам выдан тариф *${plan.title}* на ${days} дн. Приятной работы!`);
         return sendJson(res, 200, { ok: true, plan: plan.title, days });
+      }).catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
+      return;
+    }
+
+    if (url.pathname === '/api/user/refund-usage' && req.method === 'POST') {
+      readJsonBody(req).then(async (body) => {
+        if (reloadEachRequest) await store.load();
+        const u = store.findUser(String(body.userId || ''));
+        if (!u) return sendJson(res, 404, { ok: false, error: 'пользователь не найден' });
+        const from = Number(body.from);
+        const to = Number(body.to);
+        if (!Number.isFinite(from) || !Number.isFinite(to) || from >= to || to - from > 2 * 60 * 60 * 1000) {
+          return sendJson(res, 400, { ok: false, error: 'некорректный период возврата' });
+        }
+        const removed = [];
+        u.usage = (u.usage || []).filter((event) => {
+          const match = event.source === 'desktop' && event.ts >= from && event.ts <= to;
+          if (match) removed.push(event);
+          return !match;
+        });
+        const rawTokens = removed.reduce((sum, event) => sum + Math.max(0, Number(event.total || 0)), 0);
+        const refunded = removed.reduce((sum, event) => sum + Math.max(0, Number(event.billable || event.total || 0)), 0);
+        if (u.stats) {
+          u.stats.requests = Math.max(0, Number(u.stats.requests || 0) - removed.length);
+          u.stats.tokens = Math.max(0, Number(u.stats.tokens || 0) - rawTokens);
+        }
+        await store.save({ strict: true });
+        return sendJson(res, 200, { ok: true, removed: removed.length, refunded });
       }).catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
       return;
     }

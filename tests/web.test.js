@@ -145,18 +145,18 @@ test('serves the public desktop release page and resumable installers without da
   assert.match(page.headers.get('content-type'), /^text\/html/);
   const html = await page.text();
   assert.match(html, /Android 8/);
-  assert.match(html, /Clop-Code-Setup-2\.2\.0\.exe/);
-  assert.match(html, /Clop-Code-2\.2\.0-linux-x64\.tar\.xz/);
+  assert.match(html, /Clop-Code-Setup-2\.3\.0\.exe/);
+  assert.match(html, /Clop-Code-2\.3\.0-linux-x64\.tar\.xz/);
   assert.match(html, /Clop-AI-Mobile-1\.0\.4\.apk/);
   assert.doesNotMatch(html, /\d[\d ]{3,}\s*токен/iu);
 
-  const partial = await fetch(baseUrl + '/downloads/Clop-Code-Setup-2.2.0.exe', {
+  const partial = await fetch(baseUrl + '/downloads/Clop-Code-Setup-2.3.0.exe', {
     headers: { range: 'bytes=0-31' },
   });
   assert.equal(partial.status, 206);
   assert.equal(partial.headers.get('content-length'), '32');
   assert.match(partial.headers.get('content-range'), /^bytes 0-31\/\d+$/);
-  assert.match(partial.headers.get('content-disposition'), /Clop-Code-Setup-2\.2\.0\.exe/);
+  assert.match(partial.headers.get('content-disposition'), /Clop-Code-Setup-2\.3\.0\.exe/);
   assert.equal((await partial.arrayBuffer()).byteLength, 32);
 
   const apk = await fetch(baseUrl + '/downloads/Clop-AI-Mobile-1.0.4.apk', {
@@ -296,6 +296,53 @@ test('/desk/chat marks the request as a desktop action client', async () => {
   assert.equal(response.status, 200);
   assert.equal((await response.json()).ok, true);
   assert.equal(modelCalls[0].client, 'desktop');
+});
+
+test('/desk/chat does not charge a desktop task when the model performs no action', async () => {
+  const deviceId = 'desktop-no-action';
+  desktop.addDevice(user, deviceId, 'Clop Code no-action test');
+  const token = desktop.signToken(user.id, deviceId);
+  modelResults.push(okResult({
+    text: 'Уточните, какой файл нужно изменить.',
+    tokens: { input: 650_000, output: 453, total: 650_453, billable: 900, promptTokens: 447, cacheWrite: 0, cacheRead: 649_553 },
+  }));
+  const prompt = '<clop_protocol>ROLE: You are the execution engine inside Clop Code. ACCESS: mode=workspace; active working directory=C:/project.</clop_protocol>\n<user_request>Сделай оптимизацию проекта</user_request>';
+
+  const response = await fetch(baseUrl + '/desk/chat', {
+    method: 'POST',
+    headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+    body: JSON.stringify({ text: prompt, model: 'gpt-luna' }),
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.ok, true);
+  assert.equal(body.quotaCharged, false);
+  assert.equal(body.tokens.total, 0);
+  assert.equal(user.usage.length, 0);
+  assert.equal(user.chats[0].messages.some((message) => message.content === 'Уточните, какой файл нужно изменить.'), false);
+});
+
+test('admin can refund a bounded window of failed desktop usage', async () => {
+  const now = Date.now();
+  user.usage.push(
+    { ts: now - 2_000, source: 'desktop', total: 650_453, billable: 2_000 },
+    { ts: now - 1_000, source: 'site-chat', total: 50, billable: 50 },
+  );
+  user.stats.requests = 2;
+  user.stats.tokens = 650_503;
+  const authorization = 'Basic ' + Buffer.from('admin:web-test-password').toString('base64');
+  const response = await fetch(baseUrl + '/api/user/refund-usage', {
+    method: 'POST',
+    headers: { authorization, 'content-type': 'application/json' },
+    body: JSON.stringify({ userId: user.id, from: now - 3_000, to: now }),
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.deepEqual(body, { ok: true, removed: 1, refunded: 2_000 });
+  assert.equal(user.usage.length, 1);
+  assert.equal(user.usage[0].source, 'site-chat');
+  assert.equal(user.stats.requests, 1);
+  assert.equal(user.stats.tokens, 50);
 });
 
 test('the limited offer unlocks Astra, keeps its usage outside plan limits, and Sol is free with a visible multiplier', async () => {
