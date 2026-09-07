@@ -73,7 +73,7 @@ function publicProviderUsageSamples(now = Date.now()) {
   for (const user of store.allUsers()) {
     for (const event of user.usage || []) {
       const provider = MODELS[event.model]?.provider;
-      if ((provider !== 'gpt' && provider !== 'kimi') || Number(event.ts) < cutoff) continue;
+      if ((provider !== 'gpt' && provider !== 'kimi' && provider !== 'clop') || Number(event.ts) < cutoff) continue;
       result.push({
         provider,
         at: Number(event.ts) || 0,
@@ -355,19 +355,12 @@ function buildStats() {
       tokens: u.stats.tokens,
       lastSeen: u.lastSeen,
       createdAt: u.createdAt,
-      // Все движки — раздельные пулы, каждый со своими 5ч/неделя
-      claude: {
-        short: pick(all.claude.states.find((s) => s.key === 'short')),
-        long: pick(all.claude.states.find((s) => s.key === 'long')),
-      },
-      gpt: {
-        short: pick(all.gpt.states.find((s) => s.key === 'short')),
-        long: pick(all.gpt.states.find((s) => s.key === 'long')),
-      },
-      kimi: {
-        short: pick(all.kimi.states.find((s) => s.key === 'short')),
-        long: pick(all.kimi.states.find((s) => s.key === 'long')),
-      },
+      // Все движки — раздельные пулы. Окно может быть отключено тарифом,
+      // поэтому публикуем только реально действующие окна.
+      ...Object.fromEntries(Object.entries(all).map(([provider, result]) => [
+        provider,
+        Object.fromEntries(result.states.map((state) => [state.key, pick(state)])),
+      ])),
     };
   }).sort((a, b) => b.lastSeen - a.lastSeen);
 
@@ -939,7 +932,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
               return;
             }
             if (!r.ok) return finish({ ok: false, error: r.error, status: 502 });
-            if (r.provider === 'gpt') chat.gptThreadId = r.threadId; else chat.sessionId = r.sessionId;
+            if (r.runtime === 'gpt') chat.gptThreadId = r.threadId; else chat.sessionId = r.sessionId;
             // Модель создаёт файлы через безопасные текстовые маркеры. В
             // истории сохраняем полный ответ для продолжения контекста, а
             // приложению отдаём чистый текст и отдельные base64-вложения.
@@ -1553,7 +1546,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           if (!r.ok) return sendJson(res, 502, { ok: false, error: r.error });
           const tokens = r.tokens || {};
 
-          if (r.provider === 'gpt') chat.gptThreadId = r.threadId;
+          if (r.runtime === 'gpt') chat.gptThreadId = r.threadId;
           else chat.sessionId = r.sessionId;
 
           // Если модель завернула несколько файлов в %%%FILE%%% — собираем zip

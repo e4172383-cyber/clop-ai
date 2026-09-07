@@ -4,7 +4,7 @@ const WINDOW_MS = 60 * 60 * 1000;
 const RATE_WINDOW_MS = 60 * 1000;
 const THROUGHPUT_WINDOW_MS = RATE_WINDOW_MS;
 const MAX_SAMPLES = 40;
-const samples = { gpt: [], kimi: [] };
+const samples = { gpt: [], kimi: [], clop: [] };
 
 const finiteDuration = (value) => {
   const number = Number(value);
@@ -68,7 +68,7 @@ function providerSummary(provider, health, now, usageSamples = []) {
   if (health?.ok && last && !last.ok && now - last.at < 10 * 60 * 1000) status = 'degraded';
   return {
     key: provider,
-    title: provider === 'gpt' ? 'GPT' : 'Kimi',
+    title: provider === 'gpt' ? 'GPT' : provider === 'kimi' ? 'Kimi' : 'Clop 3.1',
     status,
     statusText: status === 'operational' ? 'Работает' : status === 'degraded' ? 'Есть сбои' : 'Недоступен',
     checkedAt: now,
@@ -88,9 +88,10 @@ export function publicServiceStatus({ gptHealth, kimiHealth, processingMs = 0, u
   const providers = {
     gpt: providerSummary('gpt', gptHealth, now, usageSamples),
     kimi: providerSummary('kimi', kimiHealth, now, usageSamples),
+    clop: providerSummary('clop', gptHealth, now, usageSamples),
   };
   const models = Object.values(MODELS)
-    .filter((model) => model.provider === 'gpt' || model.provider === 'kimi')
+    .filter((model) => model.provider === 'gpt' || model.provider === 'kimi' || model.provider === 'clop')
     .map((model) => ({
       key: model.key,
       title: model.title,

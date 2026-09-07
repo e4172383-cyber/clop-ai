@@ -33,13 +33,14 @@ function transcript(chat, prompt) {
  * (например gpt-5.6-terra). Держит контекст через resume по thread_id,
  * при потере сессии — досылает историю текстом заново.
  */
-export async function ask({ chat, modelCli, prompt, onDelta, fixedEffort, hideIdentity, fast, images, signal }) {
+export async function ask({ chat, modelCli, prompt, onDelta, fixedEffort, hideIdentity, identityTitle, fast, images, signal }) {
   const started = Date.now();
   const threadId = chat.gptThreadId;
   const job = {
     modelCli,
     fixedEffort,
     hideIdentity,
+    identityTitle,
     fast,
     threadId,
     resumeStdin: prompt,

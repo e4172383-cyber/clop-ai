@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 const planKeys = ['free', 'go', 'pro', 'max', 'max20', 'coderplus'];
-const providers = ['claude', 'gpt', 'kimi'];
+const providers = ['claude', 'gpt', 'kimi', 'clop'];
 process.env.TOKEN_LIMITS_JSON = JSON.stringify(Object.fromEntries(planKeys.map((key) => [
   key, Object.fromEntries(providers.map((provider) => [provider, { short: 100, long: 1000 }])),
 ])));

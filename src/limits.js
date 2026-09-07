@@ -124,6 +124,7 @@ export function windowState(u, key, provider, now = Date.now()) {
   const plan = planOf(u);
   const win = WINDOWS[key];
   const limit = plan.limits[provider][key];
+  if (limit === null) return null;
   const used = usedIn(u, win.ms, provider, now);
   const percent = Math.min(100, Math.round((used / limit) * 100));
   return {
@@ -141,7 +142,7 @@ export function windowState(u, key, provider, now = Date.now()) {
 // Лимиты одного провайдера (оба окна) — для проверки перед запросом к
 // конкретной модели: используется её MODELS[key].provider.
 export function checkLimits(u, provider, now = Date.now()) {
-  const states = Object.keys(WINDOWS).map((k) => windowState(u, k, provider, now));
+  const states = Object.keys(WINDOWS).map((k) => windowState(u, k, provider, now)).filter(Boolean);
   const blocked = states.find((s) => s.exceeded) || null;
   return { states, blocked };
 }

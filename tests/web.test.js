@@ -11,7 +11,7 @@ process.env.WEB_HOST = '127.0.0.1';
 process.env.WEB_PASSWORD = 'web-test-password';
 process.env.WEB_SESSION_SECRET = 'web-test-session-secret';
 const TEST_PLAN_KEYS = ['free', 'go', 'pro', 'max', 'max20', 'coderplus'];
-const TEST_PROVIDER_KEYS = ['claude', 'gpt', 'kimi'];
+const TEST_PROVIDER_KEYS = ['claude', 'gpt', 'kimi', 'clop'];
 const SYNTHETIC_TOKEN_LIMIT = 100;
 process.env.TOKEN_LIMITS_JSON = JSON.stringify(Object.fromEntries(TEST_PLAN_KEYS.map((plan) => [
   plan,
@@ -198,9 +198,10 @@ test('public status reports API and model routes without secrets or quota sizes'
   assert.equal(body.traffic.tokensPerSecond, 60);
   assert.equal(body.providers.gpt.tokensPerSecond, 60);
   assert.equal(body.providers.kimi.tokensPerSecond, 0, 'a message older than one minute leaves the speed window');
-  assert.deepEqual(Object.keys(body.providers).sort(), ['gpt', 'kimi']);
+  assert.deepEqual(Object.keys(body.providers).sort(), ['clop', 'gpt', 'kimi']);
   assert.ok(body.models.some((model) => model.provider === 'gpt'));
   assert.ok(body.models.some((model) => model.provider === 'kimi'));
+  assert.ok(body.models.some((model) => model.provider === 'clop'));
   assert.match(JSON.stringify(body), /GPT-6 Astra/);
   assert.doesNotMatch(JSON.stringify(body), /secret|auth|cli|quota/iu);
   assert.doesNotMatch(JSON.stringify(body), /inputTokens|outputTokens|totalTokens/iu);
@@ -375,8 +376,8 @@ test('/api/stats never returns quota sizes, even to the admin dashboard', async 
   assert.doesNotMatch(JSON.stringify(body.users), /"(?:_?used|_?limit)"/);
   for (const row of body.users) {
     for (const provider of Object.keys(config.PROVIDERS)) {
-      for (const window of ['short', 'long']) {
-        assert.deepEqual(Object.keys(row[provider][window]).sort(), ['percent', 'resetAt']);
+      for (const window of Object.values(row[provider])) {
+        assert.deepEqual(Object.keys(window).sort(), ['percent', 'resetAt']);
       }
     }
   }

@@ -26,14 +26,16 @@ export function codexBin() {
 // эта инструкция реально не даёт модели проговориться под давлением — проверено
 // живыми запросами). Держим отдельную "скрытую" рабочую директорию только для
 // моделей с hideIdentity — на обычные GPT-модели это никак не влияет.
-const HIDDEN_IDENTITY_DIR = path.join(SANDBOX_DIR, 'gpt-hidden-identity');
-function hiddenIdentityCwd() {
-  fs.mkdirSync(HIDDEN_IDENTITY_DIR, { recursive: true });
-  const agentsFile = path.join(HIDDEN_IDENTITY_DIR, 'AGENTS.md');
+const HIDDEN_IDENTITY_DIR = path.join(SANDBOX_DIR, 'clop-identity');
+function hiddenIdentityCwd(identityTitle = 'Clop 3.1') {
+  const slug = String(identityTitle).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'clop-3-1';
+  const dir = path.join(HIDDEN_IDENTITY_DIR, slug);
+  fs.mkdirSync(dir, { recursive: true });
+  const agentsFile = path.join(dir, 'AGENTS.md');
   // Всегда перезаписываем — если CLOP_IDENTITY_PROMPT поменяли в коде, файл
   // на диске (переживает рестарты в рамках одного деплоя) не должен отстать
-  fs.writeFileSync(agentsFile, CLOP_IDENTITY_PROMPT, 'utf8');
-  return HIDDEN_IDENTITY_DIR;
+  fs.writeFileSync(agentsFile, `${CLOP_IDENTITY_PROMPT}\n\nТвоё точное публичное название: ${identityTitle}.`, 'utf8');
+  return dir;
 }
 
 function freshArgs(modelCli, { fixedEffort, imagePaths, fast } = {}) {
@@ -158,8 +160,8 @@ export function runCodex(args, stdin, onDelta, cwd = SANDBOX_DIR, signal) {
  * виде оно переживает передачу по сети на чужой компьютер.
  */
 export async function runJob(job, onDelta, signal) {
-  const { modelCli, fixedEffort, hideIdentity, fast, threadId, resumeStdin, freshStdin, imagePaths = [] } = job;
-  const cwd = hideIdentity ? hiddenIdentityCwd() : SANDBOX_DIR;
+  const { modelCli, fixedEffort, hideIdentity, identityTitle, fast, threadId, resumeStdin, freshStdin, imagePaths = [] } = job;
+  const cwd = hideIdentity ? hiddenIdentityCwd(identityTitle) : SANDBOX_DIR;
   const opts = { fixedEffort, imagePaths, fast };
 
   if (threadId) {

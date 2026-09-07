@@ -5,7 +5,7 @@ import { parseTokenLimits } from '../src/token-limits.js';
 
 const SCHEMA = {
   plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'],
-  providers: ['claude', 'gpt', 'kimi'],
+  providers: ['claude', 'gpt', 'kimi', 'clop'],
   windows: ['short', 'long'],
 };
 const SYNTHETIC_TOKEN_LIMIT = 100;
@@ -29,6 +29,14 @@ test('accepts a complete synthetic token-limit matrix and freezes its copy', () 
   assert.equal(Object.isFrozen(parsed), true);
   assert.equal(Object.isFrozen(parsed.free), true);
   assert.equal(Object.isFrozen(parsed.free.gpt), true);
+});
+
+test('accepts null to disable a plan window for one provider', () => {
+  const input = syntheticMatrix();
+  input.max.clop.short = null;
+  const parsed = parseTokenLimits(JSON.stringify(input), SCHEMA);
+  assert.equal(parsed.max.clop.short, null);
+  assert.equal(parsed.max.clop.long, SYNTHETIC_TOKEN_LIMIT);
 });
 
 test('fails closed when TOKEN_LIMITS_JSON is absent or malformed', () => {

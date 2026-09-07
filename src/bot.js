@@ -38,15 +38,16 @@ export async function askModel({ chat, model, effortKey, prompt, onDelta, images
       }
       return { ...r, provider: 'kimi' };
     }
-    const selected = model?.provider === "gpt" ? model : MODELS[DEFAULT_MODEL];
+    const selected = model?.runtime === 'gpt' || model?.provider === 'gpt' ? model : MODELS[DEFAULT_MODEL];
     const r = await gptAsk({ chat, modelCli: selected.cli, prompt, onDelta, images,
       fixedEffort: selected.fixedEffort || (selected.supportsEffort ? effortKey : undefined),
-      hideIdentity: selected.hideIdentity, fast, signal });
-    recordProviderResult('gpt', r);
+      hideIdentity: selected.hideIdentity, identityTitle: selected.hideIdentity ? selected.title : undefined,
+      fast, signal });
+    recordProviderResult(selected.provider, r);
     if (!r.ok && AUTH_BROKEN.test(String(r.error || ""))) {
-      return { ...r, provider: "gpt", error: "Вход GPT временно недоступен. Владелец сервиса уже может проверить авторизацию." };
+      return { ...r, provider: selected.provider, runtime: 'gpt', error: 'Модель временно недоступна. Владелец сервиса уже может проверить подключение.' };
     }
-    return { ...r, provider: "gpt" };
+    return { ...r, provider: selected.provider, runtime: 'gpt' };
   }, signal);
 }
 import * as sites from './sites.js';
@@ -226,7 +227,7 @@ function usageText(u) {
     lines.push('');
   }
   // Для личных тарифов GPT и Kimi расходуются из отдельных пулов.
-  for (const provKey of activeTeam ? [] : ['gpt', 'kimi']) {
+  for (const provKey of activeTeam ? [] : ['gpt', 'kimi', 'clop']) {
     const prov = PROVIDERS[provKey];
     lines.push(`${prov.emoji} *${prov.title}*`);
     for (const s of all[provKey].states) {
@@ -344,9 +345,12 @@ function apiKeyText(res) {
     '',
     // Доступны и Claude, и GPT. Модель можно указывать как коротким id, так и
     // настоящим именем (claude-opus-5, gpt-5.6-sol) — принимаются оба.
-    // Брендированные Clop-модели через публичный API не отдаются.
+    // Для Clop-моделей показываем только публичный id и название; служебное
+    // имя запуска остаётся внутренней деталью.
     '*Модели* (в поле `"model"` — короткий id или полное имя):',
-    ...Object.values(MODELS).filter((m) => !m.hideIdentity).map((m) => `• \`${m.key}\` / \`${m.cli}\` — ${m.title}`),
+    ...Object.values(MODELS).map((m) => m.hideIdentity
+      ? `• \`${m.key}\` — ${m.title}`
+      : `• \`${m.key}\` / \`${m.cli}\` — ${m.title}`),
     '',
     `\`GET ${base}/v1/models\` с тем же \`x-api-key\` — список моделей с пометкой, какие доступны именно вам.`,
     '',
@@ -714,7 +718,7 @@ async function handleAsk(u, chatId, text, images = null) {
       return;
     }
 
-    if (res.provider === 'gpt') chat.gptThreadId = res.threadId;
+    if (res.runtime === 'gpt') chat.gptThreadId = res.threadId;
     else chat.sessionId = res.sessionId;
     chat.model = model.key;
     // Текущий размер контекста этого чата — вход+кэш этого хода примерно равен

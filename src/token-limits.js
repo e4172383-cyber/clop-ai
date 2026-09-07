@@ -52,12 +52,18 @@ export function parseTokenLimits(raw, schema) {
       const providerResult = {};
       for (const window of windows) {
         const value = parsed[plan][provider][window];
+        if (value === null) {
+          providerResult[window] = null;
+          continue;
+        }
         if (!Number.isSafeInteger(value) || value <= 0) {
-          throw invalid(`${path}.${window} must be a positive safe integer`);
+          throw invalid(`${path}.${window} must be a positive safe integer or null`);
         }
         providerResult[window] = value;
       }
-      if (windows.includes('short') && windows.includes('long') && providerResult.long < providerResult.short) {
+      if (windows.includes('short') && windows.includes('long')
+          && providerResult.short !== null && providerResult.long !== null
+          && providerResult.long < providerResult.short) {
         throw invalid(`${path}.long must be greater than or equal to short`);
       }
       planResult[provider] = Object.freeze(providerResult);

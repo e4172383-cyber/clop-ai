@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 const plans = ['free', 'go', 'pro', 'max', 'max20', 'coderplus'];
-const providers = ['claude', 'gpt', 'kimi'];
+const providers = ['claude', 'gpt', 'kimi', 'clop'];
 process.env.TOKEN_LIMITS_JSON = JSON.stringify(Object.fromEntries(plans.map((plan) => [
   plan,
   Object.fromEntries(providers.map((provider) => [provider, { short: 100, long: 100 }])),
