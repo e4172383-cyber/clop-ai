@@ -35,11 +35,12 @@ try {
     import('../src/config.js'),
     import('../src/desktop.js'),
     import('../src/limited-offer.js'),
+    import('../src/provider-status.js'),
   ]);
 } finally {
   globalThis.setInterval = realSetInterval;
 }
-const [web, store, webchat, config, desktop, limitedOffer] = modules;
+const [web, store, webchat, config, desktop, limitedOffer, providerStatus] = modules;
 
 let server;
 let baseUrl;
@@ -156,17 +157,28 @@ test('serves the public desktop release page and resumable installers without da
 });
 
 test('public status reports API and model routes without secrets or quota sizes', async () => {
+  providerStatus.recordProviderResult('gpt', {
+    ok: true,
+    durationMs: 2_000,
+    tokens: { output: 120, total: 600 },
+  });
   const response = await fetch(baseUrl + '/status.json');
   assert.equal(response.status, 200);
   const body = await response.json();
   assert.equal(body.ok, true);
   assert.equal(typeof body.server.processingMs, 'number');
   assert.equal(typeof body.server.uptimeSeconds, 'number');
+  assert.equal(typeof body.traffic, 'object');
+  assert.equal(body.traffic.requestWindowSeconds, 60);
+  assert.equal(body.traffic.requestsPerSecond, 0.017);
+  assert.equal(body.traffic.tokensPerSecond, 60);
+  assert.equal(body.providers.gpt.tokensPerSecond, 60);
   assert.deepEqual(Object.keys(body.providers).sort(), ['gpt', 'kimi']);
   assert.ok(body.models.some((model) => model.provider === 'gpt'));
   assert.ok(body.models.some((model) => model.provider === 'kimi'));
   assert.match(JSON.stringify(body), /GPT-6 Astra/);
-  assert.doesNotMatch(JSON.stringify(body), /token|secret|auth|cli/iu);
+  assert.doesNotMatch(JSON.stringify(body), /secret|auth|cli|quota/iu);
+  assert.doesNotMatch(JSON.stringify(body), /inputTokens|outputTokens|totalTokens/iu);
 });
 
 test('/chat/api/me exposes promo state and percentage-only provider limits', async () => {

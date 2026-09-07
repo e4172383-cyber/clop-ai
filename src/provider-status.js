@@ -1,6 +1,7 @@
 import { MODELS } from './config.js';
 
 const WINDOW_MS = 60 * 60 * 1000;
+const RATE_WINDOW_MS = 60 * 1000;
 const MAX_SAMPLES = 40;
 const samples = { gpt: [], kimi: [] };
 
@@ -9,12 +10,24 @@ const finiteDuration = (value) => {
   return Number.isFinite(number) && number >= 0 ? Math.round(number) : null;
 };
 
+const finiteTokens = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? Math.round(number) : 0;
+};
+
+const roundedRate = (value, digits = 2) => {
+  if (!Number.isFinite(value)) return null;
+  const scale = 10 ** digits;
+  return Math.round(value * scale) / scale;
+};
+
 export function recordProviderResult(provider, result = {}) {
   if (!samples[provider]) return;
   samples[provider].push({
     ok: result.ok === true,
     at: Date.now(),
     durationMs: finiteDuration(result.durationMs),
+    outputTokens: finiteTokens(result.tokens?.output),
   });
   samples[provider] = samples[provider].slice(-MAX_SAMPLES);
 }
@@ -31,6 +44,10 @@ function providerSummary(provider, health, now) {
   const lastSuccess = successes.at(-1) || null;
   const durations = successes.map((sample) => sample.durationMs).filter(Number.isFinite).sort((a, b) => a - b);
   const medianMs = durations.length ? durations[Math.floor(durations.length / 2)] : null;
+  const currentMinute = recent.filter((sample) => now - sample.at <= RATE_WINDOW_MS);
+  const throughput = successes.filter((sample) => sample.durationMs > 0 && sample.outputTokens > 0);
+  const outputTokens = throughput.reduce((total, sample) => total + sample.outputTokens, 0);
+  const generationSeconds = throughput.reduce((total, sample) => total + sample.durationMs, 0) / 1000;
   let status = health?.ok ? 'operational' : 'unavailable';
   if (health?.ok && last && !last.ok && now - last.at < 10 * 60 * 1000) status = 'degraded';
   return {
@@ -44,6 +61,9 @@ function providerSummary(provider, health, now) {
     medianResponseMs: medianMs,
     recentRequests: recent.length,
     recentSuccessPercent: recent.length ? Math.round((successes.length / recent.length) * 100) : null,
+    requestsPerSecond: recent.length ? roundedRate(currentMinute.length / (RATE_WINDOW_MS / 1000), 3) : null,
+    tokensPerSecond: generationSeconds > 0 ? roundedRate(outputTokens / generationSeconds, 1) : null,
+    throughputSamples: throughput.length,
   };
 }
 
@@ -65,6 +85,9 @@ export function publicServiceStatus({ gptHealth, kimiHealth, processingMs = 0, n
     }));
   const statuses = Object.values(providers).map((provider) => provider.status);
   const status = statuses.includes('unavailable') ? 'partial' : statuses.includes('degraded') ? 'degraded' : 'operational';
+  const providerValues = Object.values(providers);
+  const requestRates = providerValues.map((provider) => provider.requestsPerSecond).filter(Number.isFinite);
+  const tokenRates = providerValues.map((provider) => provider.tokensPerSecond).filter(Number.isFinite);
   return {
     ok: true,
     generatedAt: now,
@@ -74,8 +97,13 @@ export function publicServiceStatus({ gptHealth, kimiHealth, processingMs = 0, n
       uptimeSeconds: Math.floor(process.uptime()),
       processingMs: finiteDuration(processingMs) || 0,
     },
+    traffic: {
+      requestsPerSecond: requestRates.length ? roundedRate(requestRates.reduce((sum, value) => sum + value, 0), 3) : null,
+      tokensPerSecond: tokenRates.length ? roundedRate(tokenRates.reduce((sum, value) => sum + value, 0), 1) : null,
+      requestWindowSeconds: RATE_WINDOW_MS / 1000,
+      throughputSamples: providerValues.reduce((sum, provider) => sum + provider.throughputSamples, 0),
+    },
     providers,
     models,
   };
 }
-
