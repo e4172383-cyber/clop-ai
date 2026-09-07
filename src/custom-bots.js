@@ -181,20 +181,30 @@ export async function handleCustomBotWebhook(id, secret, headerSecret, update) {
     if (String(message.business_connection_id || '') !== String(bot.businessConnectionId || '')) return true;
     if (String(message.from?.id || '') === bot.ownerId || message.sender_business_bot) return true;
   }
-  if (/^\/start(?:\s|$)/i.test(text)) { await sendText(token, chatId, bot.welcomeText); return true; }
-  if (/^\/prices(?:\s|$)/i.test(text)) { await sendText(token, chatId, bot.pricesText); return true; }
-  if (/^\/clear(?:\s|$)/i.test(text)) { delete bot.dialogues[String(chatId)]; store.saveSoon(); await sendText(token, chatId, 'Контекст очищен. Можно начать новую тему.'); return true; }
+  const dialogueKey = `${isBusiness ? 'business' : 'bot'}:${chatId}`;
+  const sendCommandReply = async (reply) => {
+    if (isBusiness && bot.businessMode === 'draft') {
+      const customer = [message.from?.first_name, message.from?.last_name].filter(Boolean).join(' ') || `чат ${chatId}`;
+      await sendText(token, bot.ownerId, `Черновик ответа для ${customer}:\n\n${reply}`);
+      return;
+    }
+    await sendText(token, chatId, reply, isBusiness ? bot.businessConnectionId : '');
+  };
+  if (/^\/start(?:\s|$)/i.test(text)) { await sendCommandReply(bot.welcomeText); return true; }
+  if (/^\/prices(?:\s|$)/i.test(text)) { await sendCommandReply(bot.pricesText); return true; }
+  if (/^\/clear(?:\s|$)/i.test(text)) { delete bot.dialogues[dialogueKey]; store.saveSoon(); await sendCommandReply('Контекст очищен. Можно начать новую тему.'); return true; }
 
   await telegram(token, 'sendChatAction', { chat_id: chatId, action: 'typing', ...(isBusiness ? { business_connection_id: bot.businessConnectionId } : {}) }).catch(() => {});
-  const dialogueKey = `${isBusiness ? 'business' : 'bot'}:${chatId}`;
   const history = Array.isArray(bot.dialogues[dialogueKey]) ? bot.dialogues[dialogueKey].slice(-10) : [];
   const payload = { model: bot.model, messages: [{ role: 'system', content: bot.systemPrompt }, ...history, { role: 'user', content: text }] };
   let result;
   try {
     if (bot.apiMode === 'own') {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 55_000);
       const response = await fetch(`${bot.ownBaseUrl}/v1/chat/completions`, {
-        method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${decrypt(bot.apiKey)}` }, body: JSON.stringify(payload),
-      });
+        method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${decrypt(bot.apiKey)}` }, body: JSON.stringify(payload), signal: controller.signal,
+      }).finally(() => clearTimeout(timeout));
       const body = await response.json().catch(() => null);
       if (!response.ok) throw new Error(body?.error?.message || body?.error || `API ${response.status}`);
       result = body;
