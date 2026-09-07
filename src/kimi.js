@@ -4,7 +4,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { MAX_CONTEXT_MESSAGES, REQUEST_TIMEOUT_MS } from './config.js';
-import { home as kimiHome, isReady as isKimiReady, save as saveKimiAuth, sessionInfo as kimiSessionInfo } from './kimiauth.js';
+import { home as kimiHome, isReady as isKimiReady, refreshSessionInfo as refreshKimiSession, save as saveKimiAuth, sessionInfo as kimiSessionInfo } from './kimiauth.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const KIMI_ENTRY = path.join(ROOT, 'node_modules', '@moonshot-ai', 'kimi-code', 'dist', 'main.mjs');
@@ -168,13 +168,20 @@ export async function healthCheck() {
     };
   }
   if (providerProbe.result && Date.now() - providerProbe.at < 60_000) return providerProbe.result;
-  const session = kimiSessionInfo();
+  let session;
   let result;
   try {
-    const response = await fetch(`${session.baseUrl}/usages`, {
+    session = await refreshKimiSession();
+    if (!session) return { ok: false, version: 'Требуется вход в Kimi Code' };
+    const requestUsage = () => fetch(`${session.baseUrl}/usages`, {
       headers: { authorization: `Bearer ${session.accessToken}`, accept: 'application/json', 'user-agent': 'kimi-code-cli/0.41.0' },
       signal: AbortSignal.timeout(10_000),
     });
+    let response = await requestUsage();
+    if (response.status === 401) {
+      session = await refreshKimiSession({ force: true });
+      response = await requestUsage();
+    }
     const body = await response.text();
     if (response.ok) result = { ok: true, version: 'Kimi Code готов' };
     else if (response.status === 429 && /insufficient balance|resource_exhausted|quota_exceeded|credits used up/i.test(body)) {

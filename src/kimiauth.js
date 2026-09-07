@@ -55,6 +55,66 @@ export function sessionInfo(dir = home()) {
   return null;
 }
 
+function tokenRecord(dir = home()) {
+  const credentialsDir = path.join(dir, 'credentials');
+  if (!fs.existsSync(credentialsDir)) return null;
+  for (const entry of fs.readdirSync(credentialsDir, { withFileTypes: true })) {
+    if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+    const file = path.join(credentialsDir, entry.name);
+    try {
+      const value = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (typeof value?.access_token === 'string' && value.access_token.length > 20) return { file, value };
+    } catch {}
+  }
+  return null;
+}
+
+function authHost(dir = home()) {
+  try {
+    const region = fs.readFileSync(path.join(dir, 'region'), 'utf8').trim();
+    return region === 'global' ? 'https://auth.kimi.ai' : 'https://auth.kimi.com';
+  } catch {
+    return 'https://auth.kimi.com';
+  }
+}
+
+export async function refreshSessionInfo({ dir = home(), force = false, fetchImpl = fetch, oauthHost = authHost(dir) } = {}) {
+  const record = tokenRecord(dir);
+  if (!record) return null;
+  const expiresAt = Number(record.value.expires_at || 0) * 1000;
+  if (!force && expiresAt > Date.now() + 60_000) return sessionInfo(dir);
+  const refreshToken = record.value.refresh_token;
+  if (typeof refreshToken !== 'string' || refreshToken.length < 20) return sessionInfo(dir);
+  const response = await fetchImpl(`${String(oauthHost).replace(/\/+$/, '')}/api/oauth/token`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' },
+    body: new URLSearchParams({
+      client_id: '17e5f671-d194-4dfb-9706-5516cb48c098',
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+    }).toString(),
+    signal: AbortSignal.timeout(10_000),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || typeof payload.access_token !== 'string' || payload.access_token.length < 20) {
+    throw new Error(`Kimi OAuth refresh failed (HTTP ${response.status})`);
+  }
+  const next = {
+    ...record.value,
+    access_token: payload.access_token,
+    refresh_token: typeof payload.refresh_token === 'string' && payload.refresh_token.length >= 20
+      ? payload.refresh_token : refreshToken,
+    expires_at: Math.floor(Date.now() / 1000) + Math.max(60, Number(payload.expires_in) || 3600),
+    ...(typeof payload.scope === 'string' ? { scope: payload.scope } : {}),
+    ...(typeof payload.token_type === 'string' ? { token_type: payload.token_type } : {}),
+  };
+  const temporary = `${record.file}.refresh-${process.pid}`;
+  fs.writeFileSync(temporary, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
+  fs.renameSync(temporary, record.file);
+  await save();
+  return sessionInfo(dir);
+}
+
 function safeRelative(rel) {
   return rel && !path.isAbsolute(rel) && !rel.split(/[\\/]+/).includes('..');
 }
