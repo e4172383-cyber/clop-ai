@@ -38,10 +38,12 @@ import { extractFiles, filesForJson } from './files.js';
 import { buildZip } from './zip.js';
 import { listApiKeys, createApiKey, deleteApiKey, proxyApiRequest, cloudEnabled } from './cloud.js';
 import * as chatArtifacts from './chatartifacts.js';
+import { API_PRICES, STARS_PER_USD, MIN_TOPUP_STARS, MAX_TOPUP_STARS, chargeMicros, microsToUsd } from './billing.js';
 import { voiceLimitState, startVoiceSession, chargeVoiceHeartbeat, stopVoiceSession } from './voice-limits.js';
 import { healthCheck as gptHealthCheck } from './gpt.js';
 import { healthCheck as kimiHealthCheck } from './kimi.js';
 import { publicServiceStatus } from './provider-status.js';
+import { BOT_TEMPLATES, listCustomBots, createCustomBot, deleteCustomBot, handleCustomBotWebhook } from './custom-bots.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(__dirname, 'public');
@@ -149,11 +151,13 @@ const DESKTOP_DOWNLOADS = new Set([
   'Clop-Code-Setup-2.0.10.exe',
   'Clop-Code-Setup-2.0.11.exe',
   'Clop-Code-Setup-2.1.1.exe',
+  'Clop-Code-Setup-2.2.0.exe',
   'Clop-Code-2.0.6-linux-x64.tar.xz',
   'Clop-Code-2.0.9-linux-x64.tar.xz',
   'Clop-Code-2.0.10-linux-x64.tar.xz',
   'Clop-Code-2.0.11-linux-x64.tar.xz',
   'Clop-Code-2.1.1-linux-x64.tar.xz',
+  'Clop-Code-2.2.0-linux-x64.tar.xz',
   'Clop-AI-Mobile-1.0.0.apk',
   'Clop-AI-Mobile-1.0.1.apk',
   'Clop-AI-Mobile-1.0.2.apk',
@@ -453,6 +457,20 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
       });
       return res.end('ok');
     }
+    const customBotHook = /^\/custom-bot\/([^/]+)\/([^/]+)$/.exec(url.pathname);
+    if (customBotHook && req.method === 'POST') {
+      readJsonBody(req).then(async (body) => {
+        if (reloadEachRequest) await store.load();
+        const handled = await handleCustomBotWebhook(
+          decodeURIComponent(customBotHook[1]),
+          decodeURIComponent(customBotHook[2]),
+          String(req.headers['x-telegram-bot-api-secret-token'] || ''),
+          body,
+        );
+        return sendJson(res, handled ? 200 : 404, { ok: handled });
+      }).catch((e) => sendJson(res, 200, { ok: false, error: String(e.message || e) }));
+      return;
+    }
     if (url.pathname === '/status.json' && req.method === 'GET') {
       currentPublicStatus().then((status) => sendJson(res, 200, status)).catch(() => sendJson(res, 200, publicServiceStatus({
         gptHealth: { ok: false },
@@ -464,10 +482,10 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
     if (url.pathname === '/releases.json' && req.method === 'GET') {
       return sendJson(res, 200, {
         desktop: {
-          version: '2.1.1',
-          url: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-Setup-2.1.1.exe`,
-          windowsUrl: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-Setup-2.1.1.exe`,
-          linuxUrl: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-2.1.1-linux-x64.tar.xz`,
+          version: '2.2.0',
+          url: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-Setup-2.2.0.exe`,
+          windowsUrl: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-Setup-2.2.0.exe`,
+          linuxUrl: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-2.2.0-linux-x64.tar.xz`,
         },
         android: { version: '1.0.4', url: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-AI-Mobile-1.0.4.apk` },
       });
@@ -516,6 +534,11 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
         if (reloadEachRequest) await store.load();
         const u = store.findUser(userId);
         if (!u) return sendJson(res, 404, { ok: false, error: 'user not found' });
+        if (body.billingMode === 'payg') {
+          const priced = API_PRICES[String(body.model || '')];
+          const allowed = Boolean(priced && Number(u.balanceMicros || 0) > 0);
+          return sendJson(res, 200, { ok: true, allowed, plan: 'coderplus', billingMode: 'payg', reason: allowed ? null : priced ? 'Недостаточно средств. Пополните баланс минимум на $1.' : 'Для этой модели не настроена цена.' });
+        }
         const plan = planOf(u);
         const { blocked } = checkLimits(u, provider);
         return sendJson(res, 200, {
@@ -546,6 +569,14 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
         if (reloadEachRequest) await store.load();
         const u = store.findUser(userId);
         if (!u) return sendJson(res, 404, { ok: false, error: 'user not found' });
+        if (body.billingMode === 'payg') {
+          const micros = chargeMicros(modelKey, body.usage || { input: billable });
+          if (micros == null) return sendJson(res, 400, { ok: false, error: 'model price missing' });
+          const charged = store.chargeBalance(u, micros, { source: 'cloud-api', requestId, model: modelKey });
+          if (!charged.ok) return sendJson(res, 402, { ok: false, error: 'insufficient balance' });
+          await store.save({ strict: true });
+          return sendJson(res, 200, { ok: true, chargedUsd: microsToUsd(micros), balanceUsd: microsToUsd(charged.balanceMicros), duplicate: charged.duplicate === true });
+        }
         if (u.usage.some((event) => event.source === 'cloud-api' && event.requestId === requestId)) {
           await store.save({ strict: true });
           return sendJson(res, 200, { ok: true, duplicate: true });
@@ -1337,7 +1368,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
         // 4 минуты обновляет облаку его тариф. Без пометки (ключ выдан только
         // на сайте) тариф там протухал и откатывался на free.
         if ((r.keys || []).length && !u.cloudKey) { u.cloudKey = true; await store.save(); }
-        return sendJson(res, 200, { ok: true, keys: r.keys || [], max: r.max || 5, baseUrl: process.env.CLOUD_API_URL || '' });
+        return sendJson(res, 200, { ok: true, keys: r.keys || [], max: r.max || 5, baseUrl: process.env.CLOUD_API_URL || '', bot: getBotUsername(), billing: { balanceUsd: microsToUsd(u.balanceMicros), starsPerUsd: STARS_PER_USD, minStars: MIN_TOPUP_STARS, maxStars: MAX_TOPUP_STARS, prices: API_PRICES } });
       })().catch((e) => sendJson(res, 500, { ok: false, error: String(e.message || e) }));
       return;
     }
@@ -1347,7 +1378,9 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
         const u = await sessionUser(req);
         if (!u) return sendJson(res, 401, { ok: false, error: 'not logged in' });
         if (!cloudEnabled()) return sendJson(res, 503, { ok: false, error: 'Облачный API сейчас недоступен.' });
-        const r = await createApiKey(u.id, planOf(u).key, String(body.label || ''));
+        const mode = body.mode === 'payg' ? 'payg' : 'subscription';
+        if (mode === 'payg' && Number(u.balanceMicros || 0) <= 0) return sendJson(res, 402, { ok: false, error: 'Сначала пополните баланс минимум на $1.' });
+        const r = await createApiKey(u.id, planOf(u).key, String(body.label || ''), mode);
         if (!r) return sendJson(res, 502, { ok: false, error: 'Не удалось создать ключ — облако не ответило.' });
         if (r.error) return sendJson(res, 400, { ok: false, error: `Достигнут лимит: максимум ${r.max || 5} ключей.` });
         u.cloudKey = true; // чтобы бот периодически освежал тариф в облаке
@@ -1395,6 +1428,74 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
         });
         if (!r.ok) return sendJson(res, 502, { ok: false, error: r.error, durationMs: r.durationMs });
         return sendJson(res, 200, { ok: true, status: r.status, body: r.body, durationMs: r.durationMs });
+      }).catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
+      return;
+    }
+
+    // Конструктор пользовательских Telegram-ботов. Токены шифруются на
+    // сервере и никогда не возвращаются браузеру после сохранения.
+    if (url.pathname === '/chat/api/bots' && req.method === 'GET') {
+      (async () => {
+        const u = await sessionUser(req);
+        if (!u) return sendJson(res, 401, { ok: false, error: 'not logged in' });
+        return sendJson(res, 200, {
+          ok: true,
+          bots: listCustomBots(u.id),
+          templates: BOT_TEMPLATES,
+          models: Object.entries(API_PRICES).map(([id, price]) => ({ id, ...price })),
+          balanceUsd: microsToUsd(u.balanceMicros),
+        });
+      })().catch((e) => sendJson(res, 500, { ok: false, error: String(e.message || e) }));
+      return;
+    }
+
+    if (url.pathname === '/chat/api/bots/create' && req.method === 'POST') {
+      readJsonBody(req).then(async (body) => {
+        const u = await sessionUser(req);
+        if (!u) return sendJson(res, 401, { ok: false, error: 'not logged in' });
+        const mode = body.apiMode === 'own' ? 'own' : body.apiMode === 'payg' ? 'payg' : 'subscription';
+        if (mode === 'payg' && Number(u.balanceMicros || 0) <= 0) return sendJson(res, 402, { ok: false, error: 'Для режима по факту сначала пополните баланс минимум на $1.' });
+        let managedKey = '';
+        try {
+          if (mode !== 'own') {
+            if (!cloudEnabled()) return sendJson(res, 503, { ok: false, error: 'Облачный API сейчас недоступен.' });
+            const created = await createApiKey(u.id, planOf(u).key, `TG-бот ${String(body.title || '').slice(0, 22)}`, mode);
+            if (!created?.apiKey) throw new Error(created?.error || 'Не удалось создать ключ API для бота.');
+            managedKey = created.apiKey;
+            u.cloudKey = true;
+          }
+          const bot = await createCustomBot({
+            ownerId: u.id,
+            token: body.token,
+            template: body.template,
+            title: body.title,
+            model: body.model,
+            apiMode: mode,
+            apiKey: mode === 'own' ? String(body.ownApiKey || '') : managedKey,
+            ownBaseUrl: body.ownBaseUrl,
+            systemPrompt: body.systemPrompt,
+            welcomeText: body.welcomeText,
+            pricesText: body.pricesText,
+            businessMode: body.businessMode,
+          });
+          await store.save({ strict: true });
+          return sendJson(res, 200, { ok: true, bot });
+        } catch (error) {
+          if (managedKey) await deleteApiKey(u.id, managedKey).catch(() => null);
+          return sendJson(res, 400, { ok: false, error: String(error.message || error) });
+        }
+      }).catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
+      return;
+    }
+
+    if (url.pathname === '/chat/api/bots/delete' && req.method === 'POST') {
+      readJsonBody(req).then(async (body) => {
+        const u = await sessionUser(req);
+        if (!u) return sendJson(res, 401, { ok: false, error: 'not logged in' });
+        const removed = await deleteCustomBot(u.id, String(body.id || ''));
+        if (!removed) return sendJson(res, 404, { ok: false, error: 'Бот не найден.' });
+        if (removed.plainApiKey) await deleteApiKey(u.id, removed.plainApiKey).catch(() => null);
+        return sendJson(res, 200, { ok: true });
       }).catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
       return;
     }

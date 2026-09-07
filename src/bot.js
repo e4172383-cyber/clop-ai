@@ -14,10 +14,10 @@ import { addOfferUsage, claimOffer, offerActiveFor, offerState } from './limited
 import { recordProviderResult } from './provider-status.js';
 
 const DESKTOP_RELEASE = Object.freeze({
-  version: '2.0.11',
+  version: '2.2.0',
   released: '07.09.2026',
-  windows: 'Clop-Code-Setup-2.0.11.exe',
-  linux: 'Clop-Code-2.0.11-linux-x64.tar.xz',
+  windows: 'Clop-Code-Setup-2.2.0.exe',
+  linux: 'Clop-Code-2.2.0-linux-x64.tar.xz',
   androidVersion: '1.0.4',
   android: 'Clop-AI-Mobile-1.0.4.apk',
 });
@@ -58,6 +58,7 @@ import { isOffice, extractOffice } from './docs.js';
 import { buildZip } from './zip.js';
 import { claimApiKey, resetApiKey, syncPlan, cloudEnabled } from './cloud.js';
 import { claimCode } from './weblogin.js';
+import { STARS_PER_USD, MIN_TOPUP_STARS, MAX_TOPUP_STARS, starsToMicros, microsToUsd } from './billing.js';
 
 const busy = new Set();
 
@@ -393,6 +394,7 @@ function helpText() {
     '/phone — сохранить свой номер для приглашения',
     '/buy — купить Pro',
     '/myapi — получить свой личный API-ключ (можно сбросить/перевыпустить кнопкой)',
+    '/balance — баланс API и пополнение через Telegram Stars',
     '/download — скачать Clop Code для Windows или Linux',
     '/menu — главное меню',
     '',
@@ -917,6 +919,9 @@ async function onCommand(u, chatId, cmd, rawText = '') {
       catch { await tg.sendMessage(chatId, text, { reply_markup: myApiKb() }); }
       return;
     }
+    case '/balance':
+    case '/баланс':
+      return void await tg.sendMessage(chatId, balanceText(u), { reply_markup: balanceKb() });
     case '/help':
       return void await tg.sendMessage(chatId, helpText(), { reply_markup: helpKb() });
     default:
@@ -968,6 +973,34 @@ function plansKb(u) {
     }]);
   if (corporatePlansReady()) rows.push([{ text: '🏢 Корпоративные тарифы', callback_data: 'corporate_plans' }]);
   return backKb(rows);
+}
+
+async function sendBalanceInvoice(chatId, stars) {
+  const amount = Math.round(Number(stars));
+  if (amount < MIN_TOPUP_STARS || amount > MAX_TOPUP_STARS) throw new Error('Пополнение доступно от $1 до $500');
+  await tg.api('sendInvoice', {
+    chat_id: chatId, title: `Баланс ${BOT_NAME}`, description: `Пополнение API-баланса на $${(amount / STARS_PER_USD).toFixed(2)}.`,
+    payload: `balance_${amount}`, provider_token: '', currency: 'XTR', prices: [{ label: 'Баланс API', amount }],
+  });
+}
+
+function balanceText(u) {
+  return [
+    '💳 *Баланс API*', '',
+    `Доступно: *$${microsToUsd(u.balanceMicros).toFixed(2)}*`,
+    `Курс пополнения: *${STARS_PER_USD} ⭐️ = $1*`,
+    'Ключ с оплатой по факту не расходует лимиты подписки и оплачивает только успешные ответы.',
+    '',
+    'Минимум: $1 · максимум: $500 за одно пополнение.',
+  ].join('\n');
+}
+
+function balanceKb() {
+  return backKb([
+    [{ text: '$1 · 86 ⭐️', callback_data: 'balance:86' }, { text: '$5 · 430 ⭐️', callback_data: 'balance:430' }],
+    [{ text: '$10 · 860 ⭐️', callback_data: 'balance:860' }, { text: '$50 · 4 300 ⭐️', callback_data: 'balance:4300' }],
+    [{ text: '$100 · 8 600 ⭐️', callback_data: 'balance:8600' }, { text: '$500 · 43 000 ⭐️', callback_data: 'balance:43000' }],
+  ]);
 }
 
 function corporatePlansText(u) {
@@ -1215,6 +1248,12 @@ async function onCallback(u, q) {
     u.cloudKey = true;
     store.saveSoon();
     return void await edit(apiKeyText({ ...res, wasReset: true }), myApiKb());
+  }
+  if (data.startsWith('balance:')) {
+    const stars = Number(data.split(':')[1]);
+    if (!Number.isInteger(stars) || stars < MIN_TOPUP_STARS || stars > MAX_TOPUP_STARS) return void await tg.answerCallback(q.id, 'Неверная сумма', true);
+    await tg.answerCallback(q.id);
+    return void await sendBalanceInvoice(chatId, stars);
   }
   if (data.startsWith('need_plan:')) {
     const m = MODELS[data.split(':')[1]];
@@ -1543,6 +1582,13 @@ export async function handleUpdate(update) {
 
   if (msg.successful_payment) {
     const sp = msg.successful_payment;
+    if (String(sp.invoice_payload || '').startsWith('balance_')) {
+      const stars = Number(String(sp.invoice_payload).split('_')[1]);
+      if (!Number.isInteger(stars) || stars < MIN_TOPUP_STARS || stars > MAX_TOPUP_STARS || sp.total_amount !== stars) return;
+      const balance = store.addBalance(u, starsToMicros(stars), { stars, currency: sp.currency, chargeId: sp.telegram_payment_charge_id });
+      await store.save();
+      return void await tg.sendMessage(chatId, `✅ Баланс пополнен. Доступно: *$${microsToUsd(balance).toFixed(2)}*. Ключи с оплатой по факту теперь могут использовать все модели.`);
+    }
     const requestedKey = sp.invoice_payload?.split('_')[0];
     const plan = PLANS[requestedKey] || corporatePlan(requestedKey) || PLANS.pro;
     const planKey = plan.key;
@@ -1621,6 +1667,13 @@ export async function handleUpdate(update) {
       }
       await tg.sendMessage(chatId, `💎 Оформляем *${plan.title}* на ${plan.days} дней — счёт ниже.`);
       return void await sendPlanInvoice(chatId, planKey);
+    }
+
+    const balance = text.match(/^\/start\s+balance_(\d+)$/i);
+    if (balance) {
+      const stars = Number(balance[1]);
+      if (stars < MIN_TOPUP_STARS || stars > MAX_TOPUP_STARS) return void await tg.sendMessage(chatId, 'Пополнение доступно от $1 до $500.');
+      return void await sendBalanceInvoice(chatId, stars);
     }
 
     return void await onCommand(u, chatId, text.split(/[\s@]/)[0].toLowerCase(), text);

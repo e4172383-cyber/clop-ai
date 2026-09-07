@@ -49,8 +49,8 @@ export async function listApiKeys(telegramUserId, plan) {
   return call('/v1/keys/list', { method: 'POST', body: JSON.stringify({ telegramUserId: String(telegramUserId), plan }) }, COLD_START_TIMEOUT_MS);
 }
 
-export async function createApiKey(telegramUserId, plan, label) {
-  return call('/v1/keys/create', { method: 'POST', body: JSON.stringify({ telegramUserId: String(telegramUserId), plan, label }) }, COLD_START_TIMEOUT_MS);
+export async function createApiKey(telegramUserId, plan, label, mode = 'subscription') {
+  return call('/v1/keys/create', { method: 'POST', body: JSON.stringify({ telegramUserId: String(telegramUserId), plan, label, mode }) }, COLD_START_TIMEOUT_MS);
 }
 
 export async function deleteApiKey(telegramUserId, key) {

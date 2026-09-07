@@ -7,7 +7,7 @@
 
   const elements = {};
   for (const id of [
-    'app', 'workspaceCrumb', 'workspaceName', 'connectionStatus', 'updateButton', 'sidebar', 'newChatButton',
+    'app', 'workspaceCrumb', 'workspaceName', 'connectionStatus', 'updateButton', 'sidebar', 'newChatButton', 'botBuilderButton',
     'railNewChatButton', 'chatRailButton', 'sidebarArtifactsButton', 'guestLoginPrompt',
     'chatSearch', 'chatGroups', 'chatList', 'chatsTop', 'chatsBottom', 'accountButton', 'userAvatar', 'accountName',
     'accountPlan', 'chatTitle', 'chatSubtitle', 'modeSwitch', 'emptyTitle', 'emptyNote',
@@ -29,7 +29,7 @@
     'themeSelect', 'animationsSetting', 'enterSendsSetting', 'approvalModeSetting', 'modelSelect', 'effortSelect',
     'fastSetting', 'shellTimeoutSetting', 'emptyLoginButton',
     'settingsModeName', 'settingsModeDescription', 'changeModeButton', 'openBackups',
-    'openTermsSettings', 'openWebsite', 'logoutButton', 'toastStack',
+    'openTermsSettings', 'openWebsite', 'openBotBuilder', 'logoutButton', 'toastStack',
   ]) elements[id] = byId(id);
 
   const fallbackModels = [
@@ -2558,6 +2558,8 @@
     elements.changeModeButton.addEventListener('click', () => { hideModal(elements.settingsModal); document.querySelector(`[data-mode="${state.mode}"]`)?.focus(); });
     elements.openBackups.addEventListener('click', openBackups);
     elements.openWebsite.addEventListener('click', () => openExternal('https://clop-ai.onrender.com'));
+    elements.botBuilderButton.addEventListener('click', () => openExternal('https://clop-ai.onrender.com/chat#bots'));
+    elements.openBotBuilder.addEventListener('click', () => openExternal('https://clop-ai.onrender.com/chat#bots'));
     elements.logoutButton.addEventListener('click', async () => {
       elements.logoutButton.disabled = true;
       try {

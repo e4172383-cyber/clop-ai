@@ -13,19 +13,19 @@ if (!hasRedis) {
   console.warn('[store] UPSTASH_REDIS_REST_URL/TOKEN не заданы — данные будут жить только в памяти процесса и потеряются при рестарте.');
 }
 
-let db = { users: {}, teams: {}, updatedAt: 0 };
+let db = { users: {}, teams: {}, customBots: {}, updatedAt: 0 };
 let saveTimer = null;
 
 export async function load() {
   if (redis) {
     try {
       const v = await redis.get(STORE_KEY);
-      if (v && typeof v === 'object') { db = v; if (!db.users) db.users = {}; if (!db.teams) db.teams = {}; return db; }
+      if (v && typeof v === 'object') { db = v; if (!db.users) db.users = {}; if (!db.teams) db.teams = {}; if (!db.customBots) db.customBots = {}; return db; }
     } catch (e) {
       console.error('[store] load failed', e.message);
     }
   }
-  db = { users: {}, teams: {}, updatedAt: 0 };
+  db = { users: {}, teams: {}, customBots: {}, updatedAt: 0 };
   return db;
 }
 
@@ -262,6 +262,29 @@ export function addUsage(u, event) {
   const cutoff = Date.now() - USAGE_RETENTION;
   if (u.usage.length > 400) u.usage = u.usage.filter((e) => e.ts >= cutoff);
   saveSoon();
+}
+
+export function addBalance(u, micros, payment) {
+  const value = Math.max(0, Math.round(Number(micros || 0)));
+  if (!u.balanceTransactions) u.balanceTransactions = [];
+  if (payment?.chargeId && u.balanceTransactions.some((entry) => entry.chargeId === payment.chargeId)) return Math.max(0, Math.round(Number(u.balanceMicros || 0)));
+  u.balanceMicros = Math.max(0, Math.round(Number(u.balanceMicros || 0))) + value;
+  u.balanceTransactions.push({ type: 'topup', micros: value, ts: Date.now(), ...payment });
+  saveSoon();
+  return u.balanceMicros;
+}
+
+export function chargeBalance(u, micros, details = {}) {
+  const value = Math.max(0, Math.round(Number(micros || 0)));
+  if (!u.billingCharges) u.billingCharges = [];
+  if (details.requestId && u.billingCharges.some((x) => x.requestId === details.requestId)) return { ok: true, duplicate: true, balanceMicros: u.balanceMicros || 0 };
+  const balance = Math.max(0, Math.round(Number(u.balanceMicros || 0)));
+  if (value > balance) return { ok: false, balanceMicros: balance };
+  u.balanceMicros = balance - value;
+  u.billingCharges.push({ micros: value, ts: Date.now(), ...details });
+  if (u.billingCharges.length > 500) u.billingCharges = u.billingCharges.slice(-500);
+  saveSoon();
+  return { ok: true, balanceMicros: u.balanceMicros };
 }
 
 // Отмечает одну генерацию картинки (для суточного лимита) — храним только

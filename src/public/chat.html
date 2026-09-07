@@ -622,7 +622,7 @@
   .api-section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
   .api-section-head h3{margin:0}
   .muted-sm{color:var(--muted);font-size:12px;font-weight:400;text-transform:none;letter-spacing:0}
-  #createKeyBtn,#pgSend,#pgCurl{
+  #createKeyBtn,#pgSend,#pgCurl,#createBotBtn,#topupBalanceBtn{
     background:var(--glass);border:1px solid var(--glass-line);color:var(--text);
     border-radius:11px;padding:7px 13px;font-size:12px;box-shadow:var(--glass-glow);
     transition:all .22s cubic-bezier(.2,.9,.25,1);
@@ -665,6 +665,19 @@
   }
   .pg-result.err{border-color:rgba(255,123,114,.4);color:var(--bad)}
   .pg-result.ok{border-color:rgba(63,185,80,.32)}
+  .bot-template-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin:10px 0 14px}
+  .bot-template{min-height:92px;padding:12px;text-align:left;border:1px solid var(--glass-line);border-radius:14px;background:var(--glass);color:var(--text);transition:all .2s}
+  .bot-template:hover,.bot-template.selected{border-color:var(--accent);transform:translateY(-1px);box-shadow:0 8px 24px rgba(217,119,87,.12)}
+  .bot-template b,.bot-template span{display:block}.bot-template b{font-size:12px;margin:7px 0 4px}.bot-template span{font-size:10.5px;line-height:1.35;color:var(--muted)}
+  .bot-template i{font-style:normal;color:var(--accent);font-size:18px}
+  .bot-form{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+  .bot-form .wide{grid-column:1/-1}.bot-form input,.bot-form textarea{width:100%;background:rgba(0,0,0,.24);border:1px solid var(--glass-line);color:var(--text);border-radius:11px;padding:9px 11px;font:inherit;resize:vertical}
+  .bot-form input:focus,.bot-form textarea:focus{outline:none;border-color:rgba(217,119,87,.55);box-shadow:0 0 0 3px rgba(217,119,87,.1)}
+  .bot-row{display:flex;align-items:center;gap:10px;padding:11px 13px;margin-top:8px;border:1px solid var(--glass-line);border-radius:13px;background:var(--glass)}
+  .bot-row .bot-meta{min-width:0;flex:1}.bot-row b,.bot-row small{display:block}.bot-row small{color:var(--muted);margin-top:3px}.bot-row .status-dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok)}
+  .bot-row button{border:1px solid var(--glass-line);border-radius:9px;background:transparent;color:var(--bad);padding:6px 9px}
+  .bot-help{padding:10px 12px;border-radius:11px;background:rgba(217,119,87,.08);border:1px solid rgba(217,119,87,.2);font-size:11.5px;color:var(--muted);line-height:1.5;margin-bottom:12px}
+  @media(max-width:720px){.bot-template-grid{grid-template-columns:1fr 1fr}.bot-form{grid-template-columns:1fr}.bot-form .wide{grid-column:1}}
 
   /* Тонкие скроллбары, чтобы не спорили со стеклом */
   ::-webkit-scrollbar{width:9px;height:9px}
@@ -911,6 +924,10 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="12" r="3.2"/><path d="M11.2 12H21M17.5 12v3M14.5 12v2.2"/></svg>
           Мой API
         </button>
+        <button id="botsBtn">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="6" width="16" height="13" rx="4"/><path d="M9 11h.01M15 11h.01M8 15h8M12 6V3"/></svg>
+          Telegram-боты
+        </button>
         <button id="logout">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 20H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h8M17 15l3-3-3-3M20 12h-9"/></svg>
           Выйти
@@ -1017,6 +1034,36 @@
       <button class="modal-close" data-close="apiOverlay" aria-label="Закрыть">✕</button>
     </div>
     <div class="api-body">
+      <section>
+        <h3>Баланс и режим API</h3>
+        <div class="pg-grid">
+          <label>Новый ключ<select id="newKeyMode"><option value="subscription">Лимиты подписки</option><option value="payg">Оплата по факту · все модели</option></select></label>
+          <label>Пополнение<select id="topupStars"><option value="86">$1 · 86 ★</option><option value="430">$5 · 430 ★</option><option value="860">$10 · 860 ★</option><option value="4300">$50 · 4 300 ★</option><option value="8600">$100 · 8 600 ★</option><option value="43000">$500 · 43 000 ★</option></select></label>
+        </div>
+        <div class="pg-actions"><b id="apiBalance">Баланс: $0.00</b><button id="topupBalanceBtn">Пополнить через Telegram</button></div>
+        <div id="apiPrices" class="muted-sm" style="margin-top:10px"></div>
+      </section>
+      <section id="botBuilderSection">
+        <div class="api-section-head"><h3>Создать Telegram-бота</h3><span class="muted-sm">Работает 24/7 через webhook</span></div>
+        <div class="bot-help">Создайте бота у @BotFather и вставьте его токен. После сохранения токен шифруется и больше не показывается. Для ответов из вашего личного аккаунта включите у бота Business Mode в @BotFather, затем подключите бота в Telegram: Настройки → Telegram Business → Чат-боты. Доступные чаты выбираете вы в самом Telegram.</div>
+        <div id="botTemplates" class="bot-template-grid"></div>
+        <div class="bot-form">
+          <label>Название<input id="customBotTitle" maxlength="64" placeholder="Мой помощник"></label>
+          <label>Токен @BotFather<input id="customBotToken" type="password" autocomplete="new-password" placeholder="123456789:AA..."></label>
+          <label>Источник ИИ<select id="customBotApiMode"><option value="subscription">Clop · лимиты подписки</option><option value="payg">Clop · оплата по факту</option><option value="own">Свой OpenAI-совместимый API</option></select></label>
+          <label>Модель<select id="customBotModel"></select></label>
+          <label>Ответы в личных чатах · Beta<select id="customBotBusinessMode"><option value="off">Выключено</option><option value="draft">Только черновик мне</option><option value="auto">Автоответ от моего имени</option></select></label>
+          <span class="muted-sm" style="align-self:end;padding-bottom:10px">Для автоответов Telegram должен прислать Business-подключение.</span>
+          <label class="own-api-field" hidden>Адрес своего API<input id="customBotBaseUrl" placeholder="https://api.example.com"></label>
+          <label class="own-api-field" hidden>Ключ своего API<input id="customBotOwnKey" type="password" autocomplete="new-password" placeholder="sk-..."></label>
+          <label class="own-api-field wide" hidden>ID модели своего API<input id="customBotOwnModel" placeholder="например, gpt-4.1-mini"></label>
+          <label class="wide">Инструкция боту<textarea id="customBotSystem" rows="3" maxlength="8000"></textarea></label>
+          <label class="wide">Приветствие<textarea id="customBotWelcome" rows="2" maxlength="3500" placeholder="Привет! Чем помочь?"></textarea></label>
+          <label class="wide">Команда /prices<textarea id="customBotPrices" rows="2" maxlength="3500" placeholder="Ваши цены и условия"></textarea></label>
+        </div>
+        <div class="pg-actions" style="margin-top:12px"><button id="createBotBtn">Создать и запустить</button><span id="botCreateStatus" class="muted-sm"></span></div>
+        <div id="customBotsList"><div class="muted-sm">Загрузка…</div></div>
+      </section>
       <section>
         <div class="api-section-head">
           <h3>Ключи <span class="muted-sm" id="keysCount"></span></h3>
@@ -1349,6 +1396,10 @@ function showApp(data) {
   renderMessages(data.messages);
   updateChatTitle();
   applySidebar();
+  if (location.hash === '#bots') setTimeout(() => {
+    openApi();
+    setTimeout(() => document.getElementById('botBuilderSection').scrollIntoView({ behavior: 'smooth', block: 'start' }), 120);
+  }, 80);
 }
 
 function renderModelSelect() {
@@ -2493,7 +2544,50 @@ document.getElementById('plansBtn').addEventListener('click', openPlans);
 
 /* ---------------- «Мой API»: ключи + песочница ---------------- */
 
-let apiState = { keys: [], max: 5, baseUrl: '' };
+let apiState = { keys: [], max: 5, baseUrl: '', billing: null, bots: [], templates: [], botModels: [], botTemplate: 'assistant' };
+
+function chooseBotTemplate(id) {
+  const template = apiState.templates.find(t => t.id === id) || apiState.templates[0];
+  if (!template) return;
+  apiState.botTemplate = template.id;
+  document.querySelectorAll('.bot-template').forEach(el => el.classList.toggle('selected', el.dataset.template === template.id));
+  document.getElementById('customBotSystem').value = template.system || '';
+  if (!document.getElementById('customBotTitle').value) document.getElementById('customBotTitle').value = template.title || '';
+}
+
+function renderBotBuilder() {
+  const templates = document.getElementById('botTemplates');
+  templates.innerHTML = apiState.templates.map(t => `<button type="button" class="bot-template ${t.id === apiState.botTemplate ? 'selected' : ''}" data-template="${escapeHtml(t.id)}"><i>${escapeHtml(t.icon || '✦')}</i><b>${escapeHtml(t.title)}</b><span>${escapeHtml(t.description || '')}</span></button>`).join('');
+  templates.querySelectorAll('[data-template]').forEach(button => button.addEventListener('click', () => chooseBotTemplate(button.dataset.template)));
+  const model = document.getElementById('customBotModel');
+  const selected = model.value;
+  model.innerHTML = apiState.botModels.filter(m => m.id !== 'gpt-image-2-5').map(m => `<option value="${escapeHtml(m.id)}">${escapeHtml(m.title)}</option>`).join('');
+  if (selected && apiState.botModels.some(m => m.id === selected)) model.value = selected;
+
+  const list = document.getElementById('customBotsList');
+  list.innerHTML = apiState.bots.length ? apiState.bots.map(bot => `<div class="bot-row"><i class="status-dot"></i><div class="bot-meta"><b>${escapeHtml(bot.title)} · @${escapeHtml(bot.username)}</b><small>${bot.apiMode === 'own' ? 'свой API' : bot.apiMode === 'payg' ? 'оплата по факту' : 'лимиты подписки'} · ${escapeHtml(bot.model)} · ${Number(bot.requests || 0)} запросов${bot.businessMode !== 'off' ? ` · Business: ${bot.businessConnected ? 'подключён' : 'ждёт подключения'}` : ''}${bot.lastError ? ` · ошибка: ${escapeHtml(bot.lastError)}` : ''}</small></div><button type="button" data-delete-bot="${escapeHtml(bot.id)}">Удалить</button></div>`).join('') : '<div class="muted-sm">Подключённых ботов пока нет.</div>';
+  list.querySelectorAll('[data-delete-bot]').forEach(button => button.addEventListener('click', async () => {
+    if (!confirm('Удалить этого бота и отключить его webhook?')) return;
+    button.disabled = true;
+    const result = await fetch('/chat/api/bots/delete', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: button.dataset.deleteBot }) }).then(r => r.json()).catch(() => null);
+    if (!result?.ok) alert(result?.error || 'Не удалось удалить бота.');
+    await loadBots();
+  }));
+}
+
+async function loadBots() {
+  const response = await fetch('/chat/api/bots').then(r => r.json()).catch(() => null);
+  if (!response?.ok) {
+    document.getElementById('customBotsList').innerHTML = `<div class="muted-sm">⚠️ ${escapeHtml(response?.error || 'Не удалось загрузить ботов.')}</div>`;
+    return;
+  }
+  apiState.bots = response.bots || [];
+  apiState.templates = response.templates || [];
+  apiState.botModels = response.models || [];
+  if (!apiState.templates.some(t => t.id === apiState.botTemplate)) apiState.botTemplate = apiState.templates[0]?.id || 'assistant';
+  renderBotBuilder();
+  if (!document.getElementById('customBotSystem').value) chooseBotTemplate(apiState.botTemplate);
+}
 
 function defaultPayload(path, model) {
   if (path === '/v1/files') return {
@@ -2522,7 +2616,7 @@ function renderKeys() {
   list.innerHTML = apiState.keys.length
     ? apiState.keys.map((k, i) => `
       <div class="key-row" style="animation-delay:${i * 40}ms">
-        <code>${escapeHtml(k.key)}</code>
+        <code>${escapeHtml(k.key)}</code><span class="muted-sm">${k.mode === 'payg' ? 'по факту' : 'подписка'}</span>
         <button data-copy="${escapeHtml(k.key)}">Копировать</button>
         <button class="del" data-delkey="${escapeHtml(k.key)}">Удалить</button>
       </div>`).join('')
@@ -2557,7 +2651,11 @@ async function loadKeys() {
       `<div class="muted-sm">⚠️ ${escapeHtml((r && r.error) || 'Не удалось загрузить ключи.')}</div>`;
     return;
   }
-  apiState.keys = r.keys; apiState.max = r.max; apiState.baseUrl = r.baseUrl || '';
+  apiState.keys = r.keys; apiState.max = r.max; apiState.baseUrl = r.baseUrl || ''; apiState.billing = r.billing || null; apiState.bot = r.bot || '';
+  if (apiState.billing) {
+    document.getElementById('apiBalance').textContent = `Баланс: $${Number(apiState.billing.balanceUsd || 0).toFixed(2)}`;
+    document.getElementById('apiPrices').innerHTML = '<b>Цена за 1 млн токенов</b><br>' + Object.values(apiState.billing.prices || {}).map(p => `${escapeHtml(p.title)}: вход $${p.input} · ${p.cachedInput != null ? `кэш $${p.cachedInput} · ` : ''}${p.cacheWrite != null ? `запись кэша $${p.cacheWrite} · ` : ''}выход $${p.output}`).join('<br>');
+  }
   document.getElementById('baseUrlHint').textContent = apiState.baseUrl
     ? 'Базовый адрес: ' + apiState.baseUrl : '';
   renderKeys();
@@ -2571,10 +2669,14 @@ function openApi() {
   const usable = state.models.filter(m => m.available && !m.key.startsWith('clop-'));
   pgModel.innerHTML = usable.map(m => `<option value="${m.key}">${escapeHtml(m.title)}</option>`).join('');
   syncPgBody();
-  loadKeys();
+  Promise.all([loadKeys(), loadBots()]);
 }
 
 document.getElementById('apiBtn').addEventListener('click', openApi);
+document.getElementById('botsBtn').addEventListener('click', () => {
+  openApi();
+  setTimeout(() => document.getElementById('botBuilderSection').scrollIntoView({ behavior: 'smooth', block: 'start' }), 160);
+});
 
 // Закрытие любых модалок: крестик, клик по фону, Escape
 document.querySelectorAll('.modal-close').forEach(b => b.addEventListener('click', () => {
@@ -2593,10 +2695,49 @@ document.getElementById('pgModel').addEventListener('change', syncPgBody);
 document.getElementById('createKeyBtn').addEventListener('click', async (e) => {
   e.target.disabled = true;
   const r = await fetch('/chat/api/keys/create', {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({}),
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode: document.getElementById('newKeyMode').value }),
   }).then(x => x.json()).catch(() => null);
   if (!r || !r.ok) alert((r && r.error) || 'Не удалось создать ключ.');
   await loadKeys();
+});
+
+document.getElementById('topupBalanceBtn').addEventListener('click', () => {
+  const stars = document.getElementById('topupStars').value;
+  const bot = apiState.bot || 'ClopAiRobotBot';
+  window.open(`https://t.me/${encodeURIComponent(bot)}?start=balance_${encodeURIComponent(stars)}`, '_blank', 'noopener');
+});
+
+document.getElementById('customBotApiMode').addEventListener('change', (event) => {
+  document.querySelectorAll('.own-api-field').forEach(field => { field.hidden = event.target.value !== 'own'; });
+});
+
+document.getElementById('createBotBtn').addEventListener('click', async (event) => {
+  const button = event.currentTarget;
+  const status = document.getElementById('botCreateStatus');
+  const token = document.getElementById('customBotToken').value.trim();
+  if (!token) { status.textContent = 'Вставьте токен от @BotFather.'; return; }
+  button.disabled = true;
+  status.textContent = 'Проверяем токен и подключаем webhook…';
+  const body = {
+    token,
+    title: document.getElementById('customBotTitle').value.trim(),
+    template: apiState.botTemplate,
+    apiMode: document.getElementById('customBotApiMode').value,
+    model: document.getElementById('customBotApiMode').value === 'own' ? (document.getElementById('customBotOwnModel').value.trim() || document.getElementById('customBotModel').value) : document.getElementById('customBotModel').value,
+    ownBaseUrl: document.getElementById('customBotBaseUrl').value.trim(),
+    ownApiKey: document.getElementById('customBotOwnKey').value.trim(),
+    systemPrompt: document.getElementById('customBotSystem').value.trim(),
+    welcomeText: document.getElementById('customBotWelcome').value.trim(),
+    pricesText: document.getElementById('customBotPrices').value.trim(),
+    businessMode: document.getElementById('customBotBusinessMode').value,
+  };
+  const result = await fetch('/chat/api/bots/create', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json()).catch(() => null);
+  button.disabled = false;
+  if (!result?.ok) { status.textContent = result?.error || 'Не удалось создать бота.'; return; }
+  document.getElementById('customBotToken').value = '';
+  document.getElementById('customBotOwnKey').value = '';
+  status.textContent = `Готово: @${result.bot.username} уже отвечает в Telegram.`;
+  await Promise.all([loadBots(), loadKeys()]);
 });
 
 document.getElementById('pgCurl').addEventListener('click', async (e) => {
