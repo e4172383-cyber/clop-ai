@@ -159,13 +159,17 @@ export async function restore() {
       const [saved, savedSeed] = await Promise.all([redis.get(KEY), redis.get(SEED)]);
       if (saved && (!seed || savedSeed === seedHash)) {
         unpack(saved);
-        lastSaved = hash(saved);
-        console.log('[kimi] вход восстановлен из Redis');
-        return true;
+        if (isReady()) {
+          lastSaved = hash(saved);
+          console.log('[kimi] вход восстановлен из Redis');
+          return true;
+        }
+        console.warn('[kimi] снимок входа в Redis неполный, используется резервная копия');
       }
     }
     if (seed) {
       unpack(seed);
+      if (!isReady()) throw new Error('Резервная копия входа Kimi неполная');
       lastSaved = null;
       await save();
       if (redis && seedHash) await redis.set(SEED, seedHash);
