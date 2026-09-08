@@ -14,10 +14,10 @@ import { addOfferUsage, claimOffer, offerActiveFor, offerState } from './limited
 import { recordProviderResult } from './provider-status.js';
 
 const DESKTOP_RELEASE = Object.freeze({
-  version: '2.4.0',
+  version: '2.4.1',
   released: '08.09.2026',
-  windows: 'Clop-Code-Setup-2.4.0.exe',
-  linux: 'Clop-Code-2.4.0-linux-x64.tar.xz',
+  windows: 'Clop-Code-Setup-2.4.1.exe',
+  linux: 'Clop-Code-2.4.1-linux-x64.tar.xz',
   androidVersion: '1.0.4',
   android: 'Clop-AI-Mobile-1.0.4.apk',
 });

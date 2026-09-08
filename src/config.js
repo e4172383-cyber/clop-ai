@@ -232,7 +232,7 @@ export const freeGoActive = () => Date.now() < FREE_GO_UNTIL;
 export const PUBLIC_URL = (process.env.PUBLIC_URL || 'https://clop-ai-bot-production.up.railway.app').replace(/\/+$/, '');
 export const DOWNLOAD_BASE_URL = (
   process.env.DOWNLOAD_BASE_URL
-  || 'https://github.com/e4172383-cyber/clop-ai/releases/download/v2.4.0'
+  || 'https://github.com/e4172383-cyber/clop-ai/releases/download/v2.4.1'
 ).replace(/\/+$/, '');
 
 export const MODEL_PROMO = {

@@ -145,8 +145,8 @@ test('serves the public desktop release page and resumable installers without da
   assert.match(page.headers.get('content-type'), /^text\/html/);
   const html = await page.text();
   assert.match(html, /Android 8/);
-  assert.match(html, /Clop-Code-Setup-2\.4\.0\.exe/);
-  assert.match(html, /Clop-Code-2\.4\.0-linux-x64\.tar\.xz/);
+  assert.match(html, /Clop-Code-Setup-2\.4\.1\.exe/);
+  assert.match(html, /Clop-Code-2\.4\.1-linux-x64\.tar\.xz/);
   assert.match(html, /Clop-AI-Mobile-1\.0\.4\.apk/);
   assert.doesNotMatch(html, /\d[\d ]{3,}\s*токен/iu);
 
