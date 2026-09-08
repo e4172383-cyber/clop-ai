@@ -1,0 +1,15 @@
+.git
+.github
+.env
+.kimi-main-login
+.tmp
+data
+node_modules
+bot.log
+desktop/node_modules
+desktop/release
+desktop/build/*.ico
+outputs
+src/public/downloads/*.exe
+src/public/downloads/*.tar.xz
+tests
