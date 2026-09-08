@@ -2,6 +2,7 @@ node_modules/
 .kimi-main-login/
 data/
 .env
+.env.*
 bot.log
 site/config.php
 relay/local.json
