@@ -4,7 +4,7 @@ import { BILLING_VERSION } from './token-accounting.js';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { WEB_PORT, WEB_HOST, PUBLIC_URL, MODELS, PLANS, PROVIDERS, DEFAULT_MODEL, DEFAULT_EFFORT, EFFORTS, DAY, BOT_NAME, ADMIN_IDS, freeGoActive, FREE_GO_UNTIL, FREE_GO_PLAN, MODEL_PROMO, modelPromoActive, CORPORATE_PLANS, corporatePlansReady } from './config.js';
+import { WEB_PORT, WEB_HOST, PUBLIC_URL, DOWNLOAD_BASE_URL, MODELS, PLANS, PROVIDERS, DEFAULT_MODEL, DEFAULT_EFFORT, EFFORTS, DAY, BOT_NAME, ADMIN_IDS, freeGoActive, FREE_GO_UNTIL, FREE_GO_PLAN, MODEL_PROMO, modelPromoActive, CORPORATE_PLANS, corporatePlansReady } from './config.js';
 import * as store from './store.js';
 import * as sites from './sites.js';
 import * as desk from './desktop.js';
@@ -486,22 +486,23 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
       return;
     }
     if (url.pathname === '/status.json' && req.method === 'GET') {
-      currentPublicStatus().then((status) => sendJson(res, 200, status)).catch(() => sendJson(res, 200, publicServiceStatus({
+      const cors = { 'access-control-allow-origin': '*' };
+      currentPublicStatus().then((status) => sendJson(res, 200, status, cors)).catch(() => sendJson(res, 200, publicServiceStatus({
         gptHealth: { ok: false },
         kimiHealth: { ok: false },
         processingMs: 0,
-      })));
+      }), cors));
       return;
     }
     if (url.pathname === '/releases.json' && req.method === 'GET') {
       return sendJson(res, 200, {
         desktop: {
           version: '2.4.0',
-          url: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-Setup-2.4.0.exe`,
-          windowsUrl: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-Setup-2.4.0.exe`,
-          linuxUrl: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-2.4.0-linux-x64.tar.xz`,
+          url: `${DOWNLOAD_BASE_URL}/Clop-Code-Setup-2.4.0.exe`,
+          windowsUrl: `${DOWNLOAD_BASE_URL}/Clop-Code-Setup-2.4.0.exe`,
+          linuxUrl: `${DOWNLOAD_BASE_URL}/Clop-Code-2.4.0-linux-x64.tar.xz`,
         },
-        android: { version: '1.0.4', url: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-AI-Mobile-1.0.4.apk` },
+        android: { version: '1.0.4', url: `${DOWNLOAD_BASE_URL}/Clop-AI-Mobile-1.0.4.apk` },
       });
     }
 
@@ -1147,7 +1148,10 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
         res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
         return res.end('404');
       }
-      return serveDesktopFile(req, res, name, { download: true });
+      const localFile = path.join(PUBLIC, 'downloads', name);
+      if (fs.existsSync(localFile)) return serveDesktopFile(req, res, name, { download: true });
+      res.writeHead(302, { location: `${DOWNLOAD_BASE_URL}/${encodeURIComponent(name)}`, 'cache-control': 'public, max-age=300' });
+      return res.end();
     }
 
     if (PWA_FILES[url.pathname]) {

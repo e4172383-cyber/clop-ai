@@ -1,4 +1,4 @@
-import { BOT_NAME, PUBLIC_URL, MODELS, PLANS, PROVIDERS, EFFORTS, DEFAULT_MODEL, MAX_CHATS, OPUS_FREE_PROMO_UNTIL, FREE_GO_UNTIL, freeGoActive, MODEL_PROMO, modelPromoActive, modelInPromo, IMAGE_GENERATORS, ADMIN_IDS, CORPORATE_PLANS, corporatePlan, corporatePlansReady } from './config.js';
+import { BOT_NAME, PUBLIC_URL, DOWNLOAD_BASE_URL, MODELS, PLANS, PROVIDERS, EFFORTS, DEFAULT_MODEL, MAX_CHATS, OPUS_FREE_PROMO_UNTIL, FREE_GO_UNTIL, freeGoActive, MODEL_PROMO, modelPromoActive, modelInPromo, IMAGE_GENERATORS, ADMIN_IDS, CORPORATE_PLANS, corporatePlan, corporatePlansReady } from './config.js';
 import * as tg from './telegram.js';
 import * as store from './store.js';
 import { planOf, effortOf, allowedEffortOptions, checkLimits, checkAllLimits, bar, humanLeft, imageLimitState } from './limits.js';
@@ -141,7 +141,7 @@ function mainKb(u) {
       [{ text: '🏢 Моя команда', callback_data: 'team' }],
       ...(showOffer ? [[{ text: offer.claimed ? '🎁 Бонус GPT активен' : '🎁 Получить 10 млн токенов', callback_data: 'offer_claim' }]] : []),
       [{ text: '🖼 Сгенерировать (бета)', callback_data: 'imagegen' }],
-      [{ text: '🌐 Чат на сайте (бета)', url: 'https://clop-ai.onrender.com/chat' }],
+      [{ text: '🌐 Чат на сайте (бета)', url: `${PUBLIC_URL}/chat` }],
       [{ text: `💻 Скачать Clop Code · v${DESKTOP_RELEASE.version}`, callback_data: 'app_download' }],
       [{ text: '🔑 Мой API', callback_data: 'myapi' }, { text: '❓ Помощь', callback_data: 'help' }],
       [{ text: '🐞 Баг?', callback_data: 'bug_report' }, { text: '🛟 Поддержка', callback_data: 'support' }],
@@ -433,7 +433,7 @@ function appDownloadText() {
 }
 
 function appDownloadKb() {
-  const root = `${PUBLIC_URL}/downloads`;
+  const root = DOWNLOAD_BASE_URL;
   return backKb([
     [{ text: '🪟 Скачать для Windows', url: `${root}/${DESKTOP_RELEASE.windows}` }],
     [{ text: '🐧 Скачать для Linux x64', url: `${root}/${DESKTOP_RELEASE.linux}` }],

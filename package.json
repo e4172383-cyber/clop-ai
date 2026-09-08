@@ -13,6 +13,7 @@
     "bot": "node index.js --no-web",
     "web": "node index.js --no-bot",
     "relay": "node relay/agent.mjs",
+    "build:fallback": "node scripts/build-fallback-site.mjs",
     "test": "node --test tests/*.test.js"
   },
   "dependencies": {
