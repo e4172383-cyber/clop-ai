@@ -20,6 +20,7 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { Readable, Transform } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
+const { launchWindowsUpdate } = require('./update-helper.cjs');
 const {
   defaults,
   cleanSettings,
@@ -130,14 +131,20 @@ function id(prefix = '') {
 const backedUpJsonFiles = new Set();
 
 function readJson(file, fallback) {
+  const valid = [];
   for (const candidate of [file, `${file}.bak`]) {
     try {
-      return JSON.parse(fs.readFileSync(candidate, 'utf8'));
+      valid.push({
+        value: JSON.parse(fs.readFileSync(candidate, 'utf8')),
+        modifiedAt: fs.statSync(candidate).mtimeMs,
+        primary: candidate === file,
+      });
     } catch {
-      // A valid previous-session copy is tried before falling back to defaults.
+      // Missing or malformed candidates are ignored.
     }
   }
-  return fallback;
+  valid.sort((a, b) => (b.modifiedAt - a.modifiedAt) || Number(b.primary) - Number(a.primary));
+  return valid[0]?.value ?? fallback;
 }
 
 function writeJson(file, value) {
@@ -1870,9 +1877,24 @@ function registerIpc() {
       shell.showItemInFolder(file);
       return { ok: true, downloaded: true, file };
     }
-    const installer = spawn(file, [], { detached: true, stdio: 'ignore' });
-    installer.unref();
-    setTimeout(() => app.quit(), 500);
+    launchWindowsUpdate({
+      installerPath: file,
+      installDir: path.dirname(process.execPath),
+      appPath: process.execPath,
+      tempDir: app.getPath('temp'),
+      logPath: path.join(dataDir, 'update.log'),
+      parentPid: process.pid,
+    });
+    isQuitting = true;
+    await stopEverything();
+    clearInterval(agentCursorTimer);
+    clearInterval(agentNetworkTimer);
+    setTimeout(() => {
+      if (agentTasksWindow && !agentTasksWindow.isDestroyed()) agentTasksWindow.destroy();
+      if (agentWindow && !agentWindow.isDestroyed()) agentWindow.destroy();
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.destroy();
+      app.exit(0);
+    }, 150);
     return { ok: true };
   });
   handle('state', async () => {
