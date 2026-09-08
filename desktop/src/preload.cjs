@@ -7,7 +7,7 @@ contextBridge.exposeInMainWorld('clop', {
   newChat: invoke('chat-new'), openChat: invoke('chat-open'), ask: invoke('ask'), retryAnswer: invoke('answer-retry'), stop: invoke('stop'),
   hint: invoke('hint'),
   login: invoke('login'), pollLogin: invoke('login-poll'), cancelLogin: invoke('login-cancel'),
-  me: invoke('me'), logout: invoke('logout'), approve: invoke('approve'),
+  me: invoke('me'), bugs: invoke('bugs'), submitBug: invoke('bug-submit'), logout: invoke('logout'), approve: invoke('approve'),
   attach: invoke('attach'), terminal: invoke('terminal'), backups: invoke('backups'),
   window: invoke('window'), external: invoke('external'),
   checkUpdate: invoke('update-check'), installUpdate: invoke('update-install'),

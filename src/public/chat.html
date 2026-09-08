@@ -403,6 +403,13 @@
   .api-head b{font-size:15px}
   .modal-close{background:none;border:none;color:var(--muted);font-size:16px;transition:color .2s,transform .2s}
   .modal-close:hover{color:var(--bad);transform:scale(1.15)}
+  .bug-mini{border:1px solid rgba(217,119,87,.34);background:rgba(217,119,87,.1);color:var(--text);border-radius:999px;padding:7px 11px;font-size:11.5px;font-weight:650;white-space:nowrap;transition:.2s}
+  .bug-mini:hover{background:rgba(217,119,87,.2);transform:translateY(-1px)}
+  .bug-form textarea{width:100%;min-height:120px;resize:vertical;background:rgba(0,0,0,.22);color:var(--text);border:1px solid var(--glass-line);border-radius:14px;padding:12px;font:inherit;line-height:1.5}
+  .bug-form textarea:focus{outline:none;border-color:var(--accent)}
+  .bug-list{display:grid;gap:8px;margin-top:12px}
+  .bug-item{padding:11px 13px;border-radius:13px;background:var(--glass);border:1px solid var(--glass-line);font-size:12px;line-height:1.45}
+  .bug-item-head{display:flex;justify-content:space-between;gap:10px;margin-bottom:5px}.bug-item small{color:var(--muted)}
 
   /* --- Слайдер силы мышления: тянется мышью/пальцем, снапится по ступеням.
      Ползунок — прозрачный нативный range поверх, вся картинка рисуется CSS
@@ -622,7 +629,7 @@
   .api-section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
   .api-section-head h3{margin:0}
   .muted-sm{color:var(--muted);font-size:12px;font-weight:400;text-transform:none;letter-spacing:0}
-  #createKeyBtn,#pgSend,#pgCurl,#createBotBtn,#topupBalanceBtn{
+  #createKeyBtn,#pgSend,#pgCurl,#createBotBtn,#topupBalanceBtn,#submitBugBtn{
     background:var(--glass);border:1px solid var(--glass-line);color:var(--text);
     border-radius:11px;padding:7px 13px;font-size:12px;box-shadow:var(--glass-glow);
     transition:all .22s cubic-bezier(.2,.9,.25,1);
@@ -948,6 +955,7 @@
         </div>
       </div>
       <div class="header-controls">
+        <button class="bug-mini" id="bugBtn" type="button">🐞 Баг?</button>
         <span class="tag promo-tag" id="promoTag" style="display:none"></span>
         <label class="model-control"><span>Модель</span><select id="modelSelect" aria-label="Модель"></select></label>
         <div class="model-usage" id="modelUsage" role="button" tabindex="0" aria-label="Лимиты выбранной модели">
@@ -987,6 +995,16 @@
       </div>
     </div>
   </main>
+</div>
+
+<div id="bugOverlay" class="overlay" role="dialog" aria-modal="true" aria-labelledby="bugTitle">
+  <div class="api-modal glass">
+    <div class="api-head"><b id="bugTitle">🐞 Сообщить о баге</b><button class="modal-close" data-close="bugOverlay" aria-label="Закрыть">✕</button></div>
+    <div class="api-body bug-form">
+      <section><p class="muted-sm">Опишите, что произошло, где это случилось и что вы ожидали. Владелец увидит ваш ник, примет или отклонит сообщение и при принятии сможет выдать вознаграждение.</p><textarea id="bugDescription" maxlength="4000" placeholder="Например: в приложении нажимаю…, после этого…"></textarea><div class="pg-actions" style="margin-top:10px"><button id="submitBugBtn" type="button">Отправить</button><span id="bugSubmitState" class="muted-sm"></span></div></section>
+      <section><h3>Мои сообщения</h3><div id="bugList" class="bug-list"><div class="muted-sm">Загрузка…</div></div></section>
+    </div>
+  </div>
 </div>
 
 <!-- Профиль: аккаунт, лимиты, настройки по умолчанию и оформление -->
@@ -1242,7 +1260,10 @@ async function boot() {
   loaderReady.data();
   await loaderReady.done;
   hideLoader();
-  if (data) showApp(data); else showLogin();
+  if (data) {
+    showApp(data);
+    if (location.hash === '#bug') window.setTimeout(openBugs, 0);
+  } else showLogin();
 }
 
 function showLogin() {
@@ -2233,6 +2254,11 @@ async function openProfile() {
       html: '<div id="setEffort"></div>', opts, current };
   }
   const eff0 = effortControl(p.model, p.effort);
+  const bonusNames = { credit:'Начисление', debit:'Скидка', 'limit-reset':'Сброс 5-часового лимита' };
+  const bonusRows = (p.bonuses?.transactions || []).slice(0, 12).map((entry) => {
+    const amount = Number(entry.amount || 0);
+    return `<div class="bug-item"><div class="bug-item-head"><b>${escapeHtml(bonusNames[entry.type] || entry.type)}</b><small>${new Date(entry.ts).toLocaleString('ru-RU')}</small></div><div>${amount > 0 ? '+' : ''}${amount || '—'}${entry.reason ? ` · ${escapeHtml(entry.reason)}` : ''}</div></div>`;
+  }).join('');
 
   body.innerHTML = `
     <section>
@@ -2247,9 +2273,13 @@ async function openProfile() {
         <div class="stat"><div class="k">Запросов</div><div class="v">${p.stats.requests}</div></div>
         <div class="stat"><div class="k">Токенов</div><div class="v">${(p.stats.tokens/1000).toFixed(1)}к</div></div>
         <div class="stat"><div class="k">Чатов</div><div class="v">${p.chatsCount}</div></div>
+        <div class="stat"><div class="k">Бонусов</div><div class="v">${p.bonuses?.balance || 0}</div></div>
         <div class="stat"><div class="k">С нами с</div><div class="v" style="font-size:14px">${fmtDate(p.createdAt)}</div></div>
       </div>
+      <div class="muted-sm" style="margin-top:10px">1 бонус = 1 ⭐️ скидки. После покупок начисляется 4% от оплаченной суммы.</div>
     </section>
+
+    <section><h3>Отчёт по бонусам</h3><div class="bug-list">${bonusRows || '<div class="muted-sm">Операций пока нет.</div>'}</div></section>
 
     <section>
       <h3>Единый лимит</h3>
@@ -2388,6 +2418,43 @@ async function openProfile() {
 }
 
 document.getElementById('profileBtn').addEventListener('click', openProfile);
+
+function renderBugList(data) {
+  const labels = { open:'На проверке', accepted:'Принят', rejected:'Отклонён' };
+  const list = document.getElementById('bugList');
+  list.innerHTML = (data.bugs || []).length ? data.bugs.map((bug) => `
+    <div class="bug-item"><div class="bug-item-head"><b>№${bug.id} · ${labels[bug.status] || escapeHtml(bug.status)}</b><small>${new Date(bug.updated).toLocaleString('ru-RU')}</small></div>
+    <div>${escapeHtml(bug.description)}</div>${bug.reward?.label ? `<small>Вознаграждение: ${escapeHtml(bug.reward.label)}</small>` : ''}</div>`).join('') : '<div class="muted-sm">Вы ещё не отправляли сообщения о багах.</div>';
+}
+
+async function loadBugList() {
+  const data = await fetch('/chat/api/bugs').then((response) => response.json()).catch(() => null);
+  if (!data?.ok) return document.getElementById('bugList').innerHTML = '<div class="muted-sm">Не удалось загрузить сообщения.</div>';
+  renderBugList(data);
+}
+
+async function openBugs() {
+  openModal('bugOverlay');
+  document.getElementById('bugSubmitState').textContent = '';
+  await loadBugList();
+}
+
+document.getElementById('bugBtn').addEventListener('click', openBugs);
+window.addEventListener('hashchange', () => { if (location.hash === '#bug' && document.getElementById('app').style.display !== 'none') openBugs(); });
+document.getElementById('submitBugBtn').addEventListener('click', async (event) => {
+  const description = document.getElementById('bugDescription').value.trim();
+  const stateEl = document.getElementById('bugSubmitState');
+  if (description.length < 5) return stateEl.textContent = 'Добавьте немного подробностей.';
+  event.currentTarget.disabled = true;
+  stateEl.textContent = 'Отправляю…';
+  const result = await fetch('/chat/api/bugs', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ description, platform:navigator.userAgentData?.mobile ? 'Телефон' : 'Сайт' }) }).then((response) => response.json()).catch(() => null);
+  event.currentTarget.disabled = false;
+  if (!result?.ok) return stateEl.textContent = result?.error || 'Не удалось отправить.';
+  document.getElementById('bugDescription').value = '';
+  stateEl.textContent = `Отправлено: баг №${result.bug.id}`;
+  await loadBugList();
+});
+
 document.getElementById('fastToggle').addEventListener('click', async () => {
   const r = await fetch('/chat/api/profile', {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ fast: !state.fast }),

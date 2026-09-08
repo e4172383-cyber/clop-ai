@@ -14,10 +14,10 @@ import { addOfferUsage, claimOffer, offerActiveFor, offerState } from './limited
 import { recordProviderResult } from './provider-status.js';
 
 const DESKTOP_RELEASE = Object.freeze({
-  version: '2.3.2',
-  released: '07.09.2026',
-  windows: 'Clop-Code-Setup-2.3.2.exe',
-  linux: 'Clop-Code-2.3.2-linux-x64.tar.xz',
+  version: '2.3.3',
+  released: '08.09.2026',
+  windows: 'Clop-Code-Setup-2.3.3.exe',
+  linux: 'Clop-Code-2.3.3-linux-x64.tar.xz',
   androidVersion: '1.0.4',
   android: 'Clop-AI-Mobile-1.0.4.apk',
 });
@@ -59,7 +59,7 @@ import { isOffice, extractOffice } from './docs.js';
 import { buildZip } from './zip.js';
 import { claimApiKey, resetApiKey, syncPlan, cloudEnabled } from './cloud.js';
 import { claimCode } from './weblogin.js';
-import { STARS_PER_USD, MIN_TOPUP_STARS, MAX_TOPUP_STARS, starsToMicros, microsToUsd } from './billing.js';
+import { STARS_PER_USD, MIN_TOPUP_STARS, MAX_TOPUP_STARS, starsToMicros, microsToUsd, purchaseBonus } from './billing.js';
 
 const busy = new Set();
 
@@ -144,7 +144,8 @@ function mainKb(u) {
       [{ text: '🌐 Чат на сайте (бета)', url: 'https://clop-ai.onrender.com/chat' }],
       [{ text: `💻 Скачать Clop Code · v${DESKTOP_RELEASE.version}`, callback_data: 'app_download' }],
       [{ text: '🔑 Мой API', callback_data: 'myapi' }, { text: '❓ Помощь', callback_data: 'help' }],
-      [{ text: '🛟 Поддержка 24/7', callback_data: 'support' }],
+      [{ text: '🐞 Баг?', callback_data: 'bug_report' }, { text: '🛟 Поддержка', callback_data: 'support' }],
+      [{ text: `🎁 Бонусы: ${store.bonusBalance(u)}`, callback_data: 'bonus' }],
     ],
   };
 }
@@ -503,19 +504,67 @@ async function clearLegacyKeyboard(u, chatId) {
 
 /* ---------------- payments ---------------- */
 
-async function sendPlanInvoice(chatId, planKey) {
+function activatePurchasedPlan(u, plan, payment) {
+  if (corporatePlan(plan.key)) store.grantCorporatePlan(u, plan.key, plan.days, payment);
+  else store.grantPlan(u, plan.key, plan.days, payment);
+}
+
+async function sendPlanInvoice(u, chatId, planKey) {
   const p = PLANS[planKey] || corporatePlan(planKey);
   if (!p) throw new Error('Тариф временно недоступен');
+  const available = store.bonusBalance(u);
+  if (available >= p.stars) {
+    store.spendBonus(u, p.stars, { reason: `Скидка на ${p.title}`, plan: p.key });
+    activatePurchasedPlan(u, p, { stars: 0, bonus: p.stars, source: 'bonus_purchase' });
+    await store.save({ strict: true });
+    return void await tg.sendMessage(chatId, `🎁 *${p.title} активирован за ${p.stars} бонусов.*\n\nДоступ до ${dt(corporatePlan(p.key) ? store.activeTeamFor(u).until : u.proUntil)}.`, { reply_markup: mainKb(u) });
+  }
+  const reservation = store.reserveBonus(u, Math.max(0, p.stars - 1), 24 * 60 * 60_000);
+  const discount = reservation?.amount || 0;
+  const payable = p.stars - discount;
   const description = p.perks?.join('. ') || `Корпоративный доступ до ${p.maxUsers} пользователей. Общий недельный пул и отдельное 5-часовое окно каждого участника.`;
-  await tg.api('sendInvoice', {
-    chat_id: chatId,
-    title: `${BOT_NAME} ${p.title} — ${p.days} дней`,
-    description: description + '.',
-    payload: `${planKey}_${p.days}`,
-    provider_token: '',
-    currency: 'XTR',
-    prices: [{ label: `${BOT_NAME} ${p.title}`, amount: p.stars }],
+  try {
+    await tg.api('sendInvoice', {
+      chat_id: chatId,
+      title: `${BOT_NAME} ${p.title} — ${p.days} дней`,
+      description: description + (discount ? `. Скидка ${discount} ⭐️ за бонусы.` : '.'),
+      payload: `plan:${planKey}:${p.days}:${reservation?.id || '-'}:${discount}`,
+      provider_token: '',
+      currency: 'XTR',
+      prices: [{ label: `${BOT_NAME} ${p.title}`, amount: payable }],
+    });
+  } catch (error) {
+    if (reservation) store.releaseBonusReservation(u, reservation.id);
+    throw error;
+  }
+}
+
+function bonusText(u) {
+  const report = store.bonusReport(u);
+  const names = { credit: 'Начисление', debit: 'Скидка', 'limit-reset': 'Сброс лимита' };
+  const rows = report.transactions.slice(0, 12).map((entry) => {
+    const amount = Number(entry.amount || 0);
+    const value = amount > 0 ? `+${amount}` : amount < 0 ? String(amount) : '—';
+    return `• ${dt(entry.ts)} · ${names[entry.type] || entry.type} · *${value}*${entry.reason ? ` · ${entry.reason}` : ''}`;
   });
+  return [
+    '🎁 *Бонусный счёт*', '',
+    `Баланс: *${report.balance} бонусов*`,
+    '1 бонус = 1 ⭐️ скидки при покупке тарифа.',
+    'После оплаченной покупки начисляется 4% от реально уплаченных звёзд.',
+    '', '*Последние операции*', rows.length ? rows.join('\n') : 'Операций пока нет.',
+  ].join('\n');
+}
+
+function bugReportText(u) {
+  const recent = support.userTickets(u.id).filter((ticket) => ticket.type === 'bug').slice(0, 5);
+  const labels = { open: 'на проверке', accepted: 'принят', rejected: 'отклонён' };
+  return [
+    '🐞 *Сообщить о баге*', '',
+    'Одним сообщением опишите, что не работает, где это произошло и что вы ожидали увидеть.',
+    'После отправки владелец увидит ваш ник и описание, затем примет или отклонит баг. За принятый баг может быть выдано вознаграждение.',
+    ...(recent.length ? ['', '*Ваши последние сообщения:*', ...recent.map((ticket) => `• №${ticket.id} — ${labels[ticket.status] || ticket.status}${ticket.reward?.label ? ` · ${ticket.reward.label}` : ''}`)] : []),
+  ].join('\n');
 }
 
 /* ---------------- AI ---------------- */
@@ -803,6 +852,7 @@ async function handleAsk(u, chatId, text, images = null) {
 
 async function onCommand(u, chatId, cmd, rawText = '') {
   if (u.pending) { u.pending = null; store.saveSoon(); } // любая команда отменяет ожидание промпта картинки
+  if (cmd !== '/bug' && cmd !== '/баг' && u.bugReportMode) { u.bugReportMode = false; store.saveSoon(); }
   switch (cmd) {
     case '/grant': {
       if (!ADMIN_IDS.includes(String(u.id))) return void await tg.sendMessage(chatId, 'Неизвестная команда. /help — список команд.');
@@ -851,6 +901,13 @@ async function onCommand(u, chatId, cmd, rawText = '') {
     case '/поддержка':
       u.supportMode = true; store.saveSoon();
       return void await tg.sendMessage(chatId, supportText(u), { reply_markup: supportKb() });
+    case '/bug':
+    case '/баг':
+      u.bugReportMode = true; store.saveSoon();
+      return void await tg.sendMessage(chatId, bugReportText(u), { reply_markup: backKb() });
+    case '/bonus':
+    case '/бонусы':
+      return void await tg.sendMessage(chatId, bonusText(u), { reply_markup: backKb() });
     case '/devices':
     case '/устройства':
       return void await tg.sendMessage(chatId, devicesText(u), { reply_markup: devicesKb(u) });
@@ -1208,6 +1265,12 @@ async function onCallback(u, q) {
     await tg.answerCallback(q.id);
     return void await edit('➕ *Добавление участника*\n\nОтправьте отдельным сообщением одну из команд:\n`/team_add @username`\n`/team_add 123456789`\n`/team_add +380…`\n\nПользователь должен заранее нажать /start. Для поиска по номеру он один раз использует команду /phone.', teamKb(u));
   }
+  if (data === 'bug_report') {
+    u.bugReportMode = true; store.saveSoon();
+    await tg.answerCallback(q.id);
+    return void await edit(bugReportText(u), backKb());
+  }
+  if (data === 'bonus') { await tg.answerCallback(q.id); return void await edit(bonusText(u), backKb()); }
   if (data.startsWith('team_accept:') || data.startsWith('team_decline:')) {
     const accept = data.startsWith('team_accept:');
     const inviteId = data.slice(data.indexOf(':') + 1);
@@ -1310,7 +1373,7 @@ async function onCallback(u, q) {
 
   if (data.startsWith('buy_') && (PLANS[data.slice(4)] || corporatePlan(data.slice(4)))) {
     await tg.answerCallback(q.id);
-    return void await sendPlanInvoice(chatId, data.slice(4));
+    return void await sendPlanInvoice(u, chatId, data.slice(4));
   }
 
   await tg.answerCallback(q.id);
@@ -1590,23 +1653,33 @@ export async function handleUpdate(update) {
       const stars = Number(String(sp.invoice_payload).split('_')[1]);
       if (!Number.isInteger(stars) || stars < MIN_TOPUP_STARS || stars > MAX_TOPUP_STARS || sp.total_amount !== stars) return;
       const balance = store.addBalance(u, starsToMicros(stars), { stars, currency: sp.currency, chargeId: sp.telegram_payment_charge_id });
+      const earned = purchaseBonus(stars);
+      if (earned) store.addBonus(u, earned, { reason: '4% за пополнение API', sourceId: `cashback:${sp.telegram_payment_charge_id}` });
       await store.save();
-      return void await tg.sendMessage(chatId, `✅ Баланс пополнен. Доступно: *$${microsToUsd(balance).toFixed(2)}*. Ключи с оплатой по факту теперь могут использовать все модели.`);
+      return void await tg.sendMessage(chatId, `✅ Баланс пополнен. Доступно: *$${microsToUsd(balance).toFixed(2)}*.${earned ? ` Начислено *${earned} бонусов*.` : ''}\nКлючи с оплатой по факту теперь могут использовать все модели.`);
     }
-    const requestedKey = sp.invoice_payload?.split('_')[0];
+    const modern = String(sp.invoice_payload || '').match(/^plan:([a-z0-9]+):(\d+):([^:]+):(\d+)$/i);
+    const requestedKey = modern ? modern[1] : sp.invoice_payload?.split('_')[0];
     const plan = PLANS[requestedKey] || corporatePlan(requestedKey) || PLANS.pro;
     const planKey = plan.key;
+    const reservedBonus = modern ? Number(modern[4]) || 0 : 0;
+    if (modern && modern[3] !== '-') {
+      const consumed = store.consumeBonusReservation(u, modern[3], { reason: `Скидка на ${plan.title}`, plan: planKey });
+      if (consumed === null && reservedBonus) store.spendBonus(u, Math.min(reservedBonus, store.bonusBalance(u)), { reason: `Скидка на ${plan.title}`, plan: planKey });
+    }
+    const earned = purchaseBonus(sp.total_amount);
+    if (earned) store.addBonus(u, earned, { reason: `4% за покупку ${plan.title}`, sourceId: `cashback:${sp.telegram_payment_charge_id}` });
     const payment = {
       stars: sp.total_amount, currency: sp.currency, payload: sp.invoice_payload,
       chargeId: sp.telegram_payment_charge_id,
     };
-    if (corporatePlan(planKey)) store.grantCorporatePlan(u, planKey, plan.days, payment);
-    else store.grantPlan(u, planKey, plan.days, payment);
+    activatePurchasedPlan(u, plan, { ...payment, bonus: reservedBonus });
     return void await tg.sendMessage(chatId, [
       `🎉 *Оплата прошла. ${plan.title} активирован!*`,
       '',
       `Доступ до ${dt(corporatePlan(planKey) ? store.activeTeamFor(u).until : u.proUntil)}.`,
       corporatePlan(planKey) ? 'Управление участниками: /team' : `Теперь доступны: ${plan.perks[0]}.`,
+      earned ? `Начислено *${earned} бонусов* (4% от оплаты). Баланс: *${store.bonusBalance(u)}*.` : '',
     ].join('\n'), { reply_markup: mainKb(u) });
   }
 
@@ -1631,6 +1704,19 @@ export async function handleUpdate(update) {
   }
   // В режиме поддержки обычный текст уходит оператору, а не моделям. Команды
   // по-прежнему работают: иначе из режима было бы не выйти.
+  if (u.bugReportMode && !text.startsWith('/')) {
+    try {
+      const ticket = support.createBugReport(u, text, 'Telegram');
+      u.bugReportMode = false;
+      await store.save({ strict: true });
+      for (const adminId of ADMIN_IDS) {
+        tg.sendMessage(adminId, `🐞 Новый баг №${ticket.id} от ${store.displayName(u)}${u.username ? ` (@${u.username})` : ''}\n\n${text.slice(0, 900)}`).catch(() => {});
+      }
+      return void await tg.sendMessage(chatId, `✅ Баг №${ticket.id} отправлен. Решение появится в /bug, а уведомление придёт сюда.`, { reply_markup: mainKb(u) });
+    } catch (error) {
+      return void await tg.sendMessage(chatId, `⚠️ ${error.message}`);
+    }
+  }
   if (u.supportMode && !text.startsWith('/')) {
     return void await handleSupport(u, chatId, text);
   }
@@ -1670,7 +1756,7 @@ export async function handleUpdate(update) {
         return void await tg.sendMessage(chatId, '⚠️ Такой тариф не найден. Смотрите /plans.', { reply_markup: mainKb(u) });
       }
       await tg.sendMessage(chatId, `💎 Оформляем *${plan.title}* на ${plan.days} дней — счёт ниже.`);
-      return void await sendPlanInvoice(chatId, planKey);
+      return void await sendPlanInvoice(u, chatId, planKey);
     }
 
     const balance = text.match(/^\/start\s+balance_(\d+)$/i);

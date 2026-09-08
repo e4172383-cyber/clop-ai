@@ -32,3 +32,6 @@ export function chargeMicros(model, usage = {}) {
 
 export const microsToUsd = (micros) => Math.max(0, Number(micros || 0)) / MICRO;
 export const starsToMicros = (stars) => Math.round((Number(stars) / STARS_PER_USD) * MICRO);
+// Telegram Stars are indivisible. Cashback is always four percent of the
+// amount actually paid, rounded down to a whole bonus.
+export const purchaseBonus = (paidStars) => Math.max(0, Math.floor(Number(paidStars || 0) * 0.04));

@@ -17,6 +17,15 @@ export const SUPPORT_MODEL = 'gpt-luna';
 
 // Ответы поддержки в лимит тарифа не идут, поэтому нужен свой предохранитель
 export const SUPPORT_HOURLY_LIMIT = 25;
+export const BUG_REWARDS = Object.freeze({
+  reset5h: { key: 'reset5h', label: 'Сброс 5-часового лимита', type: 'limit-reset', amount: 0 },
+  bonus50: { key: 'bonus50', label: '50 бонусов', type: 'bonus', amount: 50 },
+  bonus75: { key: 'bonus75', label: '75 бонусов', type: 'bonus', amount: 75 },
+  bonus100: { key: 'bonus100', label: '100 бонусов', type: 'bonus', amount: 100 },
+  bonus250: { key: 'bonus250', label: '250 бонусов', type: 'bonus', amount: 250 },
+  bonus500: { key: 'bonus500', label: '500 бонусов', type: 'bonus', amount: 500 },
+  bonus1000: { key: 'bonus1000', label: '1000 бонусов', type: 'bonus', amount: 1000 },
+});
 
 export const SUPPORT_PROMPT = [
   'Ты — оператор службы поддержки сервиса Clop ai. Не помощник и не чат-бот с задачами.',
@@ -72,13 +81,15 @@ const newId = () => {
   return list.length ? Math.max(...list.map((t) => t.id)) + 1 : 1;
 };
 
-export function createTicket(u, subject, body) {
+export function createTicket(u, subject, body, options = {}) {
   const t = {
     id: newId(),
     userId: String(u.id),
     name: store.displayName(u),
     username: u.username || '',
     subject: String(subject || 'Без темы').slice(0, 120),
+    type: options.type === 'bug' ? 'bug' : 'support',
+    platform: String(options.platform || '').slice(0, 80),
     status: 'open',
     created: Date.now(),
     updated: Date.now(),
@@ -89,6 +100,16 @@ export function createTicket(u, subject, body) {
   if (db().tickets.length > 500) db().tickets.length = 500;
   store.saveSoon();
   return t;
+}
+
+export function createBugReport(u, body, platform = '') {
+  const description = String(body || '').trim();
+  if (description.length < 5) throw new Error('Опишите проблему хотя бы в нескольких словах.');
+  const dayAgo = Date.now() - 24 * 60 * 60_000;
+  if (userTickets(u.id).filter((ticket) => ticket.type === 'bug' && ticket.created >= dayAgo).length >= 10) {
+    throw new Error('За сутки уже отправлено 10 сообщений. Дождитесь проверки предыдущих.');
+  }
+  return createTicket(u, 'Сообщение об ошибке', description, { type: 'bug', platform });
 }
 
 export const allTickets = () => db().tickets;
@@ -105,6 +126,18 @@ export function addMessage(ticket, who, text) {
 
 export function closeTicket(ticket) {
   ticket.status = 'closed';
+  ticket.updated = Date.now();
+  store.saveSoon();
+  return ticket;
+}
+
+export function decideBug(ticket, decision, reward = null) {
+  if (!ticket || ticket.type !== 'bug') throw new Error('Это не баг-репорт.');
+  if (!['accepted', 'rejected'].includes(decision)) throw new Error('Неизвестное решение.');
+  if (['accepted', 'rejected'].includes(ticket.status)) throw new Error('По этому багу решение уже принято.');
+  if (decision === 'accepted' && (!reward || !BUG_REWARDS[reward.key])) throw new Error('Выберите вознаграждение.');
+  ticket.status = decision;
+  ticket.reward = decision === 'accepted' ? BUG_REWARDS[reward.key] : null;
   ticket.updated = Date.now();
   store.saveSoon();
   return ticket;

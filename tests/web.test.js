@@ -145,18 +145,18 @@ test('serves the public desktop release page and resumable installers without da
   assert.match(page.headers.get('content-type'), /^text\/html/);
   const html = await page.text();
   assert.match(html, /Android 8/);
-  assert.match(html, /Clop-Code-Setup-2\.3\.2\.exe/);
-  assert.match(html, /Clop-Code-2\.3\.2-linux-x64\.tar\.xz/);
+  assert.match(html, /Clop-Code-Setup-2\.3\.3\.exe/);
+  assert.match(html, /Clop-Code-2\.3\.3-linux-x64\.tar\.xz/);
   assert.match(html, /Clop-AI-Mobile-1\.0\.4\.apk/);
   assert.doesNotMatch(html, /\d[\d ]{3,}\s*токен/iu);
 
-  const partial = await fetch(baseUrl + '/downloads/Clop-Code-Setup-2.3.2.exe', {
+  const partial = await fetch(baseUrl + '/downloads/Clop-Code-Setup-2.3.3.exe', {
     headers: { range: 'bytes=0-31' },
   });
   assert.equal(partial.status, 206);
   assert.equal(partial.headers.get('content-length'), '32');
   assert.match(partial.headers.get('content-range'), /^bytes 0-31\/\d+$/);
-  assert.match(partial.headers.get('content-disposition'), /Clop-Code-Setup-2\.3\.2\.exe/);
+  assert.match(partial.headers.get('content-disposition'), /Clop-Code-Setup-2\.3\.3\.exe/);
   assert.equal((await partial.arrayBuffer()).byteLength, 32);
 
   const apk = await fetch(baseUrl + '/downloads/Clop-AI-Mobile-1.0.4.apk', {
@@ -302,6 +302,48 @@ test('/desk/chat marks the request as a desktop action client', async () => {
   assert.equal(response.status, 200);
   assert.equal((await response.json()).ok, true);
   assert.equal(modelCalls[0].client, 'desktop');
+});
+
+test('a user can submit a bug and the admin can accept it with one idempotent reward', async () => {
+  const createdResponse = await authed('/chat/api/bugs', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ description: 'Кнопка отправки не реагирует после второго нажатия', platform: 'Сайт' }),
+  });
+  assert.equal(createdResponse.status, 201);
+  const created = await createdResponse.json();
+  assert.equal(created.bug.status, 'open');
+
+  const authorization = `Basic ${Buffer.from(':web-test-password').toString('base64')}`;
+  const catalogResponse = await fetch(baseUrl + '/api/tickets', { headers: { authorization } });
+  assert.equal(catalogResponse.status, 200);
+  const catalog = await catalogResponse.json();
+  assert.deepEqual(catalog.bugRewards.map((reward) => reward.key), [
+    'reset5h', 'bonus50', 'bonus75', 'bonus100', 'bonus250', 'bonus500', 'bonus1000',
+  ]);
+
+  const invalidDecision = await fetch(baseUrl + '/api/ticket/decision', {
+    method: 'POST',
+    headers: { authorization, 'content-type': 'application/json' },
+    body: JSON.stringify({ id: created.bug.id, decision: 'accepted', reward: 'unknown' }),
+  });
+  assert.equal(invalidDecision.status, 400);
+
+  const decide = () => fetch(baseUrl + '/api/ticket/decision', {
+    method: 'POST',
+    headers: { authorization, 'content-type': 'application/json' },
+    body: JSON.stringify({ id: created.bug.id, decision: 'accepted', reward: 'bonus50' }),
+  });
+  const decisionResponse = await decide();
+  assert.equal(decisionResponse.status, 200);
+  const decision = await decisionResponse.json();
+  assert.equal(decision.bonuses.balance, 50);
+  assert.equal(decision.ticket.reward.amount, 50);
+
+  assert.equal((await decide()).status, 400);
+  const own = await (await authed('/chat/api/bugs')).json();
+  assert.equal(own.bonuses.balance, 50);
+  assert.equal(own.bugs.find((bug) => bug.id === created.bug.id).status, 'accepted');
 });
 
 test('/desk/chat does not charge a desktop task when the model performs no action', async () => {

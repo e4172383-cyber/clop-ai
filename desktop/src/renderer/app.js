@@ -7,7 +7,7 @@
 
   const elements = {};
   for (const id of [
-    'app', 'workspaceCrumb', 'workspaceName', 'connectionStatus', 'updateButton', 'updateButtonLabel', 'updateButtonMeta', 'sidebar', 'newChatButton', 'botBuilderButton',
+    'app', 'workspaceCrumb', 'workspaceName', 'connectionStatus', 'bugReportButton', 'updateButton', 'updateButtonLabel', 'updateButtonMeta', 'sidebar', 'newChatButton', 'botBuilderButton',
     'railNewChatButton', 'chatRailButton', 'sidebarArtifactsButton', 'guestLoginPrompt',
     'chatSearch', 'chatGroups', 'chatList', 'chatsTop', 'chatsBottom', 'accountButton', 'userAvatar', 'accountName',
     'accountPlan', 'chatTitle', 'chatSubtitle', 'modeSwitch', 'emptyTitle', 'emptyNote',
@@ -25,7 +25,8 @@
     'approvalModal', 'approvalTitle', 'approvalDescription', 'approvalKind', 'approvalRisk',
     'approvalCode', 'approvalNote', 'denyAction', 'allowAction', 'fullModeModal',
     'fullModeAcknowledge', 'confirmFullMode', 'settingsButton', 'settingsModal',
-    'settingsTitle', 'settingsAccount', 'settingsAvatar', 'settingsAccountName', 'settingsPlan',
+    'settingsTitle', 'settingsAccount', 'settingsAvatar', 'settingsAccountName', 'settingsPlan', 'bugReportModal', 'bugDescription',
+    'submitBugButton', 'bugSubmitState', 'bugBonusBalance', 'refreshBugsButton', 'bugHistory',
     'themeSelect', 'animationsSetting', 'agentVisibleSetting', 'enterSendsSetting', 'approvalModeSetting', 'modelSelect', 'effortSelect',
     'fastSetting', 'shellTimeoutSetting', 'emptyLoginButton',
     'settingsModeName', 'settingsModeDescription', 'changeModeButton', 'openBackups',
@@ -2107,6 +2108,70 @@
     if (state.loggedIn) refreshAccount(false);
   }
 
+  function renderBugReports(result = {}) {
+    const labels = { open: 'На проверке', accepted: 'Принят', rejected: 'Отклонён' };
+    elements.bugBonusBalance.textContent = String(result.bonuses?.balance ?? state.user?.bonuses?.balance ?? 0);
+    elements.bugHistory.replaceChildren();
+    const bugs = Array.isArray(result.bugs) ? result.bugs : [];
+    if (!bugs.length) {
+      elements.bugHistory.append(node('span', 'bug-empty', 'Вы ещё не отправляли сообщения о багах.'));
+      return;
+    }
+    for (const bug of bugs) {
+      const card = node('article', 'bug-history-item');
+      const head = node('header');
+      head.append(node('strong', '', `№${bug.id} · ${labels[bug.status] || bug.status}`));
+      const time = node('time', '', new Date(Number(bug.updated) || Date.now()).toLocaleString('ru-RU'));
+      head.append(time);
+      card.append(head, node('p', '', bug.description || 'Без описания'));
+      if (bug.reward?.label) card.append(node('small', '', `Награда: ${bug.reward.label}`));
+      elements.bugHistory.append(card);
+    }
+  }
+
+  async function loadBugReports() {
+    if (!state.loggedIn) return;
+    elements.bugHistory.replaceChildren(node('span', 'bug-empty', 'Загружаем сообщения…'));
+    try {
+      renderBugReports(await api.bugs());
+    } catch (error) {
+      elements.bugHistory.replaceChildren(node('span', 'bug-empty', errorText(error)));
+    }
+  }
+
+  async function openBugReporter() {
+    if (!state.loggedIn) {
+      showLogin();
+      toast('Сначала войдите через Telegram — так владелец увидит ваш ник.');
+      return;
+    }
+    elements.bugSubmitState.textContent = '';
+    showModal(elements.bugReportModal);
+    await loadBugReports();
+  }
+
+  async function submitBugReport() {
+    const description = elements.bugDescription.value.trim();
+    if (description.length < 5) {
+      elements.bugSubmitState.textContent = 'Добавьте короткое описание.';
+      elements.bugDescription.focus();
+      return;
+    }
+    elements.submitBugButton.disabled = true;
+    elements.bugSubmitState.textContent = 'Отправляем…';
+    try {
+      const result = await api.submitBug({ description });
+      elements.bugDescription.value = '';
+      elements.bugSubmitState.textContent = `Отправлено: баг №${result.bug.id}`;
+      toast('Баг отправлен владельцу.', 'success');
+      await loadBugReports();
+    } catch (error) {
+      elements.bugSubmitState.textContent = errorText(error);
+    } finally {
+      elements.submitBugButton.disabled = false;
+    }
+  }
+
   async function refreshAccount(showFeedback = false) {
     if (!state.loggedIn) return;
     try {
@@ -2487,6 +2552,9 @@
   }
 
   function bindEvents() {
+    elements.bugReportButton.addEventListener('click', openBugReporter);
+    elements.submitBugButton.addEventListener('click', submitBugReport);
+    elements.refreshBugsButton.addEventListener('click', loadBugReports);
     elements.updateButton.addEventListener('click', async () => {
       elements.updateButton.disabled = true;
       renderUpdateProgress({ phase: 'downloading', percent: 0, receivedBytes: 0, totalBytes: 0 });
@@ -2656,7 +2724,7 @@
       }
       hideModal(modal);
     }));
-    for (const modal of [elements.telegramModal, elements.settingsModal]) {
+    for (const modal of [elements.telegramModal, elements.settingsModal, elements.bugReportModal]) {
       modal.addEventListener('mousedown', (event) => {
         if (event.target !== modal) return;
         if (modal === elements.telegramModal) cancelLogin();

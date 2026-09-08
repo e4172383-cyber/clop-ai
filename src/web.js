@@ -4,7 +4,7 @@ import { BILLING_VERSION } from './token-accounting.js';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { WEB_PORT, WEB_HOST, PUBLIC_URL, MODELS, PLANS, PROVIDERS, DEFAULT_MODEL, DEFAULT_EFFORT, EFFORTS, DAY, BOT_NAME, freeGoActive, FREE_GO_UNTIL, FREE_GO_PLAN, MODEL_PROMO, modelPromoActive, CORPORATE_PLANS, corporatePlansReady } from './config.js';
+import { WEB_PORT, WEB_HOST, PUBLIC_URL, MODELS, PLANS, PROVIDERS, DEFAULT_MODEL, DEFAULT_EFFORT, EFFORTS, DAY, BOT_NAME, ADMIN_IDS, freeGoActive, FREE_GO_UNTIL, FREE_GO_PLAN, MODEL_PROMO, modelPromoActive, CORPORATE_PLANS, corporatePlansReady } from './config.js';
 import * as store from './store.js';
 import * as sites from './sites.js';
 import * as desk from './desktop.js';
@@ -48,6 +48,18 @@ import { BOT_TEMPLATES, listCustomBots, createCustomBot, deleteCustomBot, handle
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(__dirname, 'public');
 const WEB_PASSWORD = process.env.WEB_PASSWORD || '';
+
+function publicBug(ticket) {
+  return {
+    id: ticket.id,
+    status: ticket.status,
+    description: ticket.messages?.[0]?.text || '',
+    platform: ticket.platform || '',
+    created: ticket.created,
+    updated: ticket.updated,
+    reward: ticket.reward || null,
+  };
+}
 
 function checkBasicAuth(req) {
   const header = req.headers['authorization'] || '';
@@ -155,7 +167,7 @@ const DESKTOP_DOWNLOADS = new Set([
   'Clop-Code-Setup-2.1.1.exe',
   'Clop-Code-Setup-2.3.0.exe',
   'Clop-Code-Setup-2.3.1.exe',
-  'Clop-Code-Setup-2.3.2.exe',
+  'Clop-Code-Setup-2.3.3.exe',
   'Clop-Code-2.0.6-linux-x64.tar.xz',
   'Clop-Code-2.0.9-linux-x64.tar.xz',
   'Clop-Code-2.0.10-linux-x64.tar.xz',
@@ -163,7 +175,7 @@ const DESKTOP_DOWNLOADS = new Set([
   'Clop-Code-2.1.1-linux-x64.tar.xz',
   'Clop-Code-2.3.0-linux-x64.tar.xz',
   'Clop-Code-2.3.1-linux-x64.tar.xz',
-  'Clop-Code-2.3.2-linux-x64.tar.xz',
+  'Clop-Code-2.3.3-linux-x64.tar.xz',
   'Clop-AI-Mobile-1.0.0.apk',
   'Clop-AI-Mobile-1.0.1.apk',
   'Clop-AI-Mobile-1.0.2.apk',
@@ -481,10 +493,10 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
     if (url.pathname === '/releases.json' && req.method === 'GET') {
       return sendJson(res, 200, {
         desktop: {
-          version: '2.3.2',
-          url: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-Setup-2.3.2.exe`,
-          windowsUrl: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-Setup-2.3.2.exe`,
-          linuxUrl: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-2.3.2-linux-x64.tar.xz`,
+          version: '2.3.3',
+          url: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-Setup-2.3.3.exe`,
+          windowsUrl: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-Setup-2.3.3.exe`,
+          linuxUrl: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-2.3.3-linux-x64.tar.xz`,
         },
         android: { version: '1.0.4', url: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-AI-Mobile-1.0.4.apk` },
       });
@@ -757,8 +769,33 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
             fast: u.fast === true,
             voice: voiceLimitState(u, plan.key),
             limitedOffer: offerState(u),
+            bonuses: store.bonusReport(u),
           });
         }).catch(() => sendJson(res, 500, { ok: false }));
+        return;
+      }
+
+      if (url.pathname === '/desk/bugs' && req.method === 'GET') {
+        authed().then((u) => {
+          if (!u) return sendJson(res, 401, { ok: false, error: 'нужен вход' });
+          return sendJson(res, 200, {
+            ok: true,
+            bugs: support.userTickets(u.id).filter((ticket) => ticket.type === 'bug').map(publicBug),
+            bonuses: store.bonusReport(u),
+          });
+        }).catch(() => sendJson(res, 500, { ok: false }));
+        return;
+      }
+
+      if (url.pathname === '/desk/bugs' && req.method === 'POST') {
+        readJsonBody(req, 20_000).then(async (body) => {
+          const u = await authed();
+          if (!u) return sendJson(res, 401, { ok: false, error: 'нужен вход' });
+          const ticket = support.createBugReport(u, body.description, 'Clop Code');
+          await store.save({ strict: true });
+          for (const adminId of ADMIN_IDS) notifyUser(adminId, `🐞 Новый баг №${ticket.id} от ${store.displayName(u)}${u.username ? ` (@${u.username})` : ''}\n\n${ticket.messages[0].text.slice(0, 900)}`);
+          return sendJson(res, 201, { ok: true, bug: publicBug(ticket) });
+        }).catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
         return;
       }
 
@@ -1178,6 +1215,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
             ? { title: MODEL_PROMO.title, until: MODEL_PROMO.until, models: MODEL_PROMO.models }
             : null,
           limitedOffer: offerState(u),
+          bonuses: store.bonusReport(u),
           models,
           chats: store.liveChats(u).map((item) => chatSummary(u, item)),
           messages: chat.messages.map(publicChatMessage),
@@ -1185,6 +1223,34 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
       });
       return;
     }
+    if (url.pathname === '/chat/api/bugs' && req.method === 'GET') {
+      (reloadEachRequest ? store.load() : Promise.resolve()).then(() => {
+        const userId = sessionUserId(req);
+        const u = userId && store.findUser(userId);
+        if (!u) return sendJson(res, 401, { ok: false, error: 'not logged in' });
+        return sendJson(res, 200, {
+          ok: true,
+          bugs: support.userTickets(u.id).filter((ticket) => ticket.type === 'bug').map(publicBug),
+          bonuses: store.bonusReport(u),
+        });
+      }).catch(() => sendJson(res, 500, { ok: false }));
+      return;
+    }
+
+    if (url.pathname === '/chat/api/bugs' && req.method === 'POST') {
+      readJsonBody(req, 20_000).then(async (body) => {
+        if (reloadEachRequest) await store.load();
+        const userId = sessionUserId(req);
+        const u = userId && store.findUser(userId);
+        if (!u) return sendJson(res, 401, { ok: false, error: 'not logged in' });
+        const ticket = support.createBugReport(u, body.description, String(body.platform || 'Сайт'));
+        await store.save({ strict: true });
+        for (const adminId of ADMIN_IDS) notifyUser(adminId, `🐞 Новый баг №${ticket.id} от ${store.displayName(u)}${u.username ? ` (@${u.username})` : ''}\n\n${ticket.messages[0].text.slice(0, 900)}`);
+        return sendJson(res, 201, { ok: true, bug: publicBug(ticket) });
+      }).catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
+      return;
+    }
+
     // Список чатов (для обновления сайдбара без полного /me)
     if (url.pathname === '/chat/api/chats' && req.method === 'GET') {
       (reloadEachRequest ? store.load() : Promise.resolve()).then(() => {
@@ -1277,6 +1343,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           images: { used: img.used, limit: img.limit, left: img.left },
           chatsCount: store.liveChats(u).length,
           limitedOffer: offerState(u),
+          bonuses: store.bonusReport(u),
         });
       });
       return;
@@ -1673,7 +1740,12 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
             until: u && (u.ban || u.mute) ? (u.ban?.until || u.mute?.until || 0) : 0,
           };
         });
-        return sendJson(res, 200, { ok: true, tickets: list, plans: Object.values(PLANS).map((p) => ({ key: p.key, title: p.title, days: p.days })) });
+        return sendJson(res, 200, {
+          ok: true,
+          tickets: list,
+          plans: Object.values(PLANS).map((p) => ({ key: p.key, title: p.title, days: p.days })),
+          bugRewards: Object.values(support.BUG_REWARDS),
+        });
       });
       return;
     }
@@ -1703,6 +1775,30 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
         await store.save();
         notifyUser(t.userId, `✅ Заявка №${t.id} закрыта. Если вопрос остался — напишите в /support.`);
         return sendJson(res, 200, { ok: true });
+      }).catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
+      return;
+    }
+
+    if (url.pathname === '/api/ticket/decision' && req.method === 'POST') {
+      readJsonBody(req).then(async (body) => {
+        if (reloadEachRequest) await store.load();
+        const ticket = support.findTicket(body.id);
+        if (!ticket) return sendJson(res, 404, { ok: false, error: 'баг не найден' });
+        const user = store.findUser(ticket.userId);
+        if (!user) return sendJson(res, 404, { ok: false, error: 'пользователь не найден' });
+        const decision = String(body.decision || '');
+        const reward = decision === 'accepted' ? support.BUG_REWARDS[String(body.reward || '')] : null;
+        support.decideBug(ticket, decision, reward);
+        if (decision === 'accepted' && reward.type === 'limit-reset') {
+          store.resetFiveHourUsage(user, { reason: `Вознаграждение за баг №${ticket.id}`, sourceId: `bug:${ticket.id}` });
+        } else if (decision === 'accepted' && reward.type === 'bonus') {
+          store.addBonus(user, reward.amount, { reason: `Вознаграждение за баг №${ticket.id}`, sourceId: `bug:${ticket.id}` });
+        }
+        await store.save({ strict: true });
+        notifyUser(user.id, decision === 'accepted'
+          ? `✅ Баг №${ticket.id} принят. Вознаграждение: *${reward.label}*.${reward.type === 'bonus' ? ` Баланс: *${store.bonusBalance(user)} бонусов*.` : ''}`
+          : `❌ Баг №${ticket.id} отклонён. Спасибо, что сообщили — описание сохранено для анализа.`);
+        return sendJson(res, 200, { ok: true, ticket, bonuses: store.bonusReport(user) });
       }).catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
       return;
     }

@@ -398,6 +398,8 @@
   .tag.max20{border-color:rgba(194,120,50,.24);color:#9c5f27;background:rgba(194,120,50,.1)}
   .tag.free,.tag.closed{color:var(--muted);background:rgba(118,111,103,.08)}
   .tag.open{border-color:rgba(57,123,90,.22);color:var(--ok);background:rgba(57,123,90,.09)}
+  .tag.accepted{border-color:rgba(57,123,90,.22);color:var(--ok);background:rgba(57,123,90,.09)}
+  .tag.rejected{border-color:rgba(189,74,67,.25);color:var(--bad);background:rgba(189,74,67,.09)}
   .tag.ban{border-color:rgba(189,74,67,.25);color:var(--bad);background:rgba(189,74,67,.09)}
   .tag.mute{border-color:rgba(194,120,50,.24);color:#9c5f27;background:rgba(194,120,50,.09)}
 
@@ -867,7 +869,7 @@ async function loadTickets() {
 
 function renderTickets() {
   const list = ticketsData.tickets || [];
-  const live = list.filter(t => t.status !== 'closed').length;
+  const live = list.filter(t => !['closed','accepted','rejected'].includes(t.status)).length;
   document.getElementById('tcount').textContent = live ? `— ${live} в работе` : '— всё закрыто';
   document.getElementById('tickets').innerHTML = list.length
     ? list.map(renderTicket).join('')
@@ -875,14 +877,15 @@ function renderTickets() {
 }
 
 function renderTicket(t) {
-  const st = t.status === 'closed' ? 'closed' : t.status === 'answered' ? 'answered' : 'open';
-  const stName = { open: 'в работе', answered: 'отвечено', closed: 'закрыта' }[st];
+  const st = ['closed','answered','accepted','rejected'].includes(t.status) ? t.status : 'open';
+  const stName = { open: 'в работе', answered: 'отвечено', closed: 'закрыта', accepted: 'принят', rejected: 'отклонён' }[st];
   const plans = (ticketsData.plans || []).filter(p => p.key !== 'free')
     .map(p => `<option value="${p.key}">${escapeHtml(p.title)}</option>`).join('');
+  const rewards = (ticketsData.bugRewards || []).map(r => `<option value="${r.key}">${escapeHtml(r.label)}</option>`).join('');
   return `
   <div class="tk ${st === 'closed' ? 'closed' : ''} ${openTicket === t.id ? 'on' : ''}" id="tk${t.id}">
     <div class="tk-head" onclick="toggleTicket(${t.id})">
-      <b>№${t.id} — ${escapeHtml(t.subject)}</b>
+      <b>№${t.id} — ${t.type === 'bug' ? '🐞 ' : ''}${escapeHtml(t.subject)}</b>
       <span class="tag ${st}">${stName}</span>
       <span class="muted">${escapeHtml(t.name)}${t.username ? ' @' + escapeHtml(t.username) : ''} · ${escapeHtml(t.plan)}</span>
       ${t.banned ? '<span class="tag ban">бан</span>' : ''}
@@ -891,6 +894,9 @@ function renderTicket(t) {
     </div>
     <div class="tk-body">
       ${t.messages.map(m => `<div class="tk-msg ${m.who}"><span class="who">${m.who === 'admin' ? 'оператор' : 'пользователь'} · ${time(m.ts)}</span>${escapeHtml(m.text)}</div>`).join('')}
+      ${t.platform ? `<div class="muted">Источник: ${escapeHtml(t.platform)}</div>` : ''}
+      ${t.reward?.label ? `<div class="tk-sub">Вознаграждение: <b>${escapeHtml(t.reward.label)}</b></div>` : ''}
+      ${t.type === 'bug' && !['accepted','rejected'].includes(t.status) ? `<div class="tk-sub">Решение: <select id="rw${t.id}">${rewards}</select><button class="go" onclick="decideBug(${t.id},'accepted')">Принять и выдать</button><button class="bad" onclick="decideBug(${t.id},'rejected')">Отклонить</button></div>` : ''}
       <div class="tk-act">
         <textarea id="rep${t.id}" placeholder="Ответ пользователю — придёт ему в бота"></textarea>
         <button class="go" onclick="replyTicket(${t.id})">Ответить</button>
@@ -940,6 +946,16 @@ async function closeTicket(id) {
   if (!confirm('Закрыть заявку №' + id + '?')) return;
   const r = await post('/api/ticket/close', { id });
   if (!r.ok) return alert('Не вышло: ' + (r.error || ''));
+  await loadTickets();
+}
+
+async function decideBug(id, decision) {
+  const ticket = ticketById(id);
+  const reward = decision === 'accepted' ? document.getElementById('rw' + id).value : '';
+  const action = decision === 'accepted' ? `Принять баг и выдать выбранное вознаграждение пользователю ${ticket.name}?` : `Отклонить баг от ${ticket.name}?`;
+  if (!confirm(action)) return;
+  const result = await post('/api/ticket/decision', { id, decision, reward });
+  if (!result.ok) return alert('Не вышло: ' + (result.error || ''));
   await loadTickets();
 }
 

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { API_PRICES, chargeMicros, starsToMicros } from '../src/billing.js';
+import { API_PRICES, chargeMicros, purchaseBonus, starsToMicros } from '../src/billing.js';
 
 test('pay as you go charges regular, cached and cache-write tokens at their own rates', () => {
   const charge = chargeMicros('gpt-astra', {
@@ -23,4 +23,11 @@ test('Clop 3.1 pay as you go models have complete billing entries', () => {
     assert.equal(typeof API_PRICES[model].title, 'string');
     assert.ok(chargeMicros(model, { input: 1000, output: 1000 }) > 0);
   }
+});
+
+test('purchases credit only four percent rounded down to whole bonuses', () => {
+  assert.equal(purchaseBonus(25), 1);
+  assert.equal(purchaseBonus(499), 19);
+  assert.equal(purchaseBonus(999), 39);
+  assert.equal(purchaseBonus(0), 0);
 });

@@ -84,6 +84,9 @@ export function getUser(from) {
       usage: [],
       images: [], // временные метки генераций картинок — для суточного лимита
       payments: [],
+      bonusBalance: 0,
+      bonusTransactions: [],
+      bonusReservations: [],
       stats: { requests: 0, tokens: 0, errors: 0 },
       pending: null,
     };
@@ -96,6 +99,9 @@ export function getUser(from) {
   u.lastSeen = Date.now();
   if (!u.effort) u.effort = DEFAULT_EFFORT; // на случай пользователей, созданных до появления поля
   if (typeof u.fast !== 'boolean') u.fast = false;
+  if (!Number.isFinite(u.bonusBalance)) u.bonusBalance = 0;
+  if (!Array.isArray(u.bonusTransactions)) u.bonusTransactions = [];
+  if (!Array.isArray(u.bonusReservations)) u.bonusReservations = [];
   if (u.proUntil && u.proUntil < Date.now() && PAID_PLAN_KEYS.has(u.plan)) u.plan = 'free';
   return u;
 }
@@ -287,6 +293,93 @@ export function chargeBalance(u, micros, details = {}) {
   return { ok: true, balanceMicros: u.balanceMicros };
 }
 
+function sweepBonusReservations(u, now = Date.now()) {
+  if (!Array.isArray(u.bonusReservations)) u.bonusReservations = [];
+  const active = [];
+  let released = false;
+  for (const reservation of u.bonusReservations) {
+    if (Number(reservation.expiresAt || 0) > now) active.push(reservation);
+    else {
+      u.bonusBalance = Math.max(0, Math.floor(Number(u.bonusBalance || 0))) + Math.max(0, Math.floor(Number(reservation.amount || 0)));
+      released = true;
+    }
+  }
+  u.bonusReservations = active;
+  if (released) saveSoon();
+}
+
+export function bonusBalance(u, now = Date.now()) {
+  sweepBonusReservations(u, now);
+  return Math.max(0, Math.floor(Number(u.bonusBalance || 0)));
+}
+
+export function bonusReport(u, now = Date.now()) {
+  return {
+    balance: bonusBalance(u, now),
+    transactions: (u.bonusTransactions || []).slice(-100).reverse(),
+  };
+}
+
+export function addBonus(u, amount, details = {}) {
+  const value = Math.max(0, Math.floor(Number(amount || 0)));
+  if (!value) return bonusBalance(u);
+  if (!Array.isArray(u.bonusTransactions)) u.bonusTransactions = [];
+  if (details.sourceId && u.bonusTransactions.some((entry) => entry.sourceId === details.sourceId)) return bonusBalance(u);
+  u.bonusBalance = bonusBalance(u) + value;
+  u.bonusTransactions.push({ type: 'credit', amount: value, ts: Date.now(), ...details });
+  if (u.bonusTransactions.length > 500) u.bonusTransactions = u.bonusTransactions.slice(-500);
+  saveSoon();
+  return u.bonusBalance;
+}
+
+export function spendBonus(u, amount, details = {}) {
+  const value = Math.max(0, Math.floor(Number(amount || 0)));
+  const balance = bonusBalance(u);
+  if (!value || value > balance) return { ok: false, balance };
+  u.bonusBalance = balance - value;
+  u.bonusTransactions.push({ type: 'debit', amount: -value, ts: Date.now(), ...details });
+  if (u.bonusTransactions.length > 500) u.bonusTransactions = u.bonusTransactions.slice(-500);
+  saveSoon();
+  return { ok: true, balance: u.bonusBalance };
+}
+
+export function reserveBonus(u, maximum, ttlMs = 15 * 60_000) {
+  const amount = Math.min(bonusBalance(u), Math.max(0, Math.floor(Number(maximum || 0))));
+  if (!amount) return null;
+  const reservation = { id: 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 9), amount, expiresAt: Date.now() + ttlMs };
+  u.bonusBalance -= amount;
+  u.bonusReservations.push(reservation);
+  saveSoon();
+  return reservation;
+}
+
+export function consumeBonusReservation(u, id, details = {}) {
+  sweepBonusReservations(u);
+  const index = u.bonusReservations.findIndex((entry) => entry.id === String(id || ''));
+  if (index < 0) return null;
+  const [reservation] = u.bonusReservations.splice(index, 1);
+  u.bonusTransactions.push({ type: 'debit', amount: -reservation.amount, ts: Date.now(), ...details });
+  saveSoon();
+  return reservation.amount;
+}
+
+export function releaseBonusReservation(u, id) {
+  const index = (u.bonusReservations || []).findIndex((entry) => entry.id === String(id || ''));
+  if (index < 0) return 0;
+  const [reservation] = u.bonusReservations.splice(index, 1);
+  u.bonusBalance = Math.max(0, Math.floor(Number(u.bonusBalance || 0))) + reservation.amount;
+  saveSoon();
+  return reservation.amount;
+}
+
+export function resetFiveHourUsage(u, details = {}) {
+  u.shortUsageResetAt = Date.now();
+  if (!Array.isArray(u.bonusTransactions)) u.bonusTransactions = [];
+  u.bonusTransactions.push({ type: 'limit-reset', amount: 0, ts: u.shortUsageResetAt, ...details });
+  saveSoon();
+  return u.shortUsageResetAt;
+}
+
 // Отмечает одну генерацию картинки (для суточного лимита) — храним только
 // метки за последние 2 суток, дальше не нужны
 export function addImageGeneration(u) {
@@ -357,6 +450,8 @@ export function transferAccount(from, to) {
 
   to.usage = to.usage.concat(from.usage).sort((a, b) => (a.ts || 0) - (b.ts || 0));
   to.payments = to.payments.concat(from.payments || []).sort((a, b) => (a.ts || 0) - (b.ts || 0));
+  to.bonusBalance = bonusBalance(to) + bonusBalance(from);
+  to.bonusTransactions = (to.bonusTransactions || []).concat(from.bonusTransactions || []).sort((a, b) => (a.ts || 0) - (b.ts || 0)).slice(-500);
   to.images = (to.images || []).concat(from.images || []);
 
   to.stats = {
@@ -397,6 +492,9 @@ export function transferAccount(from, to) {
   from.chats = [];
   from.usage = [];
   from.payments = [];
+  from.bonusBalance = 0;
+  from.bonusTransactions = [];
+  from.bonusReservations = [];
   from.images = [];
   from.stats = { requests: 0, tokens: 0, errors: 0 };
   from.activeChatId = null;

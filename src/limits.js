@@ -54,8 +54,10 @@ export function effortOf(u, model) {
 // против своего пула — фильтруем по e.model → provider.
 function countableUsage(u, windowMs, provider, now) {
   const from = now - windowMs;
+  const manualResetAt = windowMs === WINDOWS.short.ms ? Number(u.shortUsageResetAt || 0) : 0;
   return u.usage.filter((e) => {
     if (e.ts < from) return false;
+    if (manualResetAt && e.ts <= manualResetAt) return false;
     if (UNLIMITED_MODELS.has(e.model)) return false;
     if (e.offerBonus === true) return false;
     return (MODELS[e.model]?.provider) === provider;
@@ -70,9 +72,10 @@ export function usedIn(u, windowMs, provider, now = Date.now()) {
 
 function combinedUsed(user, windowMs, now, joinedAt = 0) {
   const from = Math.max(now - windowMs, Number(joinedAt || 0));
+  const manualResetAt = windowMs === WINDOWS.short.ms ? Number(user.shortUsageResetAt || 0) : 0;
   let sum = 0;
   for (const e of user.usage || []) {
-    if (Number(e.ts || 0) < from || UNLIMITED_MODELS.has(e.model) || e.offerBonus === true) continue;
+    if (Number(e.ts || 0) < from || (manualResetAt && Number(e.ts || 0) <= manualResetAt) || UNLIMITED_MODELS.has(e.model) || e.offerBonus === true) continue;
     const provider = MODELS[e.model]?.provider;
     if (provider) sum += eventBillable(e, provider);
   }
@@ -85,8 +88,9 @@ function corporateUsageEvents(team, windowMs, now, onlyUserId = null) {
   for (const id of ids) {
     const from = Math.max(now - windowMs, Number(team.memberSince?.[id] || team.createdAt || 0));
     const member = store.findUser(id);
+    const manualResetAt = windowMs === WINDOWS.short.ms ? Number(member?.shortUsageResetAt || 0) : 0;
     for (const e of member?.usage || []) {
-      if (Number(e.ts || 0) < from || UNLIMITED_MODELS.has(e.model) || e.offerBonus === true) continue;
+      if (Number(e.ts || 0) < from || (manualResetAt && Number(e.ts || 0) <= manualResetAt) || UNLIMITED_MODELS.has(e.model) || e.offerBonus === true) continue;
       if (MODELS[e.model]?.provider) events.push(e);
     }
   }

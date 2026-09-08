@@ -2109,6 +2109,16 @@ function registerIpc() {
     ensureAuthenticated();
     return { ok: true, user: await refreshAccount(true) };
   });
+  handle('bugs', async () => {
+    ensureAuthenticated();
+    return apiJson('/desk/bugs', { auth: true });
+  });
+  handle('bug-submit', async (payload = {}) => {
+    ensureAuthenticated();
+    const description = String(payload.description || '').trim();
+    if (description.length < 5) throw new Error('Опишите проблему хотя бы в нескольких словах.');
+    return apiJson('/desk/bugs', { method: 'POST', auth: true, body: { description } });
+  });
   handle('logout', async () => {
     if (token) {
       try { await apiJson('/desk/logout', { method: 'POST', auth: true }); } catch { /* local logout must still work */ }
