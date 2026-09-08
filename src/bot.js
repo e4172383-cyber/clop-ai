@@ -303,7 +303,7 @@ function myApiKb() {
 }
 
 function apiKeyText(res) {
-  const base = 'https://clop-cloud-api-2.onrender.com';
+  const base = (process.env.CLOUD_API_URL || PUBLIC_URL).replace(/\/+$/, '');
   return [
     '🔑 *Ваш личный API*',
     '',
