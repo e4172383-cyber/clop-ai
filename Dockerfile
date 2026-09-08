@@ -9,7 +9,8 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates git \
     && rm -rf /var/lib/apt/lists/* \
     && npm install --global @anthropic-ai/claude-code @openai/codex \
-    && useradd --create-home --uid 10001 --shell /usr/sbin/nologin clop
+    && useradd --create-home --uid 10001 --shell /usr/sbin/nologin clop \
+    && chown -R clop:clop /home/clop
 
 WORKDIR /app
 
