@@ -145,18 +145,18 @@ test('serves the public desktop release page and resumable installers without da
   assert.match(page.headers.get('content-type'), /^text\/html/);
   const html = await page.text();
   assert.match(html, /Android 8/);
-  assert.match(html, /Clop-Code-Setup-2\.3\.3\.exe/);
-  assert.match(html, /Clop-Code-2\.3\.3-linux-x64\.tar\.xz/);
+  assert.match(html, /Clop-Code-Setup-2\.4\.0\.exe/);
+  assert.match(html, /Clop-Code-2\.4\.0-linux-x64\.tar\.xz/);
   assert.match(html, /Clop-AI-Mobile-1\.0\.4\.apk/);
   assert.doesNotMatch(html, /\d[\d ]{3,}\s*токен/iu);
 
-  const partial = await fetch(baseUrl + '/downloads/Clop-Code-Setup-2.3.3.exe', {
+  const partial = await fetch(baseUrl + '/downloads/Clop-Code-Setup-2.4.0.exe', {
     headers: { range: 'bytes=0-31' },
   });
   assert.equal(partial.status, 206);
   assert.equal(partial.headers.get('content-length'), '32');
   assert.match(partial.headers.get('content-range'), /^bytes 0-31\/\d+$/);
-  assert.match(partial.headers.get('content-disposition'), /Clop-Code-Setup-2\.3\.3\.exe/);
+  assert.match(partial.headers.get('content-disposition'), /Clop-Code-Setup-2\.4\.0\.exe/);
   assert.equal((await partial.arrayBuffer()).byteLength, 32);
 
   const apk = await fetch(baseUrl + '/downloads/Clop-AI-Mobile-1.0.4.apk', {
@@ -255,6 +255,62 @@ test('/desk/me exposes only percentage token-limit state', async () => {
       );
     }
   }
+});
+
+test('Remote web control requires the same account and desktop approval', async () => {
+  const deviceId = 'desktop-remote-test';
+  desktop.addDevice(user, deviceId, 'Remote test PC');
+  const token = desktop.signToken(user.id, deviceId);
+  const desktopHeaders = { authorization: 'Bearer ' + token, 'content-type': 'application/json' };
+
+  const firstBeat = await fetch(baseUrl + '/desk/remote/heartbeat', {
+    method: 'POST', headers: desktopHeaders,
+    body: JSON.stringify({ name: 'Remote test PC', version: '2.4.0', enabled: true }),
+  });
+  assert.equal(firstBeat.status, 200);
+
+  const devicesResponse = await authed('/chat/api/remote/devices');
+  const devices = await devicesResponse.json();
+  assert.equal(devices.version, '1.1 Beta');
+  assert.equal(devices.devices[0].online, true);
+
+  const requestResponse = await authed('/chat/api/remote/request', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ deviceId }),
+  });
+  const requested = await requestResponse.json();
+  assert.ok(requested.request.id);
+
+  const requestBeat = await fetch(baseUrl + '/desk/remote/heartbeat', {
+    method: 'POST', headers: desktopHeaders, body: JSON.stringify({ name: 'Remote test PC', version: '2.4.0', enabled: true }),
+  }).then(response => response.json());
+  assert.equal(requestBeat.request.id, requested.request.id);
+
+  const decision = await fetch(baseUrl + '/desk/remote/decision', {
+    method: 'POST', headers: desktopHeaders, body: JSON.stringify({ requestId: requested.request.id, allow: true }),
+  }).then(response => response.json());
+  assert.ok(decision.session.id);
+
+  const queued = await authed('/chat/api/remote/command', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ deviceId, sessionId: decision.session.id, type: 'screenshot', payload: {} }),
+  }).then(response => response.json());
+  assert.ok(queued.command.id);
+
+  const commandBeat = await fetch(baseUrl + '/desk/remote/heartbeat', {
+    method: 'POST', headers: desktopHeaders, body: JSON.stringify({ name: 'Remote test PC', version: '2.4.0', enabled: true }),
+  }).then(response => response.json());
+  assert.equal(commandBeat.commands[0].id, queued.command.id);
+
+  const screen = `data:image/png;base64,${Buffer.from('remote-screen').toString('base64')}`;
+  const finished = await fetch(baseUrl + '/desk/remote/result', {
+    method: 'POST', headers: desktopHeaders,
+    body: JSON.stringify({ id: queued.command.id, sessionId: decision.session.id, ok: true, screen }),
+  });
+  assert.equal(finished.status, 200);
+
+  const status = await authed('/chat/api/remote/status?deviceId=' + deviceId).then(response => response.json());
+  assert.equal(status.latestScreen.data, screen);
+  assert.equal(status.results[0].ok, true);
 });
 
 test('Android Telegram login survives the confirmation round trip and returns a working token', async () => {

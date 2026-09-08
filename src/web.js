@@ -11,6 +11,7 @@ import * as desk from './desktop.js';
 import * as vision from './vision.js';
 import * as relay from './relay.js';
 import * as support from './support.js';
+import * as remote from './remote.js';
 
 // Ответ оператора должен дойти до человека в бота — иначе заявка теряет
 // смысл. Ошибку доставки глушим: панель не должна падать из-за Telegram.
@@ -168,6 +169,7 @@ const DESKTOP_DOWNLOADS = new Set([
   'Clop-Code-Setup-2.3.0.exe',
   'Clop-Code-Setup-2.3.1.exe',
   'Clop-Code-Setup-2.3.3.exe',
+  'Clop-Code-Setup-2.4.0.exe',
   'Clop-Code-2.0.6-linux-x64.tar.xz',
   'Clop-Code-2.0.9-linux-x64.tar.xz',
   'Clop-Code-2.0.10-linux-x64.tar.xz',
@@ -176,6 +178,7 @@ const DESKTOP_DOWNLOADS = new Set([
   'Clop-Code-2.3.0-linux-x64.tar.xz',
   'Clop-Code-2.3.1-linux-x64.tar.xz',
   'Clop-Code-2.3.3-linux-x64.tar.xz',
+  'Clop-Code-2.4.0-linux-x64.tar.xz',
   'Clop-AI-Mobile-1.0.0.apk',
   'Clop-AI-Mobile-1.0.1.apk',
   'Clop-AI-Mobile-1.0.2.apk',
@@ -493,10 +496,10 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
     if (url.pathname === '/releases.json' && req.method === 'GET') {
       return sendJson(res, 200, {
         desktop: {
-          version: '2.3.3',
-          url: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-Setup-2.3.3.exe`,
-          windowsUrl: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-Setup-2.3.3.exe`,
-          linuxUrl: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-2.3.3-linux-x64.tar.xz`,
+          version: '2.4.0',
+          url: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-Setup-2.4.0.exe`,
+          windowsUrl: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-Setup-2.4.0.exe`,
+          linuxUrl: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-Code-2.4.0-linux-x64.tar.xz`,
         },
         android: { version: '1.0.4', url: `${PUBLIC_URL || 'https://clop-ai.onrender.com'}/downloads/Clop-AI-Mobile-1.0.4.apk` },
       });
@@ -846,6 +849,51 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
             effort: effortOf(u, modelOf(u)).key,
             fast: u.fast === true,
           });
+        }).catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
+        return;
+      }
+
+      if (url.pathname === '/desk/remote/heartbeat' && req.method === 'POST') {
+        readJsonBody(req, 20_000).then(async (body) => {
+          const u = await authed();
+          const identity = desk.verifyToken(bearer);
+          if (!u || !identity?.did) return sendJson(res, 401, { ok: false, error: 'нужен вход' });
+          return sendJson(res, 200, remote.heartbeat({
+            userId: u.id, deviceId: identity.did,
+            name: body.name || desk.findDevice(u, identity.did)?.name || 'Clop Code',
+            version: body.version || '', enabled: body.enabled !== false,
+          }));
+        }).catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
+        return;
+      }
+
+      if (url.pathname === '/desk/remote/decision' && req.method === 'POST') {
+        readJsonBody(req, 20_000).then(async (body) => {
+          const u = await authed();
+          const identity = desk.verifyToken(bearer);
+          if (!u || !identity?.did) return sendJson(res, 401, { ok: false, error: 'нужен вход' });
+          return sendJson(res, 200, remote.decideAccess(u.id, identity.did, body.requestId, body.allow === true));
+        }).catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
+        return;
+      }
+
+      if (url.pathname === '/desk/remote/result' && req.method === 'POST') {
+        readJsonBody(req, 8_500_000).then(async (body) => {
+          const u = await authed();
+          const identity = desk.verifyToken(bearer);
+          if (!u || !identity?.did) return sendJson(res, 401, { ok: false, error: 'нужен вход' });
+          return sendJson(res, 200, remote.finishCommand(u.id, identity.did, body.sessionId, body));
+        }).catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
+        return;
+      }
+
+      if (url.pathname === '/desk/remote/end' && req.method === 'POST') {
+        readJsonBody(req, 20_000).then(async (body) => {
+          const u = await authed();
+          const identity = desk.verifyToken(bearer);
+          if (!u || !identity?.did) return sendJson(res, 401, { ok: false, error: 'нужен вход' });
+          remote.endSession(u.id, identity.did, body.sessionId || '');
+          return sendJson(res, 200, { ok: true });
         }).catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
         return;
       }
@@ -1234,6 +1282,62 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           bonuses: store.bonusReport(u),
         });
       }).catch(() => sendJson(res, 500, { ok: false }));
+      return;
+    }
+
+    if (url.pathname === '/chat/api/remote/devices' && req.method === 'GET') {
+      (reloadEachRequest ? store.load() : Promise.resolve()).then(() => {
+        const userId = sessionUserId(req);
+        const u = userId && store.findUser(userId);
+        if (!u) return sendJson(res, 401, { ok: false, error: 'not logged in' });
+        return sendJson(res, 200, { ok: true, version: '1.1 Beta', devices: remote.listDevices(u.id) });
+      }).catch((e) => sendJson(res, 500, { ok: false, error: String(e.message || e) }));
+      return;
+    }
+
+    if (url.pathname === '/chat/api/remote/request' && req.method === 'POST') {
+      readJsonBody(req, 20_000).then(async (body) => {
+        if (reloadEachRequest) await store.load();
+        const userId = sessionUserId(req);
+        const u = userId && store.findUser(userId);
+        if (!u) return sendJson(res, 401, { ok: false, error: 'not logged in' });
+        return sendJson(res, 200, { ok: true, ...remote.requestAccess(u.id, body.deviceId, 'Веб-версия Clop') });
+      }).catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
+      return;
+    }
+
+    if (url.pathname === '/chat/api/remote/status' && req.method === 'GET') {
+      (reloadEachRequest ? store.load() : Promise.resolve()).then(() => {
+        const userId = sessionUserId(req);
+        const u = userId && store.findUser(userId);
+        if (!u) return sendJson(res, 401, { ok: false, error: 'not logged in' });
+        const status = remote.remoteStatus(u.id, url.searchParams.get('deviceId'));
+        return sendJson(res, 200, { ok: true, version: '1.1 Beta', ...(status || { device: null, results: [], latestScreen: null }) });
+      }).catch((e) => sendJson(res, 500, { ok: false, error: String(e.message || e) }));
+      return;
+    }
+
+    if (url.pathname === '/chat/api/remote/command' && req.method === 'POST') {
+      readJsonBody(req, 40_000).then(async (body) => {
+        if (reloadEachRequest) await store.load();
+        const userId = sessionUserId(req);
+        const u = userId && store.findUser(userId);
+        if (!u) return sendJson(res, 401, { ok: false, error: 'not logged in' });
+        const command = remote.queueCommand(u.id, body.deviceId, body.sessionId, body.type, body.payload || {});
+        return sendJson(res, 201, { ok: true, command });
+      }).catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
+      return;
+    }
+
+    if (url.pathname === '/chat/api/remote/end' && req.method === 'POST') {
+      readJsonBody(req, 20_000).then(async (body) => {
+        if (reloadEachRequest) await store.load();
+        const userId = sessionUserId(req);
+        const u = userId && store.findUser(userId);
+        if (!u) return sendJson(res, 401, { ok: false, error: 'not logged in' });
+        remote.endSession(u.id, body.deviceId, body.sessionId || '');
+        return sendJson(res, 200, { ok: true });
+      }).catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
       return;
     }
 

@@ -24,10 +24,12 @@
     'authWaiting', 'startLoginButton', 'loginCode', 'copyLoginCode', 'cancelLoginButton',
     'approvalModal', 'approvalTitle', 'approvalDescription', 'approvalKind', 'approvalRisk',
     'approvalCode', 'approvalNote', 'denyAction', 'allowAction', 'fullModeModal',
+    'remoteRequestModal', 'remoteRequestTitle', 'remoteRequestSource', 'denyRemote', 'allowRemote',
+    'remoteSessionBar', 'remoteSessionTime', 'stopRemote',
     'fullModeAcknowledge', 'confirmFullMode', 'settingsButton', 'settingsModal',
     'settingsTitle', 'settingsAccount', 'settingsAvatar', 'settingsAccountName', 'settingsPlan', 'bugReportModal', 'bugDescription',
     'submitBugButton', 'bugSubmitState', 'bugBonusBalance', 'refreshBugsButton', 'bugHistory',
-    'themeSelect', 'animationsSetting', 'agentVisibleSetting', 'enterSendsSetting', 'approvalModeSetting', 'modelSelect', 'effortSelect',
+    'themeSelect', 'animationsSetting', 'agentVisibleSetting', 'remoteRequestsSetting', 'enterSendsSetting', 'approvalModeSetting', 'modelSelect', 'effortSelect',
     'fastSetting', 'shellTimeoutSetting', 'emptyLoginButton',
     'settingsModeName', 'settingsModeDescription', 'changeModeButton', 'openBackups',
     'openTermsSettings', 'openWebsite', 'openBotBuilder', 'logoutButton', 'toastStack',
@@ -110,7 +112,7 @@
     loggedIn: false,
     user: null,
     settings: {
-      workDir: '', theme: 'dark', animations: true, agentVisible: true, enterSends: true, approvalMode: 'smart',
+      workDir: '', theme: 'dark', animations: true, agentVisible: true, remoteRequests: true, enterSends: true, approvalMode: 'smart',
       shellTimeout: 90, model: '', effort: 'low', fast: false,
     },
     mode: 'chat',
@@ -155,6 +157,7 @@
     terminalRunning: false,
     terminalHistory: [],
     terminalHistoryIndex: 0,
+    remote: { version: '1.1 Beta', request: null, session: null, enabled: true },
   };
 
   let settingsQueue = Promise.resolve();
@@ -606,6 +609,7 @@
     elements.themeSelect.value = settings.theme || 'dark';
     elements.animationsSetting.checked = settings.animations !== false;
     elements.agentVisibleSetting.checked = settings.agentVisible !== false;
+    elements.remoteRequestsSetting.checked = settings.remoteRequests !== false;
     elements.enterSendsSetting.checked = settings.enterSends !== false;
     elements.approvalModeSetting.value = settings.approvalMode || 'smart';
     elements.fastToggle.checked = Boolean(settings.fast);
@@ -617,6 +621,49 @@
     elements.settingsModeDescription.textContent = copy[1];
     applyTheme();
     renderSelectors();
+  }
+
+  function renderRemote() {
+    const session = state.remote?.session;
+    elements.remoteSessionBar.classList.toggle('hidden', !session);
+    if (!session) return;
+    const left = Math.max(0, Math.ceil((Number(session.expiresAt || 0) - Date.now()) / 1000));
+    elements.remoteSessionTime.textContent = `осталось ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+  }
+
+  function showRemoteRequest(request) {
+    if (!request?.id) return;
+    state.remote = { ...(state.remote || {}), request };
+    elements.remoteRequestSource.textContent = `${request.source || 'Веб-версия Clop'} запрашивает доступ к экрану, мыши и клавиатуре на 15 минут.`;
+    elements.allowRemote.disabled = false;
+    elements.denyRemote.disabled = false;
+    showModal(elements.remoteRequestModal);
+  }
+
+  async function answerRemote(allow) {
+    const request = state.remote?.request;
+    if (!request?.id) return;
+    elements.allowRemote.disabled = true;
+    elements.denyRemote.disabled = true;
+    try {
+      const result = await api.remoteDecision({ requestId: request.id, allow });
+      state.remote = { ...(state.remote || {}), request: null, session: result?.session || null };
+      hideModal(elements.remoteRequestModal);
+      renderRemote();
+      toast(allow ? 'Clop Remote включён на 15 минут.' : 'Запрос Remote отклонён.', allow ? 'success' : '');
+    } catch (error) {
+      toast(errorText(error), 'error');
+      hideModal(elements.remoteRequestModal);
+    }
+  }
+
+  async function stopRemote() {
+    try {
+      await api.remoteStop();
+      state.remote = { ...(state.remote || {}), request: null, session: null };
+      renderRemote();
+      toast('Удалённый доступ остановлен.', 'success');
+    } catch (error) { toast(errorText(error), 'error'); }
   }
 
   function populateSelect(select, items, chosen, titleFn = (item) => item.title || item.key, configureOption) {
@@ -2465,6 +2512,14 @@
       case 'approval-expired':
         expireApproval(event.id);
         break;
+      case 'remote-request':
+        showRemoteRequest(event.request);
+        break;
+      case 'remote':
+        state.remote = { ...(state.remote || {}), request: event.request || null, session: event.session || null, enabled: event.enabled !== false, version: event.version || '1.1 Beta' };
+        if (!state.remote.request) hideModal(elements.remoteRequestModal);
+        renderRemote();
+        break;
       case 'terminal':
         if (event.text) appendTerminal(event.text, event.stream === 'stderr' ? 'error' : '');
         if (event.done) {
@@ -2528,6 +2583,7 @@
     state.agreementRequired = Boolean(snapshot.agreementRequired);
     state.agreementVersion = snapshot.agreementVersion || '';
     state.busy = Boolean(snapshot.busy);
+    state.remote = { ...(state.remote || {}), ...(snapshot.remote || {}) };
     state.busyChatId = snapshot.busy ? (snapshot.currentChat?.id || '') : '';
     renderAccount();
     renderSettings();
@@ -2537,11 +2593,13 @@
     renderFiles();
     renderActivity();
     renderAttachments();
+    renderRemote();
     restoreDraft();
     setBusy(state.busy, state.busyChatId, snapshot.busyStartedAt);
     setSidebar(!compactSidebar.matches);
     setInspector(window.innerWidth > 1120, state.inspectorTab);
     if (snapshot.pendingApproval) queueApproval(snapshot.pendingApproval);
+    if (state.remote?.request) showRemoteRequest(state.remote.request);
     if (state.agreementRequired) {
       state.onboardingStep = 0;
       renderOnboarding();
@@ -2622,12 +2680,16 @@
     elements.themeSelect.addEventListener('change', () => saveSetting({ theme: elements.themeSelect.value }));
     elements.animationsSetting.addEventListener('change', () => saveSetting({ animations: elements.animationsSetting.checked }));
     elements.agentVisibleSetting.addEventListener('change', () => saveSetting({ agentVisible: elements.agentVisibleSetting.checked }));
+    elements.remoteRequestsSetting.addEventListener('change', () => saveSetting({ remoteRequests: elements.remoteRequestsSetting.checked }));
     elements.enterSendsSetting.addEventListener('change', () => saveSetting({ enterSends: elements.enterSendsSetting.checked }));
     elements.approvalModeSetting.addEventListener('change', () => saveSetting({ approvalMode: elements.approvalModeSetting.value }));
     elements.modelSelect.addEventListener('change', () => saveSetting({ model: elements.modelSelect.value }));
     elements.effortSelect.addEventListener('change', () => saveSetting({ effort: elements.effortSelect.value }));
     elements.fastSetting.addEventListener('change', () => saveSetting({ fast: elements.fastSetting.checked }));
     elements.shellTimeoutSetting.addEventListener('change', () => saveSetting({ shellTimeout: Number(elements.shellTimeoutSetting.value) }));
+    elements.allowRemote.addEventListener('click', () => answerRemote(true));
+    elements.denyRemote.addEventListener('click', () => answerRemote(false));
+    elements.stopRemote.addEventListener('click', stopRemote);
 
     all('[data-mode]', elements.modeSwitch).forEach((button) => button.addEventListener('click', () => requestMode(button.dataset.mode)));
     elements.chooseFolderButton.addEventListener('click', chooseFolder);
@@ -2753,6 +2815,7 @@
       }
       const modal = visibleModal();
       if (modal === elements.approvalModal) answerApproval(false);
+      else if (modal === elements.remoteRequestModal) answerRemote(false);
       else if (modal === elements.telegramModal) { cancelLogin(); hideModal(modal); }
       else if (modal && modal !== elements.onboardingModal) hideModal(modal);
       else if (elements.sidebar.classList.contains('open')) setSidebar(false);
@@ -2869,6 +2932,7 @@
       hydrate(await api.state());
       updateConnection();
       window.setInterval(() => refreshAccount(false), 60_000);
+      window.setInterval(renderRemote, 1_000);
       window.addEventListener('focus', () => refreshAccount(false));
       const update = await api.checkUpdate().catch(() => null);
       if (update?.available) elements.updateButton.classList.remove('hidden');

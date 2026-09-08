@@ -14,6 +14,11 @@ contextBridge.exposeInMainWorld('clopAgent', {
     ipcRenderer.on('agent-cursor', listener);
     return () => ipcRenderer.removeListener('agent-cursor', listener);
   },
+  onRemoteOverlay: (fn) => {
+    const listener = (_event, value) => fn(value);
+    ipcRenderer.on('remote-overlay-state', listener);
+    return () => ipcRenderer.removeListener('remote-overlay-state', listener);
+  },
   onNetwork: (fn) => {
     const listener = (_event, value) => fn(value);
     ipcRenderer.on('agent-network', listener);

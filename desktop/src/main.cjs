@@ -5,6 +5,7 @@ const {
   BrowserWindow,
   desktopCapturer,
   dialog,
+  globalShortcut,
   ipcMain,
   Menu,
   safeStorage,
@@ -49,6 +50,7 @@ const RENDERER_FILE = path.join(__dirname, 'renderer', 'index.html');
 const PRELOAD_FILE = path.join(__dirname, 'preload.cjs');
 const AGENT_FILE = path.join(__dirname, 'renderer', 'agent.html');
 const AGENT_TASKS_FILE = path.join(__dirname, 'renderer', 'agent-tasks.html');
+const REMOTE_OVERLAY_FILE = path.join(__dirname, 'renderer', 'remote-overlay.html');
 const AGENT_PRELOAD_FILE = path.join(__dirname, 'agent-preload.cjs');
 const SMOKE_TEST = process.argv.includes('--smoke-test');
 const MAX_HISTORY_MESSAGES = 500;
@@ -85,9 +87,15 @@ const CSP = [
 let mainWindow = null;
 let agentWindow = null;
 let agentTasksWindow = null;
+let remoteOverlayWindow = null;
 let agentDrag = null;
 let agentCursorTimer = null;
 let agentNetworkTimer = null;
+let remotePollTimer = null;
+let remotePolling = false;
+let remoteRequest = null;
+let remoteSession = null;
+let remoteCommandBusy = false;
 let agentOnline = false;
 let isQuitting = false;
 let dataDir = '';
@@ -637,6 +645,12 @@ function summaryState() {
     busy: Boolean(currentRun),
     busyStartedAt: currentRun?.startedAt || 0,
     pendingApproval: [...pendingApprovals.values()].map((entry) => entry.public)[0] || null,
+    remote: {
+      version: '1.1 Beta',
+      request: remoteRequest,
+      session: remoteSession,
+      enabled: settings.remoteRequests !== false,
+    },
     version: app.getVersion(),
   };
 }
@@ -804,6 +818,65 @@ function syncAgentVisibility() {
     positionAgent();
     agentWindow.showInactive();
   }
+}
+
+function sendRemoteOverlay(value = {}) {
+  if (!remoteOverlayWindow || remoteOverlayWindow.isDestroyed() || remoteOverlayWindow.webContents.isDestroyed()) return;
+  remoteOverlayWindow.webContents.send('remote-overlay-state', value);
+}
+
+function createRemoteOverlay() {
+  if (SMOKE_TEST || remoteOverlayWindow && !remoteOverlayWindow.isDestroyed()) return;
+  const display = screen.getPrimaryDisplay();
+  remoteOverlayWindow = new BrowserWindow({
+    x: display.bounds.x, y: display.bounds.y, width: display.bounds.width, height: display.bounds.height,
+    show: false, transparent: true, backgroundColor: '#00000000', frame: false,
+    resizable: false, maximizable: false, minimizable: false, fullscreenable: false,
+    alwaysOnTop: true, skipTaskbar: true, focusable: false, hasShadow: false,
+    autoHideMenuBar: true, title: 'Clop Remote 1.1 Beta',
+    webPreferences: { preload: AGENT_PRELOAD_FILE, sandbox: true, contextIsolation: true, nodeIntegration: false, devTools: !app.isPackaged },
+  });
+  remoteOverlayWindow.setAlwaysOnTop(true, 'screen-saver');
+  remoteOverlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  remoteOverlayWindow.setContentProtection(true);
+  remoteOverlayWindow.setIgnoreMouseEvents(true, { forward: true });
+  remoteOverlayWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  remoteOverlayWindow.webContents.on('will-navigate', (event, url) => {
+    if (url !== remoteOverlayWindow.webContents.getURL()) event.preventDefault();
+  });
+  remoteOverlayWindow.webContents.once('did-finish-load', () => {
+    if (!remoteSession) return;
+    sendRemoteOverlay({ active: true, session: remoteSession });
+    remoteOverlayWindow.showInactive();
+  });
+  remoteOverlayWindow.on('closed', () => { remoteOverlayWindow = null; });
+  remoteOverlayWindow.loadFile(REMOTE_OVERLAY_FILE);
+}
+
+function syncRemoteOverlay(cursor = null, action = '') {
+  if (!remoteSession) {
+    if (remoteOverlayWindow && !remoteOverlayWindow.isDestroyed()) remoteOverlayWindow.hide();
+    emit('remote', { version: '1.1 Beta', request: remoteRequest, session: null, enabled: settings.remoteRequests !== false });
+    return;
+  }
+  if (!remoteOverlayWindow || remoteOverlayWindow.isDestroyed()) createRemoteOverlay();
+  if (!remoteOverlayWindow || remoteOverlayWindow.isDestroyed()) return;
+  const display = screen.getPrimaryDisplay();
+  remoteOverlayWindow.setBounds(display.bounds, false);
+  sendRemoteOverlay({ active: true, session: remoteSession, cursor, action });
+  remoteOverlayWindow.showInactive();
+  emit('remote', { version: '1.1 Beta', request: null, session: remoteSession, enabled: true });
+}
+
+async function stopRemoteSession({ notifyServer = true } = {}) {
+  const sessionId = remoteSession?.id || '';
+  remoteSession = null;
+  remoteRequest = null;
+  syncRemoteOverlay();
+  if (notifyServer && token && sessionId) {
+    try { await apiJson('/desk/remote/end', { method: 'POST', auth: true, body: { sessionId } }); } catch { /* local emergency stop always wins */ }
+  }
+  return { ok: true };
 }
 
 function recordAction(tool, status, summary, chatId = '') {
@@ -1267,6 +1340,12 @@ async function screenshotTool() {
 
 function clickScript(x, y) {
   return `Add-Type -TypeDefinition @'\nusing System;\nusing System.Runtime.InteropServices;\npublic static class ClopMouse {\n [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);\n [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extra);\n}\n'@\n[ClopMouse]::SetCursorPos(${x}, ${y}) | Out-Null\n[ClopMouse]::mouse_event(2, 0, 0, 0, [UIntPtr]::Zero)\nStart-Sleep -Milliseconds 45\n[ClopMouse]::mouse_event(4, 0, 0, 0, [UIntPtr]::Zero)`;
+}
+
+function remoteClickScript(x, y) {
+  // The orange overlay shows the AI pointer. Restore the person's pointer after
+  // the click so Remote does not steal their mouse position.
+  return `Add-Type -TypeDefinition @'\nusing System;\nusing System.Runtime.InteropServices;\npublic static class ClopRemoteMouse {\n [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X; public int Y; }\n [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT point);\n [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);\n [DllImport("user32.dll")] public static extern void mouse_event(uint flags, uint dx, uint dy, uint data, UIntPtr extra);\n}\n'@\n$old = New-Object ClopRemoteMouse+POINT\n[ClopRemoteMouse]::GetCursorPos([ref]$old) | Out-Null\n[ClopRemoteMouse]::SetCursorPos(${x}, ${y}) | Out-Null\n[ClopRemoteMouse]::mouse_event(2, 0, 0, 0, [UIntPtr]::Zero)\nStart-Sleep -Milliseconds 45\n[ClopRemoteMouse]::mouse_event(4, 0, 0, 0, [UIntPtr]::Zero)\nStart-Sleep -Milliseconds 55\n[ClopRemoteMouse]::SetCursorPos($old.X, $old.Y) | Out-Null`;
 }
 
 function typeScript(text) {
@@ -1752,6 +1831,173 @@ async function ask(payload = {}, options = {}) {
   }
 }
 
+function remoteProtocol(userText) {
+  const display = screen.getPrimaryDisplay();
+  return `<clop_remote_protocol version="1.1-beta">\nROLE: You control the user's visible Windows screen during a time-limited Clop Remote session that the user approved on the computer.\nSCREEN: width=${display.bounds.width}; height=${display.bounds.height}. Start with screenshot and inspect the returned image before clicking.\nACTIONS: Reply with exactly one XML block containing valid JSON for the next step: <clop_action>{"tool":"screenshot"}</clop_action>. Available tools are screenshot {}, click {x,y}, type {text}, key {key}. Allowed keys: ENTER, TAB, ESC, BACKSPACE, UP, DOWN, LEFT, RIGHT, CTRL+A, CTRL+C, CTRL+V, CTRL+S, ALT+TAB. Do not request files, shell commands, secrets, passwords, payment data, account recovery, security settings, or elevated/system actions. Use one action per turn, wait for the result, then continue. Stop when the requested visible task is complete and briefly report what you did.\nUSER TASK: ${JSON.stringify(String(userText || ''))}\n</clop_remote_protocol>`;
+}
+
+async function executeRemoteScreenAction(action, chatId = '') {
+  if (!remoteSession || remoteSession.expiresAt <= Date.now()) throw new Error('Сеанс Clop Remote завершён.');
+  if (!['screenshot', 'click', 'type', 'key'].includes(action.tool)) throw new Error('Clop Remote разрешает только экран, мышь и клавиатуру.');
+  const display = screen.getPrimaryDisplay();
+  const detail = actionEventDetail(action, null);
+  const logEntry = recordAction(`remote-${action.tool}`, 'running', detail, chatId);
+  emit('action', { status: 'running', tool: action.tool, detail, chatId, remote: true });
+  try {
+    let outcome;
+    if (action.tool === 'screenshot') {
+      outcome = await screenshotTool();
+    } else if (action.tool === 'click') {
+      if (action.x >= display.bounds.width || action.y >= display.bounds.height) throw new Error('Координаты находятся за пределами экрана.');
+      syncRemoteOverlay({ x: action.x, y: action.y }, 'Нажатие');
+      const result = process.platform === 'win32'
+        ? await runPowerShell(remoteClickScript(display.bounds.x + action.x, display.bounds.y + action.y))
+        : await runScreenInput(action, display);
+      outcome = { result: { ok: result.ok, tool: action.tool, x: action.x, y: action.y } };
+    } else {
+      syncRemoteOverlay(null, action.tool === 'type' ? 'Ввод текста' : `Клавиша ${action.key}`);
+      const result = await runScreenInput(action, display);
+      outcome = { result: { ok: result.ok, tool: action.tool, ...(action.tool === 'type' ? { characters: action.text.length } : { key: action.key }) } };
+    }
+    updateAction(logEntry, outcome.result?.ok === false ? 'error' : 'done', detail);
+    emit('action', { status: outcome.result?.ok === false ? 'error' : 'done', tool: action.tool, detail, chatId, remote: true });
+    return outcome;
+  } catch (error) {
+    updateAction(logEntry, 'error', error.message);
+    throw error;
+  }
+}
+
+async function runRemotePrompt(text, commandId) {
+  if (currentRun) throw new Error('Clop уже выполняет другую задачу.');
+  await refreshAccount();
+  const selected = validateChoice({});
+  let chat = createChat();
+  chat.title = `Remote: ${String(text).replace(/\s+/g, ' ').slice(0, 44)}`;
+  const userMessage = { role: 'user', content: String(text), ts: Date.now(), clientMessageId: commandId, remote: true };
+  chat.messages.push(userMessage);
+  saveHistory();
+  emit('message', { chatId: chat.id, message: userMessage, chat });
+  const controller = new AbortController();
+  const run = { controller, chatId: chat.id, stopped: false, startedAt: Date.now(), hints: [], remote: true };
+  currentRun = run;
+  emit('busy', { value: true, chatId: chat.id, startedAt: run.startedAt, remote: true });
+  syncAgentTasks();
+  let nextText = remoteProtocol(text);
+  let nextImages = [];
+  let finalText = '';
+  try {
+    for (let step = 0; step < 60; step += 1) {
+      if (!remoteSession || remoteSession.expiresAt <= Date.now()) throw new Error('Сеанс Clop Remote завершён.');
+      const response = await chatStream({
+        text: nextText, clientMessageId: `${commandId}:${step + 1}`, model: selected.model,
+        chatId: chat.remoteChatId || undefined, effort: selected.effort, fast: selected.fast,
+        ...(nextImages.length ? { images: nextImages } : {}),
+      }, controller.signal);
+      if (response.chatId) chat.remoteChatId = response.chatId;
+      const action = parseAction(response.text);
+      if (!action) {
+        finalText = String(response.text || 'Готово.').trim().slice(0, 20_000);
+        break;
+      }
+      if (!['screenshot', 'click', 'type', 'key'].includes(action.tool)) throw new Error('ИИ запросил действие вне разрешений Remote.');
+      const outcome = await executeRemoteScreenAction(action, chat.id);
+      nextText = modelResult(outcome.result);
+      nextImages = outcome.images || [];
+    }
+    if (!finalText) finalText = 'Задача остановлена: достигнут предел шагов Remote.';
+    const assistant = { role: 'assistant', content: finalText, ts: Date.now(), model: selected.model, remote: true };
+    chat.messages.push(assistant);
+    chat.messages = chat.messages.slice(-MAX_HISTORY_MESSAGES);
+    chat.updatedAt = Date.now();
+    saveHistory();
+    emit('message', { chatId: chat.id, message: assistant, chat });
+    return finalText;
+  } finally {
+    if (currentRun === run) currentRun = null;
+    emit('busy', { value: false, chatId: chat.id, remote: true });
+    syncAgentTasks();
+  }
+}
+
+async function reportRemoteResult(command, result) {
+  if (!token || !remoteSession) return;
+  await apiJson('/desk/remote/result', {
+    method: 'POST', auth: true,
+    body: { id: command.id, sessionId: remoteSession.id, ...result },
+  });
+}
+
+async function processRemoteCommand(command) {
+  if (remoteCommandBusy || !command || !remoteSession) return;
+  remoteCommandBusy = true;
+  try {
+    if (command.type === 'stop') {
+      await reportRemoteResult(command, { ok: true, text: 'Сеанс остановлен.' });
+      await stopRemoteSession();
+      return;
+    }
+    let result;
+    if (command.type === 'prompt') {
+      const text = await runRemotePrompt(command.payload?.text, command.id);
+      result = { ok: true, text };
+    } else {
+      const action = { tool: command.type, ...(command.payload || {}) };
+      const outcome = await executeRemoteScreenAction(action, `remote-${remoteSession.id}`);
+      result = {
+        ok: outcome.result?.ok !== false,
+        x: outcome.result?.x, y: outcome.result?.y,
+        text: outcome.result?.error || '',
+        screen: outcome.images?.[0] || undefined,
+      };
+    }
+    await reportRemoteResult(command, result);
+  } catch (error) {
+    try { await reportRemoteResult(command, { ok: false, error: error.message }); } catch { /* session may have expired */ }
+    logQuality('remote-command-error', { action: JSON.stringify(command), error: error.message });
+  } finally {
+    remoteCommandBusy = false;
+  }
+}
+
+async function pollRemote() {
+  if (remotePolling || !token) return;
+  remotePolling = true;
+  try {
+    const response = await apiJson('/desk/remote/heartbeat', {
+      method: 'POST', auth: true,
+      body: { name: `${os.hostname()} · ${process.platform}`, version: app.getVersion(), enabled: settings.remoteRequests !== false },
+    });
+    const incomingRequest = response.request || null;
+    if (incomingRequest?.id && incomingRequest.id !== remoteRequest?.id) {
+      remoteRequest = incomingRequest;
+      showMainWindow();
+      emit('remote-request', { request: incomingRequest, version: '1.1 Beta' });
+    } else if (!incomingRequest) {
+      remoteRequest = null;
+    }
+    const incomingSession = response.session || null;
+    if (incomingSession?.id) {
+      remoteSession = incomingSession;
+      syncRemoteOverlay();
+    } else if (remoteSession) {
+      await stopRemoteSession({ notifyServer: false });
+    }
+    if (response.commands?.[0] && !remoteCommandBusy) processRemoteCommand(response.commands[0]);
+  } catch (error) {
+    if (!/нужен вход|401/i.test(String(error.message || ''))) emit('remote-network', { online: false });
+  } finally {
+    remotePolling = false;
+  }
+}
+
+function startRemotePolling() {
+  clearInterval(remotePollTimer);
+  pollRemote();
+  remotePollTimer = setInterval(pollRemote, 1_500);
+  remotePollTimer.unref?.();
+}
+
 async function stopEverything() {
   if (currentRun) {
     currentRun.stopped = true;
@@ -1823,6 +2069,20 @@ function registerIpc() {
     if (!agentWindow || event.sender !== agentWindow.webContents) throw new Error('Недоверенный источник IPC.');
     return { online: agentOnline };
   });
+  handle('remote-decision', async (payload = {}) => {
+    ensureAuthenticated();
+    if (!remoteRequest || remoteRequest.id !== String(payload.requestId || '')) throw new Error('Запрос Remote уже истёк.');
+    const result = await apiJson('/desk/remote/decision', {
+      method: 'POST', auth: true,
+      body: { requestId: remoteRequest.id, allow: payload.allow === true },
+    });
+    remoteRequest = null;
+    remoteSession = result.session || null;
+    if (remoteSession) syncRemoteOverlay(); else syncRemoteOverlay();
+    emit('remote', { version: '1.1 Beta', request: null, session: remoteSession, enabled: settings.remoteRequests !== false });
+    return { ok: true, session: remoteSession, denied: result.denied === true };
+  });
+  handle('remote-stop', async () => stopRemoteSession());
   handle('hint', async (payload = {}) => addRunHint(payload));
   handle('update-check', async () => {
     const releases = await apiJson('/releases.json');
@@ -1914,6 +2174,7 @@ function registerIpc() {
     settings = next;
     saveSettings();
     if (Object.hasOwn(patch, 'agentVisible')) syncAgentVisibility();
+    if (Object.hasOwn(patch, 'remoteRequests') && settings.remoteRequests === false) await stopRemoteSession();
     try {
       if (token && ['model', 'effort', 'fast'].some((key) => Object.hasOwn(patch, key))) {
         const synced = await apiJson('/desk/profile', {
@@ -2125,6 +2386,7 @@ function registerIpc() {
     }
     clearToken();
     pendingLogin = null;
+    await stopRemoteSession({ notifyServer: false });
     await stopEverything();
     emit('auth', { loggedIn: false, user: null });
     return { ok: true };
@@ -2302,6 +2564,8 @@ if (!hasLock) {
     registerIpc();
     createWindow();
     createAgentWindow();
+    startRemotePolling();
+    globalShortcut.register('CommandOrControl+Alt+F9', () => { stopRemoteSession(); });
   }).catch((error) => {
     console.error(error);
     app.exit(1);
@@ -2315,6 +2579,9 @@ if (!hasLock) {
     isQuitting = true;
     clearInterval(agentCursorTimer);
     clearInterval(agentNetworkTimer);
+    clearInterval(remotePollTimer);
+    globalShortcut.unregisterAll();
+    if (remoteOverlayWindow && !remoteOverlayWindow.isDestroyed()) remoteOverlayWindow.destroy();
     if (agentTasksWindow && !agentTasksWindow.isDestroyed()) agentTasksWindow.destroy();
     rejectAllApprovals();
     stopChild();

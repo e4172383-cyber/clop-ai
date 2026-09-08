@@ -686,4 +686,13 @@ kbd { border: 1px solid var(--line); border-radius: 4px; padding: 2px 4px; color
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration:.01ms!important; animation-iteration-count:1!important; scroll-behavior:auto!important; transition-duration:.01ms!important; }
 }
+
+.remote-request-modal{width:min(520px,calc(100vw - 28px));text-align:center;border-color:rgba(255,132,66,.38);box-shadow:0 28px 90px rgba(0,0,0,.6),0 0 0 1px rgba(255,122,54,.08)}
+.remote-request-visual{position:relative;width:82px;height:82px;margin:0 auto 16px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#ffbc87,#ff793c 56%,#9b3c16);box-shadow:0 0 0 8px rgba(255,122,54,.12),0 18px 38px rgba(255,104,35,.25)}
+.remote-request-visual:before,.remote-request-visual:after{content:"";position:absolute;top:29px;width:10px;height:20px;border-radius:7px;background:#fff}.remote-request-visual:before{left:25px}.remote-request-visual:after{right:25px}
+.remote-orbit{position:absolute;inset:-10px;border:2px solid rgba(255,171,112,.55);border-left-color:transparent;border-radius:50%;animation:remoteOrbit 2.2s linear infinite}
+.remote-pointer{position:absolute;right:-14px;bottom:-5px;color:#fff;font-size:28px;filter:drop-shadow(0 3px 3px rgba(0,0,0,.4));transform:rotate(-35deg)}
+.remote-safety-list{display:grid;gap:8px;margin:18px 0;text-align:left}.remote-safety-list span{position:relative;padding:10px 12px 10px 37px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2);color:var(--text-2);font-size:13px}.remote-safety-list span:before{content:"✓";position:absolute;left:13px;color:#ff8a4c;font-weight:800}
+.remote-session-bar{position:fixed;z-index:90;top:45px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:14px;padding:7px 8px 7px 13px;border:1px solid rgba(255,137,76,.55);border-radius:15px;background:rgba(38,25,19,.94);box-shadow:0 12px 32px rgba(0,0,0,.36),0 0 0 3px rgba(255,122,54,.1);color:#fff}.remote-session-bar>span{display:flex;align-items:center;gap:8px}.remote-session-bar i{width:9px;height:9px;border-radius:50%;background:#ff7a36;box-shadow:0 0 0 4px rgba(255,122,54,.18);animation:remoteDot 1.2s ease-in-out infinite}.remote-session-bar small{color:#ffbf99}.remote-session-bar button{border:0;border-radius:10px;padding:7px 10px;background:#ff7a36;color:#1e1009;font-weight:800;cursor:pointer}.remote-session-bar.hidden{display:none}
+@keyframes remoteOrbit{to{transform:rotate(360deg)}}@keyframes remoteDot{50%{opacity:.5;transform:scale(.75)}}
 .setting-state{color:var(--accent);font-size:12px;font-weight:700;padding:7px 10px;border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);border-radius:999px;background:color-mix(in srgb,var(--accent) 10%,transparent)}

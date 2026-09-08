@@ -838,6 +838,17 @@
   .prov-title{color:#e8c7aa}
   .limit-bar>i{background:linear-gradient(90deg,#c85f43,#e9b187)}
   @media(max-width:760px){#app{padding:7px;gap:7px}.main{border-radius:20px}.sidebar{border-radius:0 24px 24px 0}.login-card{padding:34px 26px}}
+  .beta-nav{margin-left:auto;padding:2px 5px;border:1px solid rgba(218,111,69,.38);border-radius:7px;color:var(--accent);font-size:9px}
+  .remote-beta{margin-left:7px;padding:4px 7px;border-radius:8px;background:rgba(218,111,69,.14);color:var(--accent);font-size:10px;vertical-align:middle}
+  .remote-modal{width:min(980px,96vw);max-height:94vh}.remote-body{display:grid;gap:12px}.remote-intro{display:flex;align-items:center;justify-content:space-between;gap:16px}.remote-intro h3{margin:0 0 6px}.remote-intro p{margin:0;max-width:680px;line-height:1.55}
+  .remote-logo{position:relative;display:grid;place-items:center;flex:0 0 58px;height:58px;border-radius:50%;background:radial-gradient(circle at 35% 25%,#ffbd8a,#df7447 60%,#8a361c);color:#fff;font-weight:900;box-shadow:0 0 0 7px rgba(218,111,69,.1),0 13px 30px rgba(118,55,27,.2)}.remote-logo i{position:absolute;right:-4px;bottom:2px;width:14px;height:14px;border-radius:50%;background:#48bc72;border:3px solid var(--bg)}
+  .remote-devices{display:grid;gap:9px;margin-top:10px}.remote-device{display:flex;align-items:center;gap:11px;padding:12px;border:1px solid var(--line);border-radius:15px;background:var(--surface);}.remote-device-icon{display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:rgba(218,111,69,.14);color:var(--accent);font-weight:900}.remote-device-copy{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}.remote-device-copy b,.remote-device-copy small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.remote-device-copy small{color:var(--muted)}.remote-device-state{font-size:11px;color:var(--muted)}.remote-device-state.online{color:#58bb75}.remote-device button,.remote-toolbar button,.remote-input-row button,.remote-ai-box button,#remoteRefresh{border:1px solid var(--line);border-radius:10px;background:var(--surface-2);color:var(--text);padding:8px 11px;cursor:pointer}.remote-device button.primary,#remoteRunAi,#remoteScreenshot{background:var(--accent)!important;border-color:transparent!important;color:#fff!important;font-weight:800}
+  .remote-control{display:grid;gap:12px}.remote-live-head{display:flex;align-items:center;justify-content:space-between;gap:10px}.remote-live-head>span{display:flex;align-items:center;gap:8px}.remote-live-head i{width:9px;height:9px;border-radius:50%;background:#ff7a36;box-shadow:0 0 0 5px rgba(255,122,54,.16);animation:remotePulse 1.3s ease-in-out infinite}.remote-live-head small{color:var(--accent)}.danger-button{background:rgba(194,64,46,.12)!important;color:#d95f4a!important;border-color:rgba(194,64,46,.3)!important}
+  .remote-screen-wrap{position:relative;min-height:280px;overflow:hidden;border:3px solid #ff7a36;border-radius:17px;background:#0d0d0d;box-shadow:0 0 0 5px rgba(255,122,54,.1)}.remote-screen-wrap img{display:block;width:100%;max-height:56vh;object-fit:contain;cursor:crosshair}.remote-screen-wrap img:not([src]){display:none}#remoteScreenEmpty{position:absolute;inset:0;display:grid;place-items:center;color:#9d8b81}.remote-screen-wrap.has-screen #remoteScreenEmpty{display:none}#remoteWebCursor{position:absolute;display:none;width:20px;height:20px;border:3px solid #fff;border-radius:50%;background:#ff7a36;box-shadow:0 0 0 5px rgba(255,122,54,.25);transform:translate(-50%,-50%);pointer-events:none}.remote-screen-wrap.cursor #remoteWebCursor{display:block}
+  .remote-toolbar{display:flex;gap:7px;flex-wrap:wrap}.remote-input-row{display:grid;grid-template-columns:1fr auto;gap:8px}.remote-input-row input,.remote-ai-box textarea{width:100%;border:1px solid var(--line);border-radius:12px;background:var(--surface-2);color:var(--text);padding:11px;outline:none}.remote-ai-box{display:grid;gap:9px;padding:13px;border:1px solid rgba(218,111,69,.28);border-radius:15px;background:linear-gradient(135deg,rgba(218,111,69,.09),transparent)}.remote-ai-box label{display:flex;flex-direction:column;gap:3px}.remote-ai-box label small{color:var(--muted);font-weight:400}.remote-ai-box button{justify-self:start}.remote-events{display:grid;gap:6px;max-height:140px;overflow:auto}.remote-event{padding:8px 10px;border-radius:9px;background:var(--surface-2);color:var(--muted);font-size:12px}.remote-event.error{color:#d65d49}
+  body.remote-active:after{content:"";position:fixed;z-index:5000;inset:0;border:5px solid #ff7a36;box-shadow:inset 0 0 24px rgba(255,122,54,.3);pointer-events:none;animation:remoteBorder 2.2s ease-in-out infinite}
+  @keyframes remotePulse{50%{opacity:.5;transform:scale(.75)}}@keyframes remoteBorder{50%{border-color:#ffa06a;box-shadow:inset 0 0 34px rgba(255,122,54,.4)}}
+  @media(max-width:680px){.remote-device{align-items:flex-start;flex-wrap:wrap}.remote-device button{width:100%}.remote-screen-wrap{min-height:190px}.remote-input-row{grid-template-columns:1fr}.remote-ai-box button{width:100%}}
 </style>
 <link rel="stylesheet" href="/workspace.css?v=20260906-6">
 </head>
@@ -927,6 +938,10 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.6h2"/></svg>
           Приложение
         </button>
+        <button id="remoteBtn">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4M8 10h8m-3-3 3 3-3 3"/></svg>
+          Remote <small class="beta-nav">1.1 Beta</small>
+        </button>
         <button id="apiBtn">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="12" r="3.2"/><path d="M11.2 12H21M17.5 12v3M14.5 12v2.2"/></svg>
           Мой API
@@ -1003,6 +1018,27 @@
     <div class="api-body bug-form">
       <section><p class="muted-sm">Опишите, что произошло, где это случилось и что вы ожидали. Владелец увидит ваш ник, примет или отклонит сообщение и при принятии сможет выдать вознаграждение.</p><textarea id="bugDescription" maxlength="4000" placeholder="Например: в приложении нажимаю…, после этого…"></textarea><div class="pg-actions" style="margin-top:10px"><button id="submitBugBtn" type="button">Отправить</button><span id="bugSubmitState" class="muted-sm"></span></div></section>
       <section><h3>Мои сообщения</h3><div id="bugList" class="bug-list"><div class="muted-sm">Загрузка…</div></div></section>
+    </div>
+  </div>
+</div>
+
+<div id="remoteOverlay" class="overlay" role="dialog" aria-modal="true" aria-labelledby="remoteTitle">
+  <div class="api-modal glass remote-modal">
+    <div class="api-head"><b id="remoteTitle">Clop Remote <span class="remote-beta">1.1 Beta</span></b><button class="modal-close" data-close="remoteOverlay" aria-label="Закрыть">✕</button></div>
+    <div class="api-body remote-body">
+      <section class="remote-intro"><div><h3>Управление компьютером через Clop</h3><p class="muted-sm">ПК может оставаться со свёрнутым Clop Code. Каждый сеанс нужно разрешить на самом компьютере; во время управления его экран окружает оранжевая рамка и виден отдельный указатель ИИ.</p></div><span class="remote-logo">C<i></i></span></section>
+      <section>
+        <div class="api-section-head"><h3>Мои компьютеры</h3><button id="remoteRefresh" type="button">Обновить</button></div>
+        <div id="remoteDevices" class="remote-devices"><div class="muted-sm">Ищем Clop Code…</div></div>
+      </section>
+      <section id="remoteControl" class="remote-control" hidden>
+        <div class="remote-live-head"><span><i></i><b id="remoteLiveName">Удалённый сеанс</b><small id="remoteLiveTime">15:00</small></span><button id="remoteStop" class="danger-button" type="button">Остановить</button></div>
+        <div class="remote-screen-wrap" id="remoteScreenWrap"><img id="remoteScreen" alt="Экран удалённого компьютера"><div id="remoteScreenEmpty">Нажмите «Показать экран»</div><span id="remoteWebCursor"></span></div>
+        <div class="remote-toolbar"><button id="remoteScreenshot" type="button">Показать экран</button><button class="remote-key" data-key="ESC">Esc</button><button class="remote-key" data-key="TAB">Tab</button><button class="remote-key" data-key="ENTER">Enter</button><button class="remote-key" data-key="ALT+TAB">Alt Tab</button></div>
+        <div class="remote-input-row"><input id="remoteTypeText" maxlength="12000" placeholder="Текст для активного поля"><button id="remoteType" type="button">Напечатать</button></div>
+        <div class="remote-ai-box"><label for="remotePrompt"><b>Задача для ИИ</b><small>ИИ сам посмотрит экран и будет нажимать, вводить текст и проверять результат.</small></label><textarea id="remotePrompt" maxlength="20000" rows="3" placeholder="Например: открой браузер, перейди на мой сайт и проверь форму входа"></textarea><button id="remoteRunAi" type="button">Запустить ИИ на компьютере</button></div>
+        <div id="remoteEvents" class="remote-events" aria-live="polite"></div>
+      </section>
     </div>
   </div>
 </div>
@@ -1263,6 +1299,7 @@ async function boot() {
   if (data) {
     showApp(data);
     if (location.hash === '#bug') window.setTimeout(openBugs, 0);
+    if (location.hash === '#remote') window.setTimeout(openRemote, 0);
   } else showLogin();
 }
 
@@ -2454,6 +2491,170 @@ document.getElementById('submitBugBtn').addEventListener('click', async (event) 
   stateEl.textContent = `Отправлено: баг №${result.bug.id}`;
   await loadBugList();
 });
+
+/* ---------------- Clop Remote 1.1 Beta ---------------- */
+const remoteUi = { deviceId:'', sessionId:'', expiresAt:0, timer:null, busy:false, resultIds:new Set() };
+
+function remoteFetch(path, options) {
+  return fetch(path, options).then(r => r.json()).catch(() => null);
+}
+
+function renderRemoteDevices(data) {
+  const host = document.getElementById('remoteDevices');
+  const devices = data?.devices || [];
+  if (!devices.length) {
+    host.innerHTML = '<div class="muted-sm">Компьютеры не найдены. Откройте Clop Code 2.4.0, войдите через тот же Telegram и включите запросы Remote в настройках.</div>';
+    return;
+  }
+  host.innerHTML = devices.map(device => {
+    const active = Boolean(device.session);
+    const waiting = Boolean(device.request);
+    const online = device.online && device.enabled;
+    return `<div class="remote-device"><span class="remote-device-icon">PC</span><span class="remote-device-copy"><b>${escapeHtml(device.name)}</b><small>Clop Code ${escapeHtml(device.version || '—')} · ${device.enabled ? 'запросы включены' : 'Remote выключен'}</small></span><span class="remote-device-state ${online ? 'online' : ''}">${active ? '● доступ активен' : waiting ? 'ожидает решения на ПК' : online ? '● в сети' : 'не в сети'}</span><button type="button" class="${active ? '' : 'primary'}" data-remote-device="${escapeHtml(device.id)}" ${online ? '' : 'disabled'}>${active ? 'Открыть' : waiting ? 'Ожидаем…' : 'Запросить доступ'}</button></div>`;
+  }).join('');
+  host.querySelectorAll('[data-remote-device]').forEach(button => button.addEventListener('click', async () => {
+    const device = devices.find(item => item.id === button.dataset.remoteDevice);
+    if (!device) return;
+    remoteUi.deviceId = device.id;
+    if (device.session) {
+      remoteUi.sessionId = device.session.id; remoteUi.expiresAt = device.session.expiresAt; showRemoteControl(device); return;
+    }
+    button.disabled = true; button.textContent = 'Отправляем запрос…';
+    const result = await remoteFetch('/chat/api/remote/request', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({deviceId:device.id}) });
+    if (!result?.ok) { alert(result?.error || 'Не удалось запросить доступ.'); button.disabled = false; button.textContent = 'Запросить доступ'; return; }
+    if (result.session) { remoteUi.sessionId = result.session.id; remoteUi.expiresAt = result.session.expiresAt; showRemoteControl(device); }
+    else button.textContent = 'Подтвердите на компьютере…';
+    startRemotePolling();
+  }));
+}
+
+async function loadRemoteDevices() {
+  const data = await remoteFetch('/chat/api/remote/devices');
+  if (!data?.ok) return document.getElementById('remoteDevices').innerHTML = '<div class="muted-sm">Не удалось получить список компьютеров.</div>';
+  renderRemoteDevices(data);
+  const active = data.devices.find(device => device.session && (!remoteUi.deviceId || device.id === remoteUi.deviceId));
+  if (active) {
+    remoteUi.deviceId = active.id; remoteUi.sessionId = active.session.id; remoteUi.expiresAt = active.session.expiresAt;
+    showRemoteControl(active);
+  }
+}
+
+function showRemoteControl(device) {
+  document.getElementById('remoteControl').hidden = false;
+  document.getElementById('remoteLiveName').textContent = device?.name || 'Удалённый компьютер';
+  document.body.classList.add('remote-active');
+  updateRemoteTime();
+  sendRemoteCommand('screenshot');
+}
+
+function hideRemoteControl() {
+  remoteUi.sessionId = ''; remoteUi.expiresAt = 0;
+  document.getElementById('remoteControl').hidden = true;
+  document.body.classList.remove('remote-active');
+}
+
+function updateRemoteTime() {
+  if (!remoteUi.expiresAt) return;
+  const left = Math.max(0, Math.ceil((remoteUi.expiresAt - Date.now()) / 1000));
+  document.getElementById('remoteLiveTime').textContent = `${Math.floor(left/60)}:${String(left%60).padStart(2,'0')}`;
+  if (!left) hideRemoteControl();
+}
+
+async function sendRemoteCommand(type, payload = {}) {
+  if (!remoteUi.deviceId || !remoteUi.sessionId) return null;
+  const result = await remoteFetch('/chat/api/remote/command', {
+    method:'POST', headers:{'content-type':'application/json'},
+    body:JSON.stringify({deviceId:remoteUi.deviceId,sessionId:remoteUi.sessionId,type,payload}),
+  });
+  if (!result?.ok) {
+    addRemoteEvent(result?.error || 'Команда Remote не отправлена.', true);
+    if (/сеанс/i.test(result?.error || '')) hideRemoteControl();
+    return null;
+  }
+  addRemoteEvent(type === 'prompt' ? 'ИИ получил задачу.' : type === 'screenshot' ? 'Запрашиваем экран…' : 'Команда отправлена.');
+  return result.command;
+}
+
+function addRemoteEvent(text, error = false) {
+  const host = document.getElementById('remoteEvents');
+  const item = document.createElement('div'); item.className = `remote-event${error ? ' error' : ''}`; item.textContent = text;
+  host.prepend(item); while (host.children.length > 12) host.lastElementChild.remove();
+}
+
+function renderRemoteStatus(data) {
+  if (!data?.device?.session) {
+    if (remoteUi.sessionId) hideRemoteControl();
+    return;
+  }
+  remoteUi.sessionId = data.device.session.id; remoteUi.expiresAt = data.device.session.expiresAt;
+  if (document.getElementById('remoteControl').hidden) showRemoteControl(data.device);
+  updateRemoteTime();
+  if (data.latestScreen?.data) {
+    const image = document.getElementById('remoteScreen');
+    if (image.src !== data.latestScreen.data) image.src = data.latestScreen.data;
+    document.getElementById('remoteScreenWrap').classList.add('has-screen');
+  }
+  for (const result of [...(data.results || [])].reverse()) {
+    if (remoteUi.resultIds.has(result.id)) continue;
+    remoteUi.resultIds.add(result.id);
+    const label = result.type === 'prompt' ? (result.text || 'Задача ИИ завершена.') : result.ok ? `${result.type}: готово` : `${result.type}: ${result.error || 'ошибка'}`;
+    addRemoteEvent(label, !result.ok);
+  }
+}
+
+async function pollRemoteStatus() {
+  if (remoteUi.busy) return;
+  remoteUi.busy = true;
+  try {
+    if (!remoteUi.deviceId) return await loadRemoteDevices();
+    const data = await remoteFetch('/chat/api/remote/status?deviceId=' + encodeURIComponent(remoteUi.deviceId));
+    if (data?.ok) {
+      renderRemoteStatus(data);
+      if (!data.device?.session) await loadRemoteDevices();
+    }
+  } finally { remoteUi.busy = false; }
+}
+
+function startRemotePolling() {
+  clearInterval(remoteUi.timer);
+  remoteUi.timer = setInterval(pollRemoteStatus, 1200);
+  pollRemoteStatus();
+}
+
+async function openRemote() {
+  openModal('remoteOverlay');
+  await loadRemoteDevices();
+  startRemotePolling();
+}
+
+document.getElementById('remoteBtn').addEventListener('click', openRemote);
+document.getElementById('remoteRefresh').addEventListener('click', loadRemoteDevices);
+document.getElementById('remoteScreenshot').addEventListener('click', () => sendRemoteCommand('screenshot'));
+document.querySelectorAll('.remote-key').forEach(button => button.addEventListener('click', () => sendRemoteCommand('key', {key:button.dataset.key})));
+document.getElementById('remoteType').addEventListener('click', () => {
+  const input = document.getElementById('remoteTypeText'); const text = input.value;
+  if (!text.trim()) return; sendRemoteCommand('type', {text}); input.value = '';
+});
+document.getElementById('remoteRunAi').addEventListener('click', () => {
+  const input = document.getElementById('remotePrompt'); const text = input.value.trim();
+  if (!text) return; sendRemoteCommand('prompt', {text}); input.value = '';
+});
+document.getElementById('remoteStop').addEventListener('click', async () => {
+  await remoteFetch('/chat/api/remote/end', {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({deviceId:remoteUi.deviceId,sessionId:remoteUi.sessionId})});
+  hideRemoteControl(); await loadRemoteDevices();
+});
+document.getElementById('remoteScreen').addEventListener('click', event => {
+  const image = event.currentTarget; if (!image.naturalWidth || !image.naturalHeight) return;
+  const rect = image.getBoundingClientRect(); const scale = Math.min(rect.width/image.naturalWidth, rect.height/image.naturalHeight);
+  const shownW = image.naturalWidth*scale, shownH = image.naturalHeight*scale;
+  const left = rect.left+(rect.width-shownW)/2, top = rect.top+(rect.height-shownH)/2;
+  const x = Math.round((event.clientX-left)/scale), y = Math.round((event.clientY-top)/scale);
+  if (x<0 || y<0 || x>=image.naturalWidth || y>=image.naturalHeight) return;
+  const marker = document.getElementById('remoteWebCursor'); marker.style.left = `${event.clientX-rect.left}px`; marker.style.top = `${event.clientY-rect.top}px`;
+  document.getElementById('remoteScreenWrap').classList.add('cursor');
+  sendRemoteCommand('click',{x,y}); setTimeout(() => sendRemoteCommand('screenshot'),700);
+});
+window.addEventListener('hashchange', () => { if (location.hash === '#remote' && document.getElementById('app').style.display !== 'none') openRemote(); });
 
 document.getElementById('fastToggle').addEventListener('click', async () => {
   const r = await fetch('/chat/api/profile', {

@@ -1,10 +1,10 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const ACTIONS = new Set(['list', 'read', 'write', 'shell', 'screenshot', 'click', 'type', 'key']);
-const defaults = Object.freeze({ workDir: '', theme: 'dark', animations: true, enterSends: true, agentVisible: true, agentPosition: null, approvalMode: 'smart', shellTimeout: 90, model: '', effort: 'low', fast: false, agreementVersion: '', agreementAt: 0 });
+const defaults = Object.freeze({ workDir: '', theme: 'dark', animations: true, enterSends: true, agentVisible: true, agentPosition: null, remoteRequests: true, approvalMode: 'smart', shellTimeout: 90, model: '', effort: 'low', fast: false, agreementVersion: '', agreementAt: 0 });
 function cleanSettings(input = {}, previous = defaults) {
   const out = { ...previous };
-  for (const k of ['animations', 'enterSends', 'agentVisible', 'fast']) if (typeof input[k] === 'boolean') out[k] = input[k];
+  for (const k of ['animations', 'enterSends', 'agentVisible', 'remoteRequests', 'fast']) if (typeof input[k] === 'boolean') out[k] = input[k];
   if (['dark', 'light', 'system'].includes(input.theme)) out.theme = input.theme;
   if (input.agentPosition === null) out.agentPosition = null;
   else if (input.agentPosition && Number.isInteger(input.agentPosition.x) && Number.isInteger(input.agentPosition.y)
