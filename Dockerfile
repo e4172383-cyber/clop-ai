@@ -18,6 +18,10 @@ RUN npm ci --omit=dev && npm cache clean --force
 
 COPY --chown=clop:clop . .
 
+# The app creates its runtime state lazily. WORKDIR itself is created by root,
+# so make the application tree writable before dropping privileges.
+RUN mkdir -p /app/data && chown -R clop:clop /app
+
 USER clop
 EXPOSE 8787
 

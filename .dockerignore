@@ -1,6 +1,7 @@
 .git
 .github
 .env
+.env.*
 .kimi-main-login
 .tmp
 data
