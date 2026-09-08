@@ -1,10 +1,11 @@
 import http from 'node:http';
 import fs from 'node:fs';
+import { Readable } from 'node:stream';
 import { BILLING_VERSION } from './token-accounting.js';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { WEB_PORT, WEB_HOST, PUBLIC_URL, DOWNLOAD_BASE_URL, MODELS, PLANS, PROVIDERS, DEFAULT_MODEL, DEFAULT_EFFORT, EFFORTS, DAY, BOT_NAME, ADMIN_IDS, freeGoActive, FREE_GO_UNTIL, FREE_GO_PLAN, MODEL_PROMO, modelPromoActive, CORPORATE_PLANS, corporatePlansReady } from './config.js';
+import { WEB_PORT, WEB_HOST, PUBLIC_URL, MODELS, PLANS, PROVIDERS, DEFAULT_MODEL, DEFAULT_EFFORT, EFFORTS, DAY, BOT_NAME, ADMIN_IDS, freeGoActive, FREE_GO_UNTIL, FREE_GO_PLAN, MODEL_PROMO, modelPromoActive, CORPORATE_PLANS, corporatePlansReady } from './config.js';
 import * as store from './store.js';
 import * as sites from './sites.js';
 import * as desk from './desktop.js';
@@ -187,6 +188,57 @@ const DESKTOP_DOWNLOADS = new Set([
   'Clop-AI-Mobile-1.0.3.apk',
   'Clop-AI-Mobile-1.0.4.apk',
 ]);
+
+const RELEASE_ASSET_BASE_URL = 'https://github.com/e4172383-cyber/clop-ai/releases/download/v2.4.1';
+
+function publicDownloadUrl(name) {
+  return `${PUBLIC_URL.replace(/\/$/, '')}/downloads/${encodeURIComponent(name)}`;
+}
+
+async function proxyReleaseAsset(req, res, name) {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  req.once('aborted', abort);
+  res.once('close', () => {
+    if (!res.writableEnded) abort();
+  });
+
+  try {
+    const requestHeaders = { 'user-agent': 'Clop-Download-Proxy/2.4.1' };
+    if (req.headers.range) requestHeaders.range = req.headers.range;
+    const upstream = await fetch(`${RELEASE_ASSET_BASE_URL}/${encodeURIComponent(name)}`, {
+      method: req.method,
+      headers: requestHeaders,
+      redirect: 'follow',
+      signal: controller.signal,
+    });
+    if (!upstream.ok) {
+      console.warn('[download] upstream', name, upstream.status);
+      res.writeHead(upstream.status === 404 ? 404 : 502, { 'content-type': 'text/plain; charset=utf-8' });
+      return res.end(upstream.status === 404 ? '404' : 'download temporarily unavailable');
+    }
+
+    const headers = {
+      'content-type': upstream.headers.get('content-type') || 'application/octet-stream',
+      'content-disposition': attachmentDisposition(name),
+      'cache-control': 'public, max-age=31536000, immutable',
+      'accept-ranges': upstream.headers.get('accept-ranges') || 'bytes',
+      'x-content-type-options': 'nosniff',
+    };
+    for (const key of ['content-length', 'content-range', 'etag', 'last-modified']) {
+      const value = upstream.headers.get(key);
+      if (value) headers[key] = value;
+    }
+    res.writeHead(upstream.status, headers);
+    if (req.method === 'HEAD' || !upstream.body) return res.end();
+    return Readable.fromWeb(upstream.body).pipe(res);
+  } catch (error) {
+    if (error?.name === 'AbortError') return;
+    console.error('[download] proxy failed', name, error?.message || error);
+    if (!res.headersSent) res.writeHead(502, { 'content-type': 'text/plain; charset=utf-8' });
+    return res.end('download temporarily unavailable');
+  }
+}
 
 function serveDesktopFile(req, res, name, { download = false } = {}) {
   const full = path.join(PUBLIC, download ? 'downloads' : '', name);
@@ -500,11 +552,11 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
       return sendJson(res, 200, {
         desktop: {
           version: '2.4.1',
-          url: `${DOWNLOAD_BASE_URL}/Clop-Code-Setup-2.4.1.exe`,
-          windowsUrl: `${DOWNLOAD_BASE_URL}/Clop-Code-Setup-2.4.1.exe`,
-          linuxUrl: `${DOWNLOAD_BASE_URL}/Clop-Code-2.4.1-linux-x64.tar.xz`,
+          url: publicDownloadUrl('Clop-Code-Setup-2.4.1.exe'),
+          windowsUrl: publicDownloadUrl('Clop-Code-Setup-2.4.1.exe'),
+          linuxUrl: publicDownloadUrl('Clop-Code-2.4.1-linux-x64.tar.xz'),
         },
-        android: { version: '1.0.4', url: `${DOWNLOAD_BASE_URL}/Clop-AI-Mobile-1.0.4.apk` },
+        android: { version: '1.0.4', url: publicDownloadUrl('Clop-AI-Mobile-1.0.4.apk') },
       });
     }
 
@@ -1152,8 +1204,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
       }
       const localFile = path.join(PUBLIC, 'downloads', name);
       if (fs.existsSync(localFile)) return serveDesktopFile(req, res, name, { download: true });
-      res.writeHead(302, { location: `${DOWNLOAD_BASE_URL}/${encodeURIComponent(name)}`, 'cache-control': 'public, max-age=300' });
-      return res.end();
+      return proxyReleaseAsset(req, res, name);
     }
 
     if (PWA_FILES[url.pathname]) {

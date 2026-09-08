@@ -1,4 +1,4 @@
-import { BOT_NAME, PUBLIC_URL, DOWNLOAD_BASE_URL, MODELS, PLANS, PROVIDERS, EFFORTS, DEFAULT_MODEL, MAX_CHATS, OPUS_FREE_PROMO_UNTIL, FREE_GO_UNTIL, freeGoActive, MODEL_PROMO, modelPromoActive, modelInPromo, IMAGE_GENERATORS, ADMIN_IDS, CORPORATE_PLANS, corporatePlan, corporatePlansReady } from './config.js';
+import { BOT_NAME, PUBLIC_URL, MODELS, PLANS, PROVIDERS, EFFORTS, DEFAULT_MODEL, MAX_CHATS, OPUS_FREE_PROMO_UNTIL, FREE_GO_UNTIL, freeGoActive, MODEL_PROMO, modelPromoActive, modelInPromo, IMAGE_GENERATORS, ADMIN_IDS, CORPORATE_PLANS, corporatePlan, corporatePlansReady } from './config.js';
 import * as tg from './telegram.js';
 import * as store from './store.js';
 import { planOf, effortOf, allowedEffortOptions, checkLimits, checkAllLimits, bar, humanLeft, imageLimitState } from './limits.js';
@@ -433,7 +433,7 @@ function appDownloadText() {
 }
 
 function appDownloadKb() {
-  const root = DOWNLOAD_BASE_URL;
+  const root = `${PUBLIC_URL.replace(/\/$/, '')}/downloads`;
   return backKb([
     [{ text: '🪟 Скачать для Windows', url: `${root}/${DESKTOP_RELEASE.windows}` }],
     [{ text: '🐧 Скачать для Linux x64', url: `${root}/${DESKTOP_RELEASE.linux}` }],
