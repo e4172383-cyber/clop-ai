@@ -61,7 +61,7 @@
     <footer><span>© 2026 Clop · Состояние сервисов обновляется автоматически</span><div class="footer-links"><a href="#download">Скачать</a><a href="#data">Данные</a><a href="#speed">Статус API</a></div></footer>
   </div>
   <script>
-    const API_BASE="https://clop-ai.onrender.com";
+    const API_BASE="https://clop-ai-bot-production.up.railway.app";
     const byId=id=>document.getElementById(id),latencyHistory=[];let loading=false,lastMeasurement='';const dots=['globalDot','latencyDot','kimiDot','gptDot'];
     function dot(id,status){const el=byId(id);el.classList.remove('skeleton','degraded','unavailable');if(status==='degraded'||status==='partial')el.classList.add('degraded');if(status==='unavailable')el.classList.add('unavailable')}
     function grade(ms){if(ms<180)return['Отличный отклик','operational'];if(ms<450)return['Хороший отклик','operational'];if(ms<900)return['Средний отклик','degraded'];return['Медленный отклик','unavailable']}
