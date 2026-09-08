@@ -22,6 +22,7 @@ const { spawn } = require('node:child_process');
 const { Readable, Transform } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
 const { launchWindowsUpdate } = require('./update-helper.cjs');
+const { DEFAULT_SERVER, resolveServer, trustedUpdateUrl } = require('./server-config.cjs');
 const {
   defaults,
   cleanSettings,
@@ -44,7 +45,8 @@ const {
   sanitizeOutputName,
 } = require('./response-files.cjs');
 
-const SERVER = 'https://clop-ai.onrender.com';
+const FALLBACK_SITE = 'https://e4172383-cyber.github.io/clop-ai/';
+let SERVER = DEFAULT_SERVER;
 const TERMS_FILE = path.join(__dirname, '..', 'TERMS.txt');
 const RENDERER_FILE = path.join(__dirname, 'renderer', 'index.html');
 const PRELOAD_FILE = path.join(__dirname, 'preload.cjs');
@@ -2096,9 +2098,9 @@ function registerIpc() {
     const release = releases?.desktop;
     const isLinux = process.platform === 'linux';
     const url = isLinux ? release?.linuxUrl : (release?.windowsUrl || release?.url);
-    const expectedPrefix = isLinux ? `${SERVER}/downloads/Clop-Code-` : `${SERVER}/downloads/Clop-Code-Setup-`;
-    const expectedSuffix = isLinux ? '.tar.xz' : '.exe';
-    if (!url?.startsWith(expectedPrefix) || !url.endsWith(expectedSuffix)) throw new Error('Сервер обновлений вернул неверный адрес.');
+    if (!trustedUpdateUrl(url, { platform: isLinux ? 'linux' : process.platform, serverBase: SERVER })) {
+      throw new Error('Сервер обновлений вернул неверный адрес.');
+    }
     const response = await fetchWithTimeout(url, {}, 10 * 60 * 1000);
     if (!response.ok || !response.body) throw new Error('Не удалось скачать обновление.');
     const file = path.join(isLinux ? app.getPath('downloads') : app.getPath('temp'), isLinux
@@ -2474,6 +2476,11 @@ function registerIpc() {
     recordAction('external', 'done', url.href);
     return { ok: true };
   });
+  handle('service-links', async () => ({
+    website: FALLBACK_SITE,
+    chat: `${SERVER}/chat`,
+    bots: `${SERVER}/chat#bots`,
+  }));
 }
 
 function secureSession() {
@@ -2557,8 +2564,11 @@ if (!hasLock) {
       mainWindow.focus();
     }
   });
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     app.setAppUserModelId('com.clop.code.desktop');
+    const resolvedServer = await resolveServer();
+    SERVER = resolvedServer.url;
+    console.log(`[server] ${SERVER} (${resolvedServer.source})`);
     initialiseStorage();
     secureSession();
     registerIpc();

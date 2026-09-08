@@ -2756,9 +2756,17 @@
     all('[data-settings-tab]').forEach((button) => button.addEventListener('click', () => switchSettingsTab(button.dataset.settingsTab)));
     elements.changeModeButton.addEventListener('click', () => { hideModal(elements.settingsModal); document.querySelector(`[data-mode="${state.mode}"]`)?.focus(); });
     elements.openBackups.addEventListener('click', openBackups);
-    elements.openWebsite.addEventListener('click', () => openExternal('https://clop-ai.onrender.com'));
-    elements.botBuilderButton.addEventListener('click', () => openExternal('https://clop-ai.onrender.com/chat#bots'));
-    elements.openBotBuilder.addEventListener('click', () => openExternal('https://clop-ai.onrender.com/chat#bots'));
+    const openServiceLink = async (kind) => {
+      try {
+        const links = await api.serviceLinks();
+        await openExternal(links?.[kind]);
+      } catch (error) {
+        toast(errorText(error), 'error');
+      }
+    };
+    elements.openWebsite.addEventListener('click', () => openServiceLink('website'));
+    elements.botBuilderButton.addEventListener('click', () => openServiceLink('bots'));
+    elements.openBotBuilder.addEventListener('click', () => openServiceLink('bots'));
     elements.logoutButton.addEventListener('click', async () => {
       elements.logoutButton.disabled = true;
       try {

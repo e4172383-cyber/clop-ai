@@ -10,7 +10,7 @@ contextBridge.exposeInMainWorld('clop', {
   me: invoke('me'), bugs: invoke('bugs'), submitBug: invoke('bug-submit'), logout: invoke('logout'), approve: invoke('approve'),
   remoteDecision: invoke('remote-decision'), remoteStop: invoke('remote-stop'),
   attach: invoke('attach'), terminal: invoke('terminal'), backups: invoke('backups'),
-  window: invoke('window'), external: invoke('external'),
+  window: invoke('window'), external: invoke('external'), serviceLinks: invoke('service-links'),
   checkUpdate: invoke('update-check'), installUpdate: invoke('update-install'),
   onEvent: (fn) => { const listener = (_e, data) => fn(data); ipcRenderer.on('event', listener); return () => ipcRenderer.removeListener('event', listener); }
 });
