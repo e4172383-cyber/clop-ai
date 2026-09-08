@@ -44,3 +44,29 @@ test('Remote stop immediately invalidates the session', () => {
   assert.equal(remote.endSession(userId, deviceId, session.id), true);
   assert.throws(() => remote.queueCommand(userId, deviceId, session.id, 'type', { text: 'hello' }), /не активен/i);
 });
+
+test('Remote expiry removes queued commands and the last screen snapshot', () => {
+  const realNow = Date.now;
+  const base = realNow();
+  try {
+    Date.now = () => base;
+    remote.heartbeat({ userId: 'expiry-user', deviceId: 'expiry-pc', name: 'Expiry PC', version: '2.4.0' });
+    const request = remote.requestAccess('expiry-user', 'expiry-pc').request;
+    const session = remote.decideAccess('expiry-user', 'expiry-pc', request.id, true).session;
+    const command = remote.queueCommand('expiry-user', 'expiry-pc', session.id, 'screenshot', {});
+    remote.finishCommand('expiry-user', 'expiry-pc', session.id, {
+      id: command.id,
+      ok: true,
+      screen: 'data:image/png;base64,AA==',
+    });
+    assert.ok(remote.remoteStatus('expiry-user', 'expiry-pc').latestScreen);
+
+    Date.now = () => base + remote.constants.SESSION_TTL_MS + 1;
+    const expired = remote.remoteStatus('expiry-user', 'expiry-pc');
+    assert.equal(expired.device.session, null);
+    assert.equal(expired.latestScreen, null);
+    assert.throws(() => remote.queueCommand('expiry-user', 'expiry-pc', session.id, 'screenshot', {}), /не активен/);
+  } finally {
+    Date.now = realNow;
+  }
+});

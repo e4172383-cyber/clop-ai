@@ -24,7 +24,11 @@ function get(userId, deviceId) {
 
 function active(device, at = now()) {
   if (!device?.session || device.session.expiresAt <= at) {
-    if (device) device.session = null;
+    if (device?.session) {
+      device.session = null;
+      device.queue = [];
+      device.latestScreen = null;
+    }
     return null;
   }
   return device.session;
