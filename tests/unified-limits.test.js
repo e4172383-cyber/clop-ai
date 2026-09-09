@@ -40,7 +40,7 @@ test('every published model has the intended shared-pool consumption weight', ()
     'gpt-sol': 3.5,
     'clop-4-pulsar': 6,
     'clop-4-pro': 3.5,
-    'clop-4-flash': 2,
+    'clop-4-flash': 1.5,
   });
 });
 

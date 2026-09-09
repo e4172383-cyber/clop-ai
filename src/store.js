@@ -504,9 +504,19 @@ export function transferAccount(from, to) {
   const fromOffer = from.limitedOffer;
   const toOffer = to.limitedOffer;
   if (fromOffer && (!toOffer || Number(fromOffer.until || 0) > Number(toOffer.until || 0))) {
-    to.limitedOffer = { ...fromOffer };
+    to.limitedOffer = {
+      ...fromOffer,
+      usedByModel: fromOffer.usedByModel ? { ...fromOffer.usedByModel } : undefined,
+    };
   } else if (fromOffer && toOffer && fromOffer.id === toOffer.id) {
     to.limitedOffer.used = Math.max(Number(toOffer.used || 0), Number(fromOffer.used || 0));
+    const keys = new Set([...Object.keys(fromOffer.usedByModel || {}), ...Object.keys(toOffer.usedByModel || {})]);
+    if (keys.size) {
+      to.limitedOffer.usedByModel = Object.fromEntries([...keys].map((key) => [
+        key,
+        Math.max(Number(toOffer.usedByModel?.[key] || 0), Number(fromOffer.usedByModel?.[key] || 0)),
+      ]));
+    }
   }
 
   const итог = {

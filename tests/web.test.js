@@ -147,7 +147,7 @@ test('serves the public desktop release page and resumable installers without da
   assert.match(html, /Android 8/);
   assert.match(html, /Clop-Code-Setup-2\.4\.1\.exe/);
   assert.match(html, /Clop-Code-2\.4\.1-linux-x64\.tar\.xz/);
-  assert.match(html, /Clop-AI-Mobile-1\.0\.6\.apk/);
+  assert.match(html, /Clop-AI-Mobile-1\.0\.7\.apk/);
   assert.match(html, /href="\/downloads\/Clop-Code-Setup-2\.4\.1\.exe"/);
   assert.doesNotMatch(html, /release-assets\.githubusercontent\.com/);
   assert.doesNotMatch(html, /\d[\d ]{3,}\s*токен/iu);
@@ -168,7 +168,7 @@ test('serves the public desktop release page and resumable installers without da
   assert.match(partial.headers.get('content-disposition'), /Clop-Code-Setup-2\.4\.0\.exe/);
   assert.equal((await partial.arrayBuffer()).byteLength, 32);
 
-  const apk = await fetch(baseUrl + '/downloads/Clop-AI-Mobile-1.0.6.apk', {
+  const apk = await fetch(baseUrl + '/downloads/Clop-AI-Mobile-1.0.7.apk', {
     headers: { range: 'bytes=0-3' },
   });
   assert.equal(apk.status, 206);
@@ -458,12 +458,12 @@ test('admin can refund a bounded window of failed desktop usage', async () => {
   assert.equal(user.stats.tokens, 50);
 });
 
-test('the limited offer unlocks Astra, keeps its usage outside plan limits, and Sol is free with a visible multiplier', async () => {
+test('the limited offer unlocks Astra and keeps its covered usage outside plan limits', async () => {
   user.limitedOffer = {
     id: config.LIMITED_OFFER.id,
     claimedAt: Date.now(),
     until: Date.now() + 60_000,
-    used: 0,
+    usedByModel: { 'gpt-astra': 0, 'kimi-k3': 0 },
   };
   user.model = 'gpt-astra';
 
@@ -471,8 +471,10 @@ test('the limited offer unlocks Astra, keeps its usage outside plan limits, and 
   assert.equal(profile.status, 200);
   const body = await profile.json();
   assert.equal(body.models.find((model) => model.key === 'gpt-astra').available, true);
+  assert.equal(body.models.find((model) => model.key === 'kimi-k3').available, true);
   assert.equal(body.models.find((model) => model.key === 'gpt-sol').available, true);
-  assert.equal(body.models.find((model) => model.key === 'gpt-sol').limitMultiplier, 3.5);
+  assert.deepEqual(body.models.find((model) => model.key === 'gpt-sol').ratings, { price: 2, speed: 3, quality: 5 });
+  assert.equal(body.models.find((model) => model.key === 'gpt-sol').limitMultiplier, undefined);
   assert.equal(body.limitedOffer.active, true);
 
   modelResults.push(okResult({ tokens: { input: 11, output: 7, total: 18, billable: 18, cacheWrite: 0, cacheRead: 0 } }));
@@ -482,21 +484,38 @@ test('the limited offer unlocks Astra, keeps its usage outside plan limits, and 
     body: JSON.stringify({ text: 'Проверка бонуса', model: 'gpt-astra' }),
   });
   assert.equal(answer.status, 200);
-  assert.equal(user.limitedOffer.used, 18);
+  assert.equal(user.limitedOffer.usedByModel['gpt-astra'], 18);
+  assert.equal(user.limitedOffer.usedByModel['kimi-k3'], 0);
   assert.equal(user.usage.at(-1).offerBonus, true);
   assert.equal((await answer.json()).limits.gpt.short.percent, 0);
 });
 
 test('offer claim and expiry are calculated from server time', () => {
-  assert.equal(config.LIMITED_OFFER.tokens, 10_000_000);
+  assert.deepEqual(config.LIMITED_OFFER.budgets, { 'gpt-astra': 10_000_000, 'kimi-k3': 1_000_000 });
+  assert.equal(config.LIMITED_OFFER.claimDurationMs, 60 * 60 * 1000);
   assert.equal(config.LIMITED_OFFER.durationMs, 5 * 60 * 60 * 1000);
-  assert.deepEqual(config.LIMITED_OFFER.models, ['gpt-sol', 'gpt-astra']);
+  assert.deepEqual(config.LIMITED_OFFER.models, ['gpt-astra', 'kimi-k3']);
   const sample = {};
-  const beforeClose = config.LIMITED_OFFER.claimUntil - 1000;
+  const claimUntil = limitedOffer.offerState({}, Date.now()).claimUntil;
+  const beforeClose = claimUntil - 1000;
   const claimed = limitedOffer.claimOffer(sample, beforeClose);
   assert.equal(claimed.active, true);
   assert.equal(claimed.until, beforeClose + config.LIMITED_OFFER.durationMs);
-  assert.equal(limitedOffer.offerState({}, config.LIMITED_OFFER.claimUntil), null);
+  assert.equal(limitedOffer.offerState({}, claimUntil), null);
+});
+
+test('Astra and Kimi K3 promotion balances are independent and capped', () => {
+  const now = Date.now();
+  const sample = {};
+  limitedOffer.claimOffer(sample, now);
+  assert.equal(limitedOffer.addOfferUsage(sample, 'gpt-astra', 25, now), 25);
+  assert.equal(limitedOffer.addOfferUsage(sample, 'kimi-k3', 40, now), 40);
+  sample.limitedOffer.usedByModel['kimi-k3'] = 999_990;
+  assert.equal(limitedOffer.addOfferUsage(sample, 'kimi-k3', 100, now), 10);
+  const state = limitedOffer.offerState(sample, now);
+  assert.equal(state.usedByModel['gpt-astra'], 25);
+  assert.equal(state.leftByModel['kimi-k3'], 0);
+  assert.equal(state.leftByModel['gpt-astra'], 9_999_975);
 });
 
 test('/desk/voice tracks the weekly session on the authenticated account', async () => {
@@ -564,7 +583,7 @@ test('/chat/api/me and /chat keep GPT 5.6 Sol available on the free plan', async
   const me = await meResponse.json();
   const sol = me.models.find((model) => model.key === 'gpt-sol');
   assert.equal(sol.available, true);
-  assert.equal(sol.limitMultiplier, 3.5);
+  assert.deepEqual(sol.ratings, { price: 2, speed: 3, quality: 5 });
   assert.equal(me.currentModel, 'gpt-sol');
   assert.equal(me.chats.find((item) => item.id === chat.id).model, 'gpt-sol');
 

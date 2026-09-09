@@ -1,4 +1,4 @@
-import { BOT_NAME, PUBLIC_URL, MODELS, PLANS, PROVIDERS, EFFORTS, DEFAULT_MODEL, MAX_CHATS, OPUS_FREE_PROMO_UNTIL, FREE_GO_UNTIL, freeGoActive, MODEL_PROMO, modelPromoActive, modelInPromo, IMAGE_GENERATORS, ADMIN_IDS, CORPORATE_PLANS, corporatePlan, corporatePlansReady, PLAN_LIMIT_MULTIPLIERS } from './config.js';
+import { BOT_NAME, PUBLIC_URL, MODELS, PLANS, PROVIDERS, EFFORTS, DEFAULT_MODEL, MAX_CHATS, OPUS_FREE_PROMO_UNTIL, FREE_GO_UNTIL, freeGoActive, MODEL_PROMO, modelPromoActive, modelInPromo, IMAGE_GENERATORS, ADMIN_IDS, CORPORATE_PLANS, corporatePlan, corporatePlansReady, modelRatings } from './config.js';
 import * as tg from './telegram.js';
 import * as store from './store.js';
 import { planOf, effortOf, allowedEffortOptions, checkLimits, checkAllLimits, bar, humanLeft, imageLimitState } from './limits.js';
@@ -18,8 +18,8 @@ const DESKTOP_RELEASE = Object.freeze({
   released: '08.09.2026',
   windows: 'Clop-Code-Setup-2.4.1.exe',
   linux: 'Clop-Code-2.4.1-linux-x64.tar.xz',
-  androidVersion: '1.0.6',
-  android: 'Clop-AI-Mobile-1.0.6.apk',
+  androidVersion: '1.0.7',
+  android: 'Clop-AI-Mobile-1.0.7.apk',
 });
 
 // Единая точка входа: Claude-модели идут через Claude CLI, GPT-модели — через
@@ -136,11 +136,11 @@ function mainKb(u) {
   return {
     inline_keyboard: [
       [{ text: '💬 Новый чат', callback_data: 'new_chat' }, { text: '📂 Мои чаты', callback_data: 'chats' }],
-      [{ text: `🤖 Модель: ${m.heavy ? '⚠️ ' : ''}${m.short}`, callback_data: 'model' }, { text: `🧠 Мышление: ${effortLabel}`, callback_data: 'effort' }],
-      ...(m.provider === 'gpt' ? [[{ text: `⚡ Быстро: ${u.fast ? 'ВКЛ' : 'ВЫКЛ'} · расход ×1,2`, callback_data: 'fast_toggle' }]] : []),
+      [{ text: `🤖 Модель: ${m.short}`, callback_data: 'model' }, { text: `🧠 Мышление: ${effortLabel}`, callback_data: 'effort' }],
+      ...(m.provider === 'gpt' ? [[{ text: `⚡ Быстро: ${u.fast ? 'ВКЛ' : 'ВЫКЛ'}`, callback_data: 'fast_toggle' }]] : []),
       [{ text: '📊 Лимиты', callback_data: 'usage' }, { text: '💎 Тарифы', callback_data: 'plans' }],
       [{ text: '🏢 Моя команда', callback_data: 'team' }],
-      ...(showOffer ? [[{ text: offer.claimed ? '🎁 Бонус GPT активен' : '🎁 Получить 10 млн токенов', callback_data: 'offer_claim' }]] : []),
+      ...(showOffer ? [[{ text: offer.claimed ? '🎁 Бонус Astra + Kimi активен' : '🎁 Получить 10 млн Astra + 1 млн Kimi', callback_data: 'offer_claim' }]] : []),
       [{ text: '🖼 Сгенерировать (бета)', callback_data: 'imagegen' }],
       [{ text: '🌐 Чат на сайте (бета)', url: `${PUBLIC_URL}/chat` }],
       [{ text: `💻 Скачать Clop Code · v${DESKTOP_RELEASE.version}`, callback_data: 'app_download' }],
@@ -158,7 +158,7 @@ function modelKb(u) {
   const rows = Object.values(MODELS).map((m) => {
     const locked = !modelAvailableTo(u, m);
     const active = modelOf(u).key === m.key;
-    const label = `${active ? '✅ ' : locked ? '🔒 ' : m.heavy ? '⚠️ ' : '▫️ '}${m.title}${m.recommended ? ' ⭐' : ''}`;
+    const label = `${active ? '✅ ' : locked ? '🔒 ' : '▫️ '}${m.title}${m.recommended ? ' ⭐' : ''}`;
     return [{ text: label, callback_data: locked ? 'need_plan:' + m.key : 'model_set:' + m.key }];
   });
   if (plan.key === 'free') rows.push([{ text: '💎 Открыть все модели — тарифы', callback_data: 'plans' }]);
@@ -206,14 +206,14 @@ function usageText(u) {
     '',
   ];
   if (offer?.claimed && Date.now() < offer.until) {
-    const used = Math.max(0, Math.round(offer.used || 0));
-    const total = Math.max(1, Math.round(offer.tokens || 0));
-    const left = Math.max(0, total - used);
-    const percent = Math.min(100, Math.round((used / total) * 100));
-    lines.push('🎁 *Бонусные GPT-токены*');
-    lines.push(`Всего: *${total.toLocaleString('ru-RU')}*`);
-    lines.push(`Использовано: *${used.toLocaleString('ru-RU')}* · ${percent}%`);
-    lines.push(`Осталось: *${left.toLocaleString('ru-RU')}*`);
+    lines.push('🎁 *Бонусные токены акции*');
+    for (const key of offer.models || []) {
+      const total = Math.max(1, Math.round(Number(offer.budgets?.[key]) || 0));
+      const used = Math.max(0, Math.round(Number(offer.usedByModel?.[key]) || 0));
+      const percent = Math.min(100, Math.round((used / total) * 100));
+      lines.push(`${MODELS[key]?.title || key}: ${bar(percent)} *${percent}%*`);
+      lines.push(`Осталось ${(total - used).toLocaleString('ru-RU')} из ${total.toLocaleString('ru-RU')}`);
+    }
     lines.push(`Доступны до *${dt(offer.until)} по Киеву*`);
     lines.push('');
   }
@@ -241,8 +241,8 @@ function usageText(u) {
   }
   const curModel = modelOf(u);
   lines.push(`Модель: *${curModel.title}*`);
-  lines.push(`Расход модели: *×${String(curModel.limitMultiplier || 1).replace('.', ',')}* общего лимита`);
-  if (!activeTeam) lines.push(`Размер тарифа: *×${String(PLAN_LIMIT_MULTIPLIERS[plan.key] || 1).replace('.', ',')}* от бесплатного`);
+  const rating = modelRatings(curModel);
+  lines.push(`Цена: *${rating.price}/5* · Скорость: *${rating.speed}/5* · Качество: *${rating.quality}/5*`);
   lines.push(`Сила мышления: *${curModel.supportsEffort === false ? 'своё встроенное размышление' : effortOf(u, curModel).title}*`);
   const activeChat = store.activeChat(u, false);
   if (activeChat) {
@@ -771,24 +771,21 @@ async function handleAsk(u, chatId, text, images = null) {
     store.pushMessage(chat, 'assistant', res.text, { tokens: res.tokens.total, model: model.key, effort: effort.key });
     // В быстром режиме GPT списывает на 20% больше. total/costUsd остаются
     // фактическими, а повышающий коэффициент применяется только к лимиту.
-    const offerBonus = addOfferUsage(u, model.key, res.tokens.billable);
-    const billableForLimit = Math.round(res.tokens.billable * (model.limitMultiplier ?? 1) * (fast ? 1.2 : 1));
+    const offerCovered = addOfferUsage(u, model.key, res.tokens.billable);
+    const chargeableBillable = Math.max(0, res.tokens.billable - offerCovered);
+    const offerBonus = offerCovered > 0 && chargeableBillable === 0;
+    const billableForLimit = Math.round(chargeableBillable * (model.limitMultiplier ?? 1) * (fast ? 1.2 : 1));
     store.addUsage(u, {
       ts: Date.now(), chatId: chat.id, model: model.key, effort: effort.key, plan: planOf(u).key,
       input: res.tokens.input, output: res.tokens.output,
       cacheWrite: res.tokens.cacheWrite, cacheRead: res.tokens.cacheRead,
       promptTokens: res.tokens.promptTokens,
       total: res.tokens.total, billable: billableForLimit, costUsd: res.costUsd, durationMs: res.durationMs,
-      billingVersion: BILLING_VERSION, offerBonus,
+      billingVersion: BILLING_VERSION, offerBonus, offerCovered,
     });
     const after = offerBonus ? [] : checkLimits(u, model.provider).states;
     const warn = after.find((s) => s.percent >= 85);
     let footer = warn ? `\n\n_Общий лимит · ${warn.title}: использовано ${warn.percent}%_` : '';
-    // Предупреждение о тяжёлой модели — один раз на чат, не спамим на каждый ответ
-    if (model.heavy && !chat.heavyWarned) {
-      chat.heavyWarned = true;
-      footer += `\n\n⚠️ _${model.title}: ${model.heavyNote}_`;
-    }
     // Контекст диалога почти заполнил окно модели — предлагаем сжать
     const ctxPercent = contextPercent(chat, model);
     if (ctxPercent >= 99) {
@@ -1139,13 +1136,13 @@ function modelText(u) {
     lines.push(`${m.key === modelOf(u).key ? '✅' : locked ? '🔒' : '▫️'} *${m.title}*${m.recommended ? ' — ⭐ рекомендуется' : ''}`);
     lines.push(`_${m.desc}_`);
     lines.push(`Доступна: ${plans.map((p) => PLANS[p].title).join(', ')}`);
-    lines.push(`Расход общего лимита: *×${String(m.limitMultiplier || 1).replace('.', ',')}*`);
+    const rating = modelRatings(m);
+    lines.push(`Цена: *${rating.price}/5* · Скорость: *${rating.speed}/5* · Качество: *${rating.quality}/5*`);
     if (m.unlimited) lines.push('🎁 _Навсегда бесплатна — расход не идёт в лимит тарифа_');
     if (modelInPromo(m.key)) lines.push(`🎉 _Акция: открыта всем до ${dt(MODEL_PROMO.until)}_`);
     if (m.key === 'opus-5' && Date.now() < OPUS_FREE_PROMO_UNTIL) {
       lines.push(`🎉 _Акция: временно бесплатно, до ${dt(OPUS_FREE_PROMO_UNTIL)} — лимит тарифа расходуется как обычно_`);
     }
-    if (m.heavy) lines.push(`⚠️ _${m.heavyNote}_`);
     lines.push('');
   }
   return lines.join('\n');
@@ -1223,9 +1220,9 @@ async function onCallback(u, q) {
     const offer = claimOffer(u);
     if (!offer) return void await tg.answerCallback(q.id, 'Предложение уже завершилось', true);
     await store.save();
-    await tg.answerCallback(q.id, offer.active ? '🎁 10 млн токенов подключены на 5 часов' : 'Предложение уже использовано', true);
+    await tg.answerCallback(q.id, offer.active ? '🎁 Бонус Astra и Kimi K3 подключён на 5 часов' : 'Предложение уже использовано', true);
     return void await edit(offer.active
-      ? `🎁 *Предложение подключено*\n\n10 млн токенов для GPT 5.6 Sol и GPT-6 Astra доступны до ${dt(offer.until)} по Киеву.`
+      ? `🎁 *Предложение подключено*\n\n10 млн токенов GPT-6 Astra и 1 млн токенов Kimi K3 доступны до ${dt(offer.until)} по Киеву.`
       : 'Предложение уже завершилось.', mainKb(u));
   }
   if (data === 'usage') { await tg.answerCallback(q.id); return void await edit(usageText(u), backKb()); }
@@ -1294,7 +1291,7 @@ async function onCallback(u, q) {
   if (data === 'fast_toggle') {
     u.fast = !u.fast;
     store.saveSoon();
-    await tg.answerCallback(q.id, `⚡ Быстрый режим ${u.fast ? 'включён' : 'выключен'}${u.fast ? ' · расход ×1,2' : ''}`);
+    await tg.answerCallback(q.id, `⚡ Быстрый режим ${u.fast ? 'включён' : 'выключен'}`);
     return void await edit(menuText(u), mainKb(u));
   }
   if (data === 'chats') { await tg.answerCallback(q.id); return void await edit(chatsListText(u), chatsKb(u)); }
@@ -1350,7 +1347,7 @@ async function onCallback(u, q) {
     if (!modelAvailableTo(u, m)) return void await tg.answerCallback(q.id, '🔒 Модель недоступна на вашем тарифе', true);
     u.model = key;
     store.saveSoon();
-    await tg.answerCallback(q.id, m.heavy ? `⚠️ Выбрана ${m.short} — ${m.heavyNote}` : `Выбрана ${m.short}`, Boolean(m.heavy));
+    await tg.answerCallback(q.id, `Выбрана ${m.short}`);
     return void await edit(modelText(u), modelKb(u));
   }
 

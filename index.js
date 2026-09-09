@@ -10,6 +10,7 @@ import * as codexAuth from './src/codexauth.js';
 import * as kimiAuth from './src/kimiauth.js';
 import { healthCheck as healthCheckGpt } from './src/gpt.js';
 import { setBotUsername } from './src/botinfo.js';
+import { initializeLimitedOffer } from './src/limited-offer.js';
 
 const args = process.argv.slice(2);
 const noBot = args.includes('--no-bot');
@@ -17,6 +18,7 @@ const noWeb = args.includes('--no-web');
 
 ensureDirs();
 await store.load();
+initializeLimitedOffer();
 await initializeModelPromo(store.redisClient());
 
 // На сервере (Render и т.д.) у Codex CLI нет своего интерактивного логина —

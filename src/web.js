@@ -5,7 +5,7 @@ import { BILLING_VERSION } from './token-accounting.js';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { WEB_PORT, WEB_HOST, PUBLIC_URL, MODELS, PLANS, PROVIDERS, DEFAULT_MODEL, DEFAULT_EFFORT, EFFORTS, DAY, BOT_NAME, ADMIN_IDS, freeGoActive, FREE_GO_UNTIL, FREE_GO_PLAN, MODEL_PROMO, modelPromoActive, CORPORATE_PLANS, corporatePlansReady, PLAN_LIMIT_MULTIPLIERS } from './config.js';
+import { WEB_PORT, WEB_HOST, PUBLIC_URL, MODELS, PLANS, PROVIDERS, DEFAULT_MODEL, DEFAULT_EFFORT, EFFORTS, DAY, BOT_NAME, ADMIN_IDS, freeGoActive, FREE_GO_UNTIL, FREE_GO_PLAN, MODEL_PROMO, modelPromoActive, CORPORATE_PLANS, corporatePlansReady, modelRatings } from './config.js';
 import * as store from './store.js';
 import * as sites from './sites.js';
 import * as desk from './desktop.js';
@@ -188,7 +188,7 @@ const DESKTOP_DOWNLOADS = new Set([
   'Clop-AI-Mobile-1.0.3.apk',
   'Clop-AI-Mobile-1.0.4.apk',
   'Clop-AI-Mobile-1.0.5.apk',
-  'Clop-AI-Mobile-1.0.6.apk',
+  'Clop-AI-Mobile-1.0.7.apk',
 ]);
 
 const RELEASE_ASSET_BASE_URL = 'https://github.com/e4172383-cyber/clop-ai/releases/download/v2.4.1';
@@ -557,7 +557,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           windowsUrl: publicDownloadUrl('Clop-Code-Setup-2.4.1.exe'),
           linuxUrl: publicDownloadUrl('Clop-Code-2.4.1-linux-x64.tar.xz'),
         },
-        android: { version: '1.0.6', url: publicDownloadUrl('Clop-AI-Mobile-1.0.6.apk') },
+        android: { version: '1.0.7', url: publicDownloadUrl('Clop-AI-Mobile-1.0.7.apk') },
       });
     }
 
@@ -804,7 +804,6 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           const limits = publicLimits(u);
           return sendJson(res, 200, {
             ok: true, name: store.displayName(u), plan: plan.title, planKey: plan.key,
-            planLimitMultiplier: PLAN_LIMIT_MULTIPLIERS[plan.key] || 1,
             // Desktop показывает полный каталог: недоступные модели остаются
             // видимыми с замком, поэтому пользователь понимает состав тарифов.
             models: Object.values(MODELS).map((m) => ({
@@ -815,7 +814,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
               available: modelAvailableTo(u, m),
               plans: modelPlans(m),
               supportsEffort: m.supportsEffort !== false,
-              limitMultiplier: m.limitMultiplier || 1,
+              ratings: modelRatings(m),
             })),
             model: modelOf(u).key,
             limits,
@@ -1105,11 +1104,12 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
             const measuredBillable = Number.isFinite(r.tokens.billable)
               ? r.tokens.billable
               : (Number(r.tokens.input || 0) + Number(r.tokens.output || 0) || Number(r.tokens.total || 0));
-            const billableForLimit = chargeResponse
-              ? Math.round(measuredBillable * (model.limitMultiplier ?? 1) * (fast ? 1.2 : 1))
-              : 0;
+            let billableForLimit = 0;
             if (!model.unlimited && chargeResponse) {
-              const offerBonus = addOfferUsage(u, model.key, measuredBillable);
+              const offerCovered = addOfferUsage(u, model.key, measuredBillable);
+              const chargeableBillable = Math.max(0, measuredBillable - offerCovered);
+              const offerBonus = offerCovered > 0 && chargeableBillable === 0;
+              billableForLimit = Math.round(chargeableBillable * (model.limitMultiplier ?? 1) * (fast ? 1.2 : 1));
               store.addUsage(u, {
                 ts: Date.now(), chatId: chat.id, model: model.key, effort: effortKey, plan: plan.key,
                 input: r.tokens.input, output: r.tokens.output,
@@ -1117,7 +1117,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
                 promptTokens: r.tokens.promptTokens,
                 total: r.tokens.total,
                 billable: billableForLimit,
-                billingVersion: BILLING_VERSION, offerBonus,
+                billingVersion: BILLING_VERSION, offerBonus, offerCovered,
                 costUsd: r.costUsd, durationMs: r.durationMs, source: 'desktop',
               });
             }
@@ -1296,8 +1296,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           description: m.desc || '',
           recommended: m.recommended === true,
           heavy: m.heavy === true,
-          heavyNote: m.heavyNote || '',
-          limitMultiplier: m.limitMultiplier || 1,
+          ratings: modelRatings(m),
           plans: modelPlans(m),
           available: modelAvailableTo(u, m),
           supportsEffort: m.supportsEffort !== false,
@@ -1312,7 +1311,6 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           name: store.displayName(u),
           plan: plan.key,
           planTitle: plan.title,
-          planLimitMultiplier: PLAN_LIMIT_MULTIPLIERS[plan.key] || 1,
           currentChatId: chat.id,
           currentModel: model.key,
           effort: effortOf(u, model).key,
@@ -1487,7 +1485,6 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           plan: plan.key,
           planTitle: plan.title,
           planEmoji: plan.emoji,
-          planLimitMultiplier: PLAN_LIMIT_MULTIPLIERS[plan.key] || 1,
           proUntil: u.proUntil || 0,
           createdAt: u.createdAt,
           stats: u.stats,
@@ -1498,7 +1495,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           models: Object.values(MODELS).map((m) => ({
             key: m.key, title: m.title, provider: m.provider,
             available: modelAvailableTo(u, m),
-            limitMultiplier: m.limitMultiplier || 1,
+            ratings: modelRatings(m),
             supportsEffort: m.supportsEffort !== false,
           })),
           effortOptionsByModel: Object.fromEntries(
@@ -1847,9 +1844,11 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           const measuredBillable = Number.isFinite(tokens.billable)
             ? tokens.billable
             : (Number(tokens.input || 0) + Number(tokens.output || 0) || Number(tokens.total || 0));
-          const billableForLimit = Math.round(measuredBillable * (model.limitMultiplier ?? 1) * (fast ? 1.2 : 1));
           if (!model.unlimited) {
-            const offerBonus = addOfferUsage(u, model.key, measuredBillable);
+            const offerCovered = addOfferUsage(u, model.key, measuredBillable);
+            const chargeableBillable = Math.max(0, measuredBillable - offerCovered);
+            const offerBonus = offerCovered > 0 && chargeableBillable === 0;
+            const billableForLimit = Math.round(chargeableBillable * (model.limitMultiplier ?? 1) * (fast ? 1.2 : 1));
             store.addUsage(u, {
               ts: Date.now(), chatId: chat.id, model: model.key, effort: effortKey, plan: plan.key,
               input: tokens.input || 0, output: tokens.output || 0,
@@ -1859,6 +1858,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
               billingVersion: BILLING_VERSION,
               source: 'site-chat',
               offerBonus,
+              offerCovered,
             });
           }
           await store.save();

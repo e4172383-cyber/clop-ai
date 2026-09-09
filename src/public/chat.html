@@ -850,7 +850,7 @@
   @keyframes remotePulse{50%{opacity:.5;transform:scale(.75)}}@keyframes remoteBorder{50%{border-color:#ffa06a;box-shadow:inset 0 0 34px rgba(255,122,54,.4)}}
   @media(max-width:680px){.remote-device{align-items:flex-start;flex-wrap:wrap}.remote-device button{width:100%}.remote-screen-wrap{min-height:190px}.remote-input-row{grid-template-columns:1fr}.remote-ai-box button{width:100%}}
 </style>
-<link rel="stylesheet" href="/workspace.css?v=20260906-6">
+<link rel="stylesheet" href="/workspace.css?v=20260909-1">
 </head>
 <body>
 <div class="bg"><div class="blob a"></div><div class="blob b"></div><div class="blob c"></div></div>
@@ -973,16 +973,20 @@
         <button class="bug-mini" id="bugBtn" type="button">🐞 Баг?</button>
         <span class="tag promo-tag" id="promoTag" style="display:none"></span>
         <label class="model-control"><span>Модель</span><select id="modelSelect" aria-label="Модель"></select></label>
-        <div class="model-usage" id="modelUsage" role="button" tabindex="0" aria-label="Лимиты выбранной модели">
+        <div class="model-usage" id="modelUsage" role="button" tabindex="0" aria-label="Лимит и оценка выбранной модели">
           <i></i><span>Лимит</span><b id="modelUsagePercent">—</b>
           <div class="usage-popover" role="tooltip">
             <div class="usage-popover-head"><b id="usageProvider">Общий лимит</b><span>Бот · сайт · API</span></div>
             <div class="usage-popover-row"><span>5 часов</span><b id="usageShort">—</b></div>
             <div class="usage-popover-row"><span>Неделя</span><b id="usageLong">—</b></div>
+            <div class="model-score-caption"><b>Оценка модели</b><span>5 — лучше</span></div>
+            <div class="model-score-row"><span>Цена</span><div class="model-score-pips" id="ratingPrice"></div><b id="ratingPriceValue">—</b></div>
+            <div class="model-score-row"><span>Скорость</span><div class="model-score-pips" id="ratingSpeed"></div><b id="ratingSpeedValue">—</b></div>
+            <div class="model-score-row"><span>Качество</span><div class="model-score-pips" id="ratingQuality"></div><b id="ratingQualityValue">—</b></div>
           </div>
         </div>
         <div class="effort-control"><span>Мышление</span><div id="effortSlot" class="eff-slot"></div></div>
-        <button id="fastToggle" class="toggle" title="Быстрый режим: расход лимита ×1,2" aria-label="Быстрый режим"><span>Быстро</span><i></i></button>
+        <button id="fastToggle" class="toggle" title="Быстрый режим" aria-label="Быстрый режим"><span>Быстро</span><i></i></button>
       </div>
     </header>
     <div class="connection-strip" id="connectionStrip" aria-live="polite"><i></i><span>Синхронизация с Telegram включена</span></div>
@@ -1469,7 +1473,7 @@ function renderModelSelect() {
   ];
   const known = new Set(providers.map(([key]) => key));
   const renderOptions = (models) => models.map((m) =>
-    `<option value="${m.key}" ${m.key === state.currentModel ? 'selected' : ''} ${!m.available ? 'disabled' : ''}>${escapeHtml(m.title)}${Number(m.limitMultiplier) > 1 ? ` · лимит ×${String(m.limitMultiplier).replace('.', ',')}` : ''}${m.recommended ? ' · советуем' : ''}${!m.available ? ' 🔒' : ''}</option>`
+    `<option value="${m.key}" ${m.key === state.currentModel ? 'selected' : ''} ${!m.available ? 'disabled' : ''}>${escapeHtml(m.title)}${m.recommended ? ' · советуем' : ''}${!m.available ? ' 🔒' : ''}</option>`
   ).join('');
   sel.innerHTML = providers.map(([provider, title]) => {
     const models = state.models.filter((m) => m.provider === provider);
@@ -1528,8 +1532,8 @@ function renderUsageIndicator() {
   longRow.style.display = long === null ? 'none' : '';
   document.getElementById('usageShort').textContent = short === null ? '—' : short + '%';
   document.getElementById('usageLong').textContent = long === null ? '—' : long + '%';
-  const multiplier = Number(model.limitMultiplier) || 1;
-  document.getElementById('usageProvider').textContent = `Общий лимит · ${model.title} ×${String(multiplier).replace('.', ',')}`;
+  document.getElementById('usageProvider').textContent = model.title;
+  renderModelRatings(model);
 }
 
 function renderFastToggle() {
@@ -1538,7 +1542,7 @@ function renderFastToggle() {
   btn.style.display = model?.provider === 'gpt' ? '' : 'none';
   btn.classList.toggle('on', state.fast);
   btn.setAttribute('aria-pressed', String(state.fast));
-  btn.title = `Быстрый режим: ${state.fast ? 'включён' : 'выключен'} · расход лимита ×1,2`;
+  btn.title = `Быстрый режим: ${state.fast ? 'включён' : 'выключен'}`;
 }
 
 /* Слайдер силы мышления: тянется мышью/пальцем и снапится по ступеням.
@@ -2293,9 +2297,6 @@ async function openProfile() {
   const eff0 = effortControl(p.model, p.effort);
   const sharedLimit = p.limits.shared || p.limits.gpt || {};
   const selectedModel = p.models.find((m) => m.key === p.model);
-  const modelLimitGuide = p.models
-    .map((m) => `${m.title} ×${String(m.limitMultiplier || 1).replace('.', ',')}`)
-    .join(' · ');
   const bonusNames = { credit:'Начисление', debit:'Скидка', 'limit-reset':'Сброс 5-часового лимита' };
   const bonusRows = (p.bonuses?.transactions || []).slice(0, 12).map((entry) => {
     const amount = Number(entry.amount || 0);
@@ -2329,9 +2330,8 @@ async function openProfile() {
       <div class="prov-title"><i class="dot gpt"></i>Все текстовые модели</div>
       ${limRow('5 часов', sharedLimit.short)}
       ${limRow('Неделя', sharedLimit.long)}
-      <div class="muted-sm" style="margin-top:12px">Тариф: ×${String(p.planLimitMultiplier || 1).replace('.', ',')} от бесплатного. Выбранная модель ${escapeHtml(selectedModel?.title || '')}: ×${String(selectedModel?.limitMultiplier || 1).replace('.', ',')} расхода.</div>
-      <div class="muted-sm" style="margin-top:10px">Памятка моделей: ${escapeHtml(modelLimitGuide)}.</div>
-      <div class="muted-sm" style="margin-top:10px">Памятка тарифов: Бесплатный ×1 · GO ×2 · Pro ×3,5 · Max 5x ×14 · Max 20x ×59,5 · Coder+ ×196.</div>
+      <div class="muted-sm" style="margin-top:12px">Выбрана модель ${escapeHtml(selectedModel?.title || '')}. Лимит показывается как процент заполнения.</div>
+      ${ratingCardHtml(selectedModel?.ratings)}
       <div class="muted-sm" style="margin-top:12px">Картинки сегодня: ${p.images.used} из ${p.images.limit}</div>
     </section>
 
@@ -2349,7 +2349,7 @@ async function openProfile() {
         <div id="effortCtl">${eff0.html}</div>
       </div>
       <div class="set-row">
-        <div><div class="lbl">⚡ Быстрый режим GPT</div><div class="hint">Доступен на любом тарифе. Ответ быстрее, расход лимита ×1,2.</div></div>
+        <div><div class="lbl">⚡ Быстрый режим GPT</div><div class="hint">Доступен на любом тарифе и ускоряет получение ответа.</div></div>
         <button class="toggle ${p.fast?'on':''}" id="setFast"></button>
       </div>
     </section>
@@ -2464,6 +2464,28 @@ function renderBugList(data) {
   list.innerHTML = (data.bugs || []).length ? data.bugs.map((bug) => `
     <div class="bug-item"><div class="bug-item-head"><b>№${bug.id} · ${labels[bug.status] || escapeHtml(bug.status)}</b><small>${new Date(bug.updated).toLocaleString('ru-RU')}</small></div>
     <div>${escapeHtml(bug.description)}</div>${bug.reward?.label ? `<small>Вознаграждение: ${escapeHtml(bug.reward.label)}</small>` : ''}</div>`).join('') : '<div class="muted-sm">Вы ещё не отправляли сообщения о багах.</div>';
+}
+
+function ratingPips(value) {
+  const score = Math.max(1, Math.min(5, Math.round(Number(value) || 3)));
+  return Array.from({ length: 5 }, (_, index) => `<i class="${index < score ? 'on' : ''}"></i>`).join('');
+}
+
+function ratingCardHtml(ratings = {}) {
+  const rows = [['Цена', ratings.price], ['Скорость', ratings.speed], ['Качество', ratings.quality]];
+  return `<div class="profile-model-score"><div class="model-score-caption"><b>Оценка модели</b><span>5 — лучше</span></div>${rows.map(([label, value]) => {
+    const score = Math.max(1, Math.min(5, Math.round(Number(value) || 3)));
+    return `<div class="model-score-row"><span>${label}</span><div class="model-score-pips">${ratingPips(score)}</div><b>${score}/5</b></div>`;
+  }).join('')}</div>`;
+}
+
+function renderModelRatings(model) {
+  const ratings = model?.ratings || { price: 3, speed: 3, quality: 3 };
+  for (const [name, value] of [['Price', ratings.price], ['Speed', ratings.speed], ['Quality', ratings.quality]]) {
+    const score = Math.max(1, Math.min(5, Math.round(Number(value) || 3)));
+    document.getElementById(`rating${name}`).innerHTML = ratingPips(score);
+    document.getElementById(`rating${name}Value`).textContent = `${score}/5`;
+  }
 }
 
 async function loadBugList() {
