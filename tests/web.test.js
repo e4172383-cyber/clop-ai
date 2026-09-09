@@ -10,6 +10,7 @@ process.env.PORT = '0';
 process.env.WEB_HOST = '127.0.0.1';
 process.env.WEB_PASSWORD = 'web-test-password';
 process.env.WEB_SESSION_SECRET = 'web-test-session-secret';
+process.env.CLOUD_INTERNAL_SECRET = 'web-test-internal-secret';
 const TEST_PLAN_KEYS = ['free', 'go', 'pro', 'max', 'max20', 'coderplus'];
 const TEST_PROVIDER_KEYS = ['claude', 'gpt', 'kimi', 'clop'];
 const SYNTHETIC_TOKEN_LIMIT = 100;
@@ -137,6 +138,42 @@ test('/chat/api/plans publishes corporate prices and seats without exposing toke
   assert.equal(JSON.stringify(body).includes('short'), false);
   assert.equal(JSON.stringify(body).includes('long'), false);
   assert.equal(body.plans.some((p) => Object.hasOwn(p, 'limits')), false);
+});
+
+test('protected internal grants mutate the live store for offers and plans', async () => {
+  user.username = 'grant_target';
+  const unauthorized = await fetch(baseUrl + '/internal/admin/grant', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ identifier: '@grant_target', action: 'offer' }),
+  });
+  assert.equal(unauthorized.status, 401);
+
+  const headers = {
+    'content-type': 'application/json',
+    'x-internal-secret': process.env.CLOUD_INTERNAL_SECRET,
+  };
+  const offerResponse = await fetch(baseUrl + '/internal/admin/grant', {
+    method: 'POST', headers,
+    body: JSON.stringify({ identifier: '@grant_target', action: 'offer' }),
+  });
+  assert.equal(offerResponse.status, 200);
+  const offerBody = await offerResponse.json();
+  assert.equal(offerBody.limitedOffer.active, true);
+  assert.deepEqual(offerBody.limitedOffer.leftByModel, {
+    'gpt-astra': 10_000_000,
+    'kimi-k3': 1_000_000,
+  });
+
+  const planResponse = await fetch(baseUrl + '/internal/admin/grant', {
+    method: 'POST', headers,
+    body: JSON.stringify({ identifier: '@grant_target', action: 'plan', planKey: 'max20', days: 30 }),
+  });
+  assert.equal(planResponse.status, 200);
+  const planBody = await planResponse.json();
+  assert.equal(planBody.plan, 'max20');
+  assert.equal(user.plan, 'max20');
+  assert.ok(user.proUntil > Date.now() + 29 * config.DAY);
 });
 
 test('serves the public desktop release page and resumable installers without dashboard auth', async () => {

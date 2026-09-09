@@ -89,6 +89,12 @@ export function claimOffer(u, now = Date.now()) {
   const existing = record(u);
   if (existing) return offerState(u, now);
   if (now >= campaign(now).claimUntil) return null;
+  return grantOffer(u, now);
+}
+
+// Административная выдача запускает личные пять часов независимо от общего
+// часового окна акции. Это нужно для ручной компенсации и точечной выдачи.
+export function grantOffer(u, now = Date.now()) {
   u.limitedOffer = {
     id: LIMITED_OFFER.id,
     claimedAt: now,

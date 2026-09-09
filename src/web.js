@@ -32,7 +32,7 @@ const MAX_MESSAGE_BYTES = 26_000_000;
 import { planOf, checkAllLimits, checkLimits, effortOf, allowedEffortOptions, imageLimitState, humanLeft } from './limits.js';
 import { getSiteKey } from './sitekey.js';
 import { askModel, modelAvailableTo, modelOf, modelPlans } from './bot.js';
-import { addOfferUsage, claimOffer, offerActiveFor, offerState } from './limited-offer.js';
+import { addOfferUsage, claimOffer, grantOffer, offerActiveFor, offerState } from './limited-offer.js';
 import { getBotUsername } from './botinfo.js';
 import { createCode, peekClaimed, consumeCode } from './weblogin.js';
 import { setSessionCookie, sessionUserId } from './webchat.js';
@@ -589,6 +589,56 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
       res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
       res.writeHead(204);
       return res.end();
+    }
+
+    // Точечные административные выдачи должны выполняться внутри живого
+    // процесса. Прямая правка общего Redis-блоба извне может быть затёрта
+    // минутным сохранением бота, поэтому защищённый маршрут меняет именно
+    // текущий объект в памяти и сразу сохраняет его в Redis.
+    if (url.pathname === '/internal/admin/grant' && req.method === 'POST') {
+      if (!checkInternalSecret(req)) return sendJson(res, 401, { ok: false, error: 'unauthorized' });
+      readJsonBody(req).then(async (body) => {
+        const identifier = String(body.identifier || body.username || body.telegramUserId || '').trim();
+        if (!identifier) return sendJson(res, 400, { ok: false, error: 'identifier required' });
+        if (reloadEachRequest) await store.load();
+        const normalized = identifier.replace(/^@/, '');
+        const u = /^\d+$/.test(normalized) ? store.findUser(normalized) : store.findUserByUsername(normalized);
+        if (!u) return sendJson(res, 404, { ok: false, error: 'user not found' });
+
+        if (body.action === 'offer') {
+          const offer = grantOffer(u);
+          u.limitedOffer.grantedBy = 'internal-admin';
+          u.limitedOffer.grantReason = String(body.reason || 'manual-offer').slice(0, 80);
+          await store.save({ strict: true });
+          return sendJson(res, 200, {
+            ok: true,
+            username: u.username ? '@' + u.username : '',
+            action: 'offer',
+            limitedOffer: offer,
+          });
+        }
+
+        if (body.action === 'plan') {
+          const planKey = String(body.planKey || '');
+          const days = Math.min(366, Math.max(1, Math.floor(Number(body.days) || 30)));
+          if (!PLANS[planKey] || planKey === 'free') return sendJson(res, 400, { ok: false, error: 'invalid plan' });
+          store.grantPlan(u, planKey, days, {
+            source: 'internal_admin_grant',
+            reason: String(body.reason || 'manual-plan').slice(0, 80),
+          });
+          await store.save({ strict: true });
+          return sendJson(res, 200, {
+            ok: true,
+            username: u.username ? '@' + u.username : '',
+            action: 'plan',
+            plan: u.plan,
+            proUntil: u.proUntil,
+          });
+        }
+
+        return sendJson(res, 400, { ok: false, error: 'invalid action' });
+      }).catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
+      return;
     }
 
     // Единый источник правды по лимитам и тарифу. Раньше clop-cloud-api вёл
