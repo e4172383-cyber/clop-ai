@@ -1510,7 +1510,7 @@ function renderModelSelect() {
 function renderUsageIndicator() {
   const box = document.getElementById('modelUsage');
   const model = state.models.find((m) => m.key === state.currentModel);
-  const usage = model && state.limits && state.limits[model.provider];
+  const usage = model && state.limits && (state.limits.shared || state.limits[model.provider]);
   if (!box || !usage || (!usage.short && !usage.long) || model.unlimited) {
     if (box) box.style.display = 'none';
     return;
@@ -1528,8 +1528,8 @@ function renderUsageIndicator() {
   longRow.style.display = long === null ? 'none' : '';
   document.getElementById('usageShort').textContent = short === null ? '—' : short + '%';
   document.getElementById('usageLong').textContent = long === null ? '—' : long + '%';
-  const names = { gpt: 'Лимит GPT', kimi: 'Лимит Kimi', clop: 'Лимит Clop 4' };
-  document.getElementById('usageProvider').textContent = names[model.provider] || 'Общий лимит';
+  const multiplier = Number(model.limitMultiplier) || 1;
+  document.getElementById('usageProvider').textContent = `Общий лимит · ${model.title} ×${String(multiplier).replace('.', ',')}`;
 }
 
 function renderFastToggle() {
@@ -2291,6 +2291,11 @@ async function openProfile() {
       html: '<div id="setEffort"></div>', opts, current };
   }
   const eff0 = effortControl(p.model, p.effort);
+  const sharedLimit = p.limits.shared || p.limits.gpt || {};
+  const selectedModel = p.models.find((m) => m.key === p.model);
+  const modelLimitGuide = p.models
+    .map((m) => `${m.title} ×${String(m.limitMultiplier || 1).replace('.', ',')}`)
+    .join(' · ');
   const bonusNames = { credit:'Начисление', debit:'Скидка', 'limit-reset':'Сброс 5-часового лимита' };
   const bonusRows = (p.bonuses?.transactions || []).slice(0, 12).map((entry) => {
     const amount = Number(entry.amount || 0);
@@ -2320,16 +2325,13 @@ async function openProfile() {
 
     <section>
       <h3>Единый лимит</h3>
-      <div class="muted-sm" style="margin-bottom:14px">Бот, сайт и личный API расходуют один общий лимит.</div>
-      <div class="prov-title"><i class="dot gpt"></i>Все GPT-модели</div>
-      ${limRow('5 часов', p.limits.gpt.short)}
-      ${limRow('Неделя', p.limits.gpt.long)}
-      <div class="prov-title" style="margin-top:16px"><i class="dot kimi"></i>Все Kimi-модели</div>
-      ${limRow('5 часов', p.limits.kimi.short)}
-      ${limRow('Неделя', p.limits.kimi.long)}
-      <div class="prov-title" style="margin-top:16px"><i class="dot"></i>Все модели Clop 4</div>
-      ${limRow('5 часов', p.limits.clop.short)}
-      ${limRow('Неделя', p.limits.clop.long)}
+      <div class="muted-sm" style="margin-bottom:14px">Бот, сайт, приложения и личный API расходуют один общий запас.</div>
+      <div class="prov-title"><i class="dot gpt"></i>Все текстовые модели</div>
+      ${limRow('5 часов', sharedLimit.short)}
+      ${limRow('Неделя', sharedLimit.long)}
+      <div class="muted-sm" style="margin-top:12px">Тариф: ×${String(p.planLimitMultiplier || 1).replace('.', ',')} от бесплатного. Выбранная модель ${escapeHtml(selectedModel?.title || '')}: ×${String(selectedModel?.limitMultiplier || 1).replace('.', ',')} расхода.</div>
+      <div class="muted-sm" style="margin-top:10px">Памятка моделей: ${escapeHtml(modelLimitGuide)}.</div>
+      <div class="muted-sm" style="margin-top:10px">Памятка тарифов: Бесплатный ×1 · GO ×2 · Pro ×3,5 · Max 5x ×14 · Max 20x ×59,5 · Coder+ ×196.</div>
       <div class="muted-sm" style="margin-top:12px">Картинки сегодня: ${p.images.used} из ${p.images.limit}</div>
     </section>
 

@@ -1,4 +1,4 @@
-import { BOT_NAME, PUBLIC_URL, MODELS, PLANS, PROVIDERS, EFFORTS, DEFAULT_MODEL, MAX_CHATS, OPUS_FREE_PROMO_UNTIL, FREE_GO_UNTIL, freeGoActive, MODEL_PROMO, modelPromoActive, modelInPromo, IMAGE_GENERATORS, ADMIN_IDS, CORPORATE_PLANS, corporatePlan, corporatePlansReady } from './config.js';
+import { BOT_NAME, PUBLIC_URL, MODELS, PLANS, PROVIDERS, EFFORTS, DEFAULT_MODEL, MAX_CHATS, OPUS_FREE_PROMO_UNTIL, FREE_GO_UNTIL, freeGoActive, MODEL_PROMO, modelPromoActive, modelInPromo, IMAGE_GENERATORS, ADMIN_IDS, CORPORATE_PLANS, corporatePlan, corporatePlansReady, PLAN_LIMIT_MULTIPLIERS } from './config.js';
 import * as tg from './telegram.js';
 import * as store from './store.js';
 import { planOf, effortOf, allowedEffortOptions, checkLimits, checkAllLimits, bar, humanLeft, imageLimitState } from './limits.js';
@@ -18,8 +18,8 @@ const DESKTOP_RELEASE = Object.freeze({
   released: '08.09.2026',
   windows: 'Clop-Code-Setup-2.4.1.exe',
   linux: 'Clop-Code-2.4.1-linux-x64.tar.xz',
-  androidVersion: '1.0.5',
-  android: 'Clop-AI-Mobile-1.0.5.apk',
+  androidVersion: '1.0.6',
+  android: 'Clop-AI-Mobile-1.0.6.apk',
 });
 
 // Единая точка входа: Claude-модели идут через Claude CLI, GPT-модели — через
@@ -219,7 +219,7 @@ function usageText(u) {
   }
   if (activeTeam) {
     lines.push('🏢 *Корпоративный пул*');
-    for (const s of all.gpt.states) {
+    for (const s of all.shared.states) {
       lines.push(`${s.title}`);
       lines.push(`${bar(s.percent)} ${s.percent}%`);
       lines.push(s.exceeded
@@ -228,11 +228,9 @@ function usageText(u) {
     }
     lines.push('');
   }
-  // Для личных тарифов GPT и Kimi расходуются из отдельных пулов.
-  for (const provKey of activeTeam ? [] : ['gpt', 'kimi', 'clop']) {
-    const prov = PROVIDERS[provKey];
-    lines.push(`${prov.emoji} *${prov.title}*`);
-    for (const s of all[provKey].states) {
+  if (!activeTeam) {
+    lines.push('⚖️ *Общий лимит всех моделей*');
+    for (const s of all.shared.states) {
       lines.push(`${s.title}`);
       lines.push(`${bar(s.percent)} ${s.percent}%`);
       lines.push(s.exceeded
@@ -243,6 +241,8 @@ function usageText(u) {
   }
   const curModel = modelOf(u);
   lines.push(`Модель: *${curModel.title}*`);
+  lines.push(`Расход модели: *×${String(curModel.limitMultiplier || 1).replace('.', ',')}* общего лимита`);
+  if (!activeTeam) lines.push(`Размер тарифа: *×${String(PLAN_LIMIT_MULTIPLIERS[plan.key] || 1).replace('.', ',')}* от бесплатного`);
   lines.push(`Сила мышления: *${curModel.supportsEffort === false ? 'своё встроенное размышление' : effortOf(u, curModel).title}*`);
   const activeChat = store.activeChat(u, false);
   if (activeChat) {
@@ -356,7 +356,7 @@ function apiKeyText(res) {
     '',
     `\`GET ${base}/v1/models\` с тем же \`x-api-key\` — список моделей с пометкой, какие доступны именно вам.`,
     '',
-    '⚠️ Расход через API идёт в тот же лимит, что и бот: каждая модель списывает свой пул GPT, Kimi или Clop.',
+    '⚠️ Расход через API идёт в тот же общий лимит, что и бот. У каждой модели свой коэффициент потребления.',
   ].join('\n');
 }
 
@@ -657,21 +657,15 @@ async function handleAsk(u, chatId, text, images = null) {
   }
 
   const model = modelOf(u);
-  // Haiku 4.5 — насовсем бесплатна и без лимитов, единственное исключение.
-  // Проверяем лимит только пула провайдера этой модели — у Claude и GPT
-  // счётчики раздельные.
+  // Проверяем единый лимит всех моделей. Аргумент provider сохранён в API
+  // проверки для совместимости, но больше не создаёт отдельный пул.
   const usingOffer = offerActiveFor(u, model.key);
   if (!model.unlimited && !usingOffer) {
     const { blocked } = checkLimits(u, model.provider);
     if (blocked) {
       const plan = planOf(u);
-      const provTitle = PROVIDERS[model.provider].title;
-      // У Claude и GPT — разные пулы, поэтому явно называем, какой именно
-      // исчерпан, чтобы не казалось, что лимит один общий на всё.
-      const otherProvider = Object.keys(PROVIDERS).find((p) => p !== model.provider);
-      const otherOk = otherProvider && !checkLimits(u, otherProvider).blocked;
       await tg.sendMessage(chatId, [
-        `⛔️ *Лимит ${provTitle} на ${blocked.title} исчерпан* (100%).`,
+        `⛔️ *Общий лимит на ${blocked.title} исчерпан* (100%).`,
         `Обновится через ${humanLeft(blocked.resetAt - Date.now())}.`,
         plan.key === 'free' ? '\n💎 На тарифе Pro лимиты значительно выше.' : '',
       ].filter(Boolean).join('\n'), { reply_markup: plan.key === 'free' ? { inline_keyboard: [[{ text: '💎 Оформить Pro', callback_data: 'plans' }]] } : undefined });
@@ -789,7 +783,7 @@ async function handleAsk(u, chatId, text, images = null) {
     });
     const after = offerBonus ? [] : checkLimits(u, model.provider).states;
     const warn = after.find((s) => s.percent >= 85);
-    let footer = warn ? `\n\n_${PROVIDERS[model.provider].title} · ${warn.title}: использовано ${warn.percent}%_` : '';
+    let footer = warn ? `\n\n_Общий лимит · ${warn.title}: использовано ${warn.percent}%_` : '';
     // Предупреждение о тяжёлой модели — один раз на чат, не спамим на каждый ответ
     if (model.heavy && !chat.heavyWarned) {
       chat.heavyWarned = true;
@@ -1145,6 +1139,7 @@ function modelText(u) {
     lines.push(`${m.key === modelOf(u).key ? '✅' : locked ? '🔒' : '▫️'} *${m.title}*${m.recommended ? ' — ⭐ рекомендуется' : ''}`);
     lines.push(`_${m.desc}_`);
     lines.push(`Доступна: ${plans.map((p) => PLANS[p].title).join(', ')}`);
+    lines.push(`Расход общего лимита: *×${String(m.limitMultiplier || 1).replace('.', ',')}*`);
     if (m.unlimited) lines.push('🎁 _Навсегда бесплатна — расход не идёт в лимит тарифа_');
     if (modelInPromo(m.key)) lines.push(`🎉 _Акция: открыта всем до ${dt(MODEL_PROMO.until)}_`);
     if (m.key === 'opus-5' && Date.now() < OPUS_FREE_PROMO_UNTIL) {

@@ -46,10 +46,8 @@ export const WINDOWS = {
   long: { key: 'long', title: '7 дней', shortTitle: 'неделя', ms: 7 * DAY },
 };
 
-// У каждого движка — отдельный пул лимитов (свой счётчик на 5ч и на неделю).
-// Бот, сайт и личный API совместно списывают один и тот же пул пользователя.
-// Модель списывает только против пула
-// своего provider (см. MODELS[key].provider ниже и usedIn в limits.js).
+// PROVIDERS описывает источники моделей и их состояние. Токеновый лимит у
+// пользователя общий для всех источников; различается только вес модели.
 export const PROVIDERS = {
   claude: { key: 'claude', title: 'Claude', emoji: '🟣' },
   gpt: { key: 'gpt', title: 'GPT', emoji: '🟢' },
@@ -64,7 +62,7 @@ export const MODELS = {
     title: 'Kimi K2.6', short: 'Kimi K2.6',
     desc: 'Kimi без силы мышления — доступна всем',
     plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'],
-    recommended: false, supportsEffort: false, contextWindow: 262_144,
+    recommended: false, supportsEffort: false, limitMultiplier: 1.5, contextWindow: 262_144,
   },
   'kimi-k2-7-code': {
     key: 'kimi-k2-7-code', provider: 'kimi', runtime: 'kimi',
@@ -72,7 +70,7 @@ export const MODELS = {
     title: 'Kimi K2.7 Code', short: 'Kimi 2.7 Code',
     desc: 'Кодовая Kimi с мышлением — от тарифа GO',
     plans: ['go', 'pro', 'max', 'max20', 'coderplus'],
-    recommended: false, supportsEffort: false, contextWindow: 262_144,
+    recommended: false, supportsEffort: false, limitMultiplier: 2, contextWindow: 262_144,
   },
   'kimi-k3': {
     key: 'kimi-k3', provider: 'kimi', runtime: 'kimi',
@@ -80,7 +78,7 @@ export const MODELS = {
     title: 'Kimi K3', short: 'Kimi K3',
     desc: 'Флагманская Kimi — от тарифа GO',
     plans: ['go', 'pro', 'max', 'max20', 'coderplus'],
-    recommended: false, supportsEffort: false, contextWindow: 1_048_576,
+    recommended: false, supportsEffort: false, limitMultiplier: 3, contextWindow: 1_048_576,
   },
   'kimi-k3-swarm': {
     key: 'kimi-k3-swarm', provider: 'kimi', runtime: 'kimi',
@@ -88,8 +86,8 @@ export const MODELS = {
     title: 'Kimi K3 Swarm', short: 'K3 Swarm',
     desc: 'Kimi K3 с максимальным мышлением — от тарифа Pro',
     plans: ['pro', 'max', 'max20', 'coderplus'],
-    recommended: false, supportsEffort: false, heavy: true,
-    heavyNote: 'Максимальное мышление расходует лимит заметно быстрее',
+    recommended: false, supportsEffort: false, heavy: true, limitMultiplier: 5,
+    heavyNote: 'Расход общего лимита ×5',
     contextWindow: 1_048_576,
   },
   'gpt-astra': {
@@ -98,7 +96,7 @@ export const MODELS = {
     effortOptions: ['low', 'medium', 'high'],
     desc: 'Новое поколение GPT — доступна на тарифе GO и выше',
     plans: ['go', 'pro', 'max', 'max20', 'coderplus'],
-    recommended: true, supportsEffort: true,
+    recommended: true, supportsEffort: true, limitMultiplier: 6,
   },
   // --- GPT (OpenAI, через Codex CLI на квоте ChatGPT-подписки) ---
   'gpt-5-4-mini': {
@@ -106,7 +104,7 @@ export const MODELS = {
     title: 'GPT 5.4 Mini', short: '5.4 Mini',
     desc: 'Быстрая компактная GPT-модель — доступна всем',
     plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'],
-    recommended: true, supportsEffort: true,
+    recommended: true, supportsEffort: true, limitMultiplier: 1,
     effortOptions: ['low', 'medium', 'high'], contextWindow: 400_000,
   },
   'gpt-5-5': {
@@ -114,7 +112,7 @@ export const MODELS = {
     title: 'GPT 5.5', short: 'GPT 5.5',
     desc: 'Мощная универсальная GPT-модель — от тарифа GO',
     plans: ['go', 'pro', 'max', 'max20', 'coderplus'],
-    recommended: false, supportsEffort: true,
+    recommended: false, supportsEffort: true, limitMultiplier: 4,
     effortOptions: ['low', 'medium', 'high'], contextWindow: 400_000,
   },
   'gpt-luna': {
@@ -127,6 +125,7 @@ export const MODELS = {
     plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'],
     recommended: false,
     supportsEffort: false,
+    limitMultiplier: 1,
     contextWindow: 400_000,
   },
   'gpt-spark': {
@@ -139,6 +138,7 @@ export const MODELS = {
     plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'],
     recommended: false,
     supportsEffort: false,
+    limitMultiplier: 1.25,
     contextWindow: 400_000,
   },
   'gpt-terra': {
@@ -151,6 +151,7 @@ export const MODELS = {
     plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'],
     recommended: false,
     supportsEffort: false,
+    limitMultiplier: 2,
     contextWindow: 400_000,
   },
   'gpt-sol': {
@@ -159,13 +160,13 @@ export const MODELS = {
     cli: 'gpt-5.6-sol',
     title: 'GPT 5.6 Соль',
     short: 'Соль',
-    desc: 'Топовая GPT-модель — доступна всем, расход лимита ×1.5',
+    desc: 'Топовая GPT-модель — доступна всем, расход общего лимита ×3.5',
     plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'],
     recommended: false,
     supportsEffort: false,
     heavy: true,
-    heavyNote: 'Расход лимита ×1.5',
-    limitMultiplier: 1.5,
+    heavyNote: 'Расход общего лимита ×3.5',
+    limitMultiplier: 3.5,
     contextWindow: 400_000,
   },
   'clop-4-pulsar': {
@@ -174,6 +175,7 @@ export const MODELS = {
     desc: 'Флагманская модель Clop 4 для сложных задач — от тарифа GO',
     plans: ['go', 'pro', 'max', 'max20', 'coderplus'],
     recommended: true, supportsEffort: false, fixedEffort: 'medium', hideIdentity: true,
+    limitMultiplier: 6,
     contextWindow: 400_000,
   },
   'clop-4-pro': {
@@ -182,15 +184,16 @@ export const MODELS = {
     desc: 'Универсальная модель Clop 4 для работы и анализа — доступна всем',
     plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'],
     recommended: false, supportsEffort: false, fixedEffort: 'medium', hideIdentity: true,
+    limitMultiplier: 3.5,
     contextWindow: 400_000,
   },
   'clop-4-flash': {
     key: 'clop-4-flash', provider: 'clop', runtime: 'gpt', cli: 'gpt-5.6-terra',
     title: 'Clop 4 Flash', short: 'Flash 4',
-    desc: 'Быстрая модель Clop 4 с усиленным режимом — доступна всем, расход лимита ×1.5',
+    desc: 'Быстрая модель Clop 4 с усиленным режимом — доступна всем, расход общего лимита ×2',
     plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'],
     recommended: false, supportsEffort: false, fixedEffort: 'medium', hideIdentity: true,
-    heavy: true, heavyNote: 'Расход лимита ×1.5', limitMultiplier: 1.5,
+    heavy: true, heavyNote: 'Расход общего лимита ×2', limitMultiplier: 2,
     contextWindow: 400_000,
   },
 };
@@ -209,18 +212,49 @@ export const DEFAULT_EFFORT = 'low';
 // Точные квоты хранятся только в приватной переменной окружения.
 // Строгая проверка не позволяет запустить сервис с неполной матрицей.
 const TOKEN_LIMIT_PLAN_KEYS = ['free', 'go', 'pro', 'max', 'max20', 'coderplus'];
-const TOKEN_LIMITS = parseTokenLimits(process.env.TOKEN_LIMITS_JSON, {
+const CONFIGURED_TOKEN_LIMITS = parseTokenLimits(process.env.TOKEN_LIMITS_JSON, {
   plans: TOKEN_LIMIT_PLAN_KEYS,
   providers: Object.keys(PROVIDERS),
   windows: Object.keys(WINDOWS),
 });
 
+// Система 4.0: у пользователя один общий токен-пул. Базой служит бесплатный
+// тариф; остальные тарифы вычисляются только по этим коэффициентам. Значения
+// всех provider-полей в TOKEN_LIMITS_JSON должны быть одинаковыми: поля
+// сохранены лишь для совместимости со старыми версиями приложений.
+export const PLAN_LIMIT_MULTIPLIERS = Object.freeze({
+  free: 1,
+  go: 2,
+  pro: 3.5,
+  max: 14,       // Pro ×4
+  max20: 59.5,   // Pro ×17
+  coderplus: 196, // Pro ×56
+});
+export const SHARED_LIMIT_KEY = 'shared';
+export const FREE_TOKEN_LIMITS = Object.freeze({ ...CONFIGURED_TOKEN_LIMITS.free.clop });
+
+for (const provider of Object.keys(PROVIDERS)) {
+  const candidate = CONFIGURED_TOKEN_LIMITS.free[provider];
+  if (candidate.short !== FREE_TOKEN_LIMITS.short || candidate.long !== FREE_TOKEN_LIMITS.long) {
+    throw new Error(`Invalid TOKEN_LIMITS_JSON: free.${provider} must match the shared free limit`);
+  }
+}
+
+function scaledLimit(value, multiplier) {
+  if (value === null) return null;
+  return Math.round(value * multiplier);
+}
+
 function limitsFor(planKey) {
-  const plan = TOKEN_LIMITS[planKey];
-  return Object.fromEntries(Object.entries(plan).map(([provider, limits]) => [
-    provider,
-    { ...limits },
-  ]));
+  const multiplier = PLAN_LIMIT_MULTIPLIERS[planKey];
+  const shared = Object.freeze({
+    short: scaledLimit(FREE_TOKEN_LIMITS.short, multiplier),
+    long: scaledLimit(FREE_TOKEN_LIMITS.long, multiplier),
+  });
+  return Object.fromEntries([
+    [SHARED_LIMIT_KEY, shared],
+    ...Object.keys(PROVIDERS).map((provider) => [provider, shared]),
+  ]);
 }
 // --- Акция: тариф GO бесплатно всем до 1 сентября 2026, 15:00 МСК ---
 // Одна точка правды — её читает planOf(), поэтому акция сама доходит и до
@@ -268,7 +302,7 @@ export const PLANS = {
     limits: limitsFor('free'),
     // на бесплатном тарифе доступен выбор между Low, Medium и High
     effort: { locked: false, fixed: null, options: ['low', 'medium', 'high'] },
-    perks: ['Clop 4 Pro и Flash', 'GPT Луна и Спарк', 'Kimi K2.6 без мышления', 'Сколько угодно чатов', 'История переписки'],
+    perks: ['Базовый общий лимит ×1', 'Clop 4 Pro и Flash', 'GPT Луна и Спарк', 'Kimi K2.6 без мышления', 'Сколько угодно чатов', 'История переписки'],
   },
   go: {
     key: 'go',
@@ -282,7 +316,7 @@ export const PLANS = {
       'GPT-модели по тарифу, включая GPT-6 Astra',
       'Вся линейка Clop 4, включая Pulsar',
       'Kimi K2.7 Code и K3',
-      'Заметно больше лимита за 5 часов и в неделю, чем на бесплатном',
+      'Общий лимит ×2 от бесплатного',
       'Выбор силы мышления',
       'Приоритетная обработка запросов',
     ],
@@ -300,8 +334,7 @@ export const PLANS = {
       'GPT-модели по тарифу, включая GPT-6 Astra',
       'Вся линейка Clop 4, включая Pulsar',
       'Все Kimi, включая K3 Swarm',
-      'Значительно больше лимита за 5 часов',
-      'Значительно больше недельного лимита',
+      'Общий лимит ×3,5 от бесплатного',
       'Выбор силы мышления',
       'Приоритетная обработка запросов',
     ],
@@ -318,7 +351,7 @@ export const PLANS = {
       'GPT-модели по тарифу, включая GPT-6 Astra',
       'Вся линейка Clop 4, включая Pulsar',
       'Все Kimi, включая K3 Swarm',
-      'Увеличенные лимиты для длительных задач',
+      'Общий лимит ×4 от Pro, или ×14 от бесплатного',
       'Выбор силы мышления',
       'Максимальный приоритет обработки запросов',
     ],
@@ -335,7 +368,7 @@ export const PLANS = {
       'GPT-модели по тарифу, включая GPT-6 Astra',
       'Вся линейка Clop 4, включая Pulsar',
       'Все Kimi, включая K3 Swarm',
-      'Увеличенные лимиты для длительных задач',
+      'Общий лимит ×17 от Pro, или ×59,5 от бесплатного',
       'Выбор силы мышления',
       'Высший приоритет обработки запросов',
     ],
@@ -352,7 +385,7 @@ export const PLANS = {
       'GPT-модели по тарифу, включая GPT-6 Astra',
       'Вся линейка Clop 4, включая Pulsar',
       'Все Kimi, включая K3 Swarm',
-      'Увеличенные лимиты для длительных задач',
+      'Общий лимит ×56 от Pro, или ×196 от бесплатного',
       'Выбор силы мышления',
       'Наивысший приоритет обработки запросов',
     ],

@@ -5,7 +5,7 @@ import { BILLING_VERSION } from './token-accounting.js';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { WEB_PORT, WEB_HOST, PUBLIC_URL, MODELS, PLANS, PROVIDERS, DEFAULT_MODEL, DEFAULT_EFFORT, EFFORTS, DAY, BOT_NAME, ADMIN_IDS, freeGoActive, FREE_GO_UNTIL, FREE_GO_PLAN, MODEL_PROMO, modelPromoActive, CORPORATE_PLANS, corporatePlansReady } from './config.js';
+import { WEB_PORT, WEB_HOST, PUBLIC_URL, MODELS, PLANS, PROVIDERS, DEFAULT_MODEL, DEFAULT_EFFORT, EFFORTS, DAY, BOT_NAME, ADMIN_IDS, freeGoActive, FREE_GO_UNTIL, FREE_GO_PLAN, MODEL_PROMO, modelPromoActive, CORPORATE_PLANS, corporatePlansReady, PLAN_LIMIT_MULTIPLIERS } from './config.js';
 import * as store from './store.js';
 import * as sites from './sites.js';
 import * as desk from './desktop.js';
@@ -188,6 +188,7 @@ const DESKTOP_DOWNLOADS = new Set([
   'Clop-AI-Mobile-1.0.3.apk',
   'Clop-AI-Mobile-1.0.4.apk',
   'Clop-AI-Mobile-1.0.5.apk',
+  'Clop-AI-Mobile-1.0.6.apk',
 ]);
 
 const RELEASE_ASSET_BASE_URL = 'https://github.com/e4172383-cyber/clop-ai/releases/download/v2.4.1';
@@ -431,8 +432,7 @@ function buildStats() {
       tokens: u.stats.tokens,
       lastSeen: u.lastSeen,
       createdAt: u.createdAt,
-      // Все движки — раздельные пулы. Окно может быть отключено тарифом,
-      // поэтому публикуем только реально действующие окна.
+      // shared — единый пул; provider-алиасы сохраняются для старых клиентов.
       ...Object.fromEntries(Object.entries(all).map(([provider, result]) => [
         provider,
         Object.fromEntries(result.states.map((state) => [state.key, pick(state)])),
@@ -557,7 +557,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           windowsUrl: publicDownloadUrl('Clop-Code-Setup-2.4.1.exe'),
           linuxUrl: publicDownloadUrl('Clop-Code-2.4.1-linux-x64.tar.xz'),
         },
-        android: { version: '1.0.5', url: publicDownloadUrl('Clop-AI-Mobile-1.0.5.apk') },
+        android: { version: '1.0.6', url: publicDownloadUrl('Clop-AI-Mobile-1.0.6.apk') },
       });
     }
 
@@ -616,7 +616,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           allowed: !blocked,
           plan: plan.key,
           reason: blocked
-            ? `Лимит ${PROVIDERS[provider].title} на ${blocked.title} исчерпан — обновится через ${humanLeft(blocked.resetAt - Date.now())}.`
+            ? `Общий лимит на ${blocked.title} исчерпан — обновится через ${humanLeft(blocked.resetAt - Date.now())}.`
             : null,
         });
       }).catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
@@ -652,7 +652,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           return sendJson(res, 200, { ok: true, duplicate: true });
         }
         store.addUsage(u, {
-          ts: Date.now(), chatId: null, model: MODELS[modelKey] ? modelKey : DEFAULT_MODEL,
+          ts: Date.now(), chatId: null, model: modelKey || DEFAULT_MODEL,
           effort: null, plan: planOf(u).key,
           input: 0, output: 0, cacheWrite: 0, cacheRead: 0,
           total: billable, billable, billingVersion: BILLING_VERSION,
@@ -804,6 +804,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           const limits = publicLimits(u);
           return sendJson(res, 200, {
             ok: true, name: store.displayName(u), plan: plan.title, planKey: plan.key,
+            planLimitMultiplier: PLAN_LIMIT_MULTIPLIERS[plan.key] || 1,
             // Desktop показывает полный каталог: недоступные модели остаются
             // видимыми с замком, поэтому пользователь понимает состав тарифов.
             models: Object.values(MODELS).map((m) => ({
@@ -1311,6 +1312,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           name: store.displayName(u),
           plan: plan.key,
           planTitle: plan.title,
+          planLimitMultiplier: PLAN_LIMIT_MULTIPLIERS[plan.key] || 1,
           currentChatId: chat.id,
           currentModel: model.key,
           effort: effortOf(u, model).key,
@@ -1485,6 +1487,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           plan: plan.key,
           planTitle: plan.title,
           planEmoji: plan.emoji,
+          planLimitMultiplier: PLAN_LIMIT_MULTIPLIERS[plan.key] || 1,
           proUntil: u.proUntil || 0,
           createdAt: u.createdAt,
           stats: u.stats,
@@ -1777,7 +1780,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           if (blocked) {
             return sendJson(res, 429, {
               ok: false,
-              error: `Лимит ${PROVIDERS[model.provider]?.title || model.provider} на ${blocked.title} исчерпан — обновится через ${humanLeft(blocked.resetAt - Date.now())}.`,
+              error: `Общий лимит на ${blocked.title} исчерпан — обновится через ${humanLeft(blocked.resetAt - Date.now())}.`,
             });
           }
         }

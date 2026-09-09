@@ -1,4 +1,4 @@
-import { PLANS, FREE_GO_PLAN, freeGoActive, WINDOWS, EFFORTS, DEFAULT_EFFORT, MODELS, PROVIDERS, IMAGE_DAILY_LIMITS, DAY, corporatePlan } from './config.js';
+import { PLANS, FREE_GO_PLAN, freeGoActive, WINDOWS, EFFORTS, DEFAULT_EFFORT, MODELS, PROVIDERS, SHARED_LIMIT_KEY, IMAGE_DAILY_LIMITS, DAY, corporatePlan } from './config.js';
 import { eventBillable } from './token-accounting.js';
 import * as store from './store.js';
 
@@ -53,12 +53,11 @@ export function effortOf(u, model) {
   return EFFORTS[chosen] || EFFORTS[DEFAULT_EFFORT];
 }
 
-// billable — только вход+выход самого сообщения. Контекст (кэш системного
-// промпта и истории диалога) в лимит 5ч/неделя не идёт — он теперь считается
-// отдельно, против окна контекста модели (см. contextOf в bot.js).
-// Модели с unlimited в лимит вообще не попадают. Каждый движок списывает
-// против своего пула — фильтруем по e.model → provider.
-function countableUsage(u, windowMs, provider, now) {
+// billable — уже взвешенный расход конкретной модели. Контекст (кэш системного
+// промпта и истории диалога) в лимит 5ч/неделя не идёт. Система 4.0 считает
+// все модели в одном общем пуле; provider оставлен в публичных функциях только
+// для совместимости со старыми клиентами.
+function countableUsage(u, windowMs, _provider, now) {
   const from = now - windowMs;
   const manualResetAt = windowMs === WINDOWS.short.ms ? Number(u.shortUsageResetAt || 0) : 0;
   return u.usage.filter((e) => {
@@ -66,7 +65,7 @@ function countableUsage(u, windowMs, provider, now) {
     if (manualResetAt && e.ts <= manualResetAt) return false;
     if (UNLIMITED_MODELS.has(e.model)) return false;
     if (e.offerBonus === true) return false;
-    return providerOfEvent(e) === provider;
+    return Number(e.billable ?? e.total ?? 0) > 0;
   });
 }
 
@@ -82,8 +81,7 @@ function combinedUsed(user, windowMs, now, joinedAt = 0) {
   let sum = 0;
   for (const e of user.usage || []) {
     if (Number(e.ts || 0) < from || (manualResetAt && Number(e.ts || 0) <= manualResetAt) || UNLIMITED_MODELS.has(e.model) || e.offerBonus === true) continue;
-    const provider = providerOfEvent(e);
-    if (provider) sum += eventBillable(e, provider);
+    sum += eventBillable(e, providerOfEvent(e));
   }
   return sum;
 }
@@ -97,7 +95,7 @@ function corporateUsageEvents(team, windowMs, now, onlyUserId = null) {
     const manualResetAt = windowMs === WINDOWS.short.ms ? Number(member?.shortUsageResetAt || 0) : 0;
     for (const e of member?.usage || []) {
       if (Number(e.ts || 0) < from || (manualResetAt && Number(e.ts || 0) <= manualResetAt) || UNLIMITED_MODELS.has(e.model) || e.offerBonus === true) continue;
-      if (providerOfEvent(e)) events.push(e);
+      if (Number(e.billable ?? e.total ?? 0) > 0) events.push(e);
     }
   }
   return events.sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0));
@@ -115,7 +113,7 @@ function corporateWindowState(u, key, now) {
   const events = corporateUsageEvents(state.team, win.ms, now, isShort ? u.id : null);
   const percent = Math.min(100, Math.round((used / limit) * 100));
   return {
-    key, provider: 'corporate', title: isShort ? '5 часов · ваш лимит' : '7 дней · вся команда', shortTitle: win.shortTitle,
+    key, provider: SHARED_LIMIT_KEY, title: isShort ? '5 часов · ваш лимит' : '7 дней · вся команда', shortTitle: win.shortTitle,
     percent, left: Math.max(0, 100 - percent), exceeded: used >= limit,
     resetAt: events.length ? Number(events[0].ts || now) + win.ms : now,
   };
@@ -133,13 +131,13 @@ export function windowState(u, key, provider, now = Date.now()) {
   if (corporate) return corporate;
   const plan = planOf(u);
   const win = WINDOWS[key];
-  const limit = plan.limits[provider][key];
+  const limit = plan.limits[SHARED_LIMIT_KEY][key];
   if (limit === null) return null;
   const used = usedIn(u, win.ms, provider, now);
   const percent = Math.min(100, Math.round((used / limit) * 100));
   return {
     key,
-    provider,
+    provider: SHARED_LIMIT_KEY,
     title: win.title,
     shortTitle: win.shortTitle,
     percent,
@@ -159,7 +157,13 @@ export function checkLimits(u, provider, now = Date.now()) {
 
 // Лимиты сразу всех провайдеров — для /usage и админ-панели
 export function checkAllLimits(u, now = Date.now()) {
-  return Object.fromEntries(Object.keys(PROVIDERS).map((p) => [p, checkLimits(u, p, now)]));
+  const shared = checkLimits(u, SHARED_LIMIT_KEY, now);
+  // shared — новая точка правды. Алиасы нужны установленным версиям ПК и
+  // Android: они продолжат показывать тот же общий процент до обновления UI.
+  return {
+    [SHARED_LIMIT_KEY]: shared,
+    ...Object.fromEntries(Object.keys(PROVIDERS).map((p) => [p, shared])),
+  };
 }
 
 // Генерация изображений (бета) — отдельный скользящий лимит "в сутки" (24ч),
