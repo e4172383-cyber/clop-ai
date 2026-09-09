@@ -4,9 +4,9 @@ import path from 'node:path';
 const root = path.resolve(import.meta.dirname, '..');
 const sourcePath = path.join(root, 'src', 'public', 'download.html');
 const outputDir = path.join(root, 'docs');
-const releaseBase = 'https://github.com/e4172383-cyber/clop-ai/releases/download/v2.4.0';
+const releaseBase = 'https://github.com/e4172383-cyber/clop-ai/releases/download/v2.4.1';
 const releasePage = 'https://github.com/e4172383-cyber/clop-ai/releases/latest';
-const apiBase = 'https://clop-ai.onrender.com';
+const apiBase = 'https://clop-ai-bot-production.up.railway.app';
 
 let html = fs.readFileSync(sourcePath, 'utf8');
 
