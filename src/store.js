@@ -156,6 +156,54 @@ export function queueUsernameGrant(username, grant) {
   return true;
 }
 
+function mergeByKey(older = [], newer = [], keyOf) {
+  const values = new Map();
+  for (const value of [...older, ...newer]) {
+    const key = keyOf(value);
+    if (key) values.set(key, value);
+  }
+  return [...values.values()];
+}
+
+// Восстановление добавляет отсутствующие исторические данные, но не откатывает
+// более свежие поля уже работающего аккаунта. Вызывается только защищённым
+// внутренним маршрутом с локально проверенного снимка.
+export function mergeRecovery(snapshot) {
+  if (!snapshot || typeof snapshot !== 'object' || !snapshot.users || typeof snapshot.users !== 'object') {
+    throw new Error('invalid recovery snapshot');
+  }
+  const entries = Object.entries(snapshot.users);
+  if (!entries.length || entries.length > 10_000) throw new Error('unsafe recovery user count');
+  let addedUsers = 0;
+  let mergedUsers = 0;
+  for (const [sourceId, historical] of entries) {
+    if (!historical || typeof historical !== 'object') continue;
+    const id = String(historical.id || sourceId || '');
+    if (!id) continue;
+    const current = db.users[id];
+    if (!current) {
+      db.users[id] = historical;
+      addedUsers++;
+      continue;
+    }
+    const combined = { ...historical, ...current, id };
+    combined.chats = mergeByKey(historical.chats, current.chats, (c) => String(c?.id || ''));
+    combined.usage = mergeByKey(historical.usage, current.usage, (e) => String(e?.requestId || `${e?.ts || 0}:${e?.model || ''}:${e?.total || 0}`));
+    combined.payments = mergeByKey(historical.payments, current.payments, (p) => String(p?.id || `${p?.ts || 0}:${p?.source || ''}:${p?.stars || 0}`));
+    combined.stats = {
+      requests: Math.max(Number(historical.stats?.requests) || 0, Number(current.stats?.requests) || 0),
+      tokens: Math.max(Number(historical.stats?.tokens) || 0, Number(current.stats?.tokens) || 0),
+      errors: Math.max(Number(historical.stats?.errors) || 0, Number(current.stats?.errors) || 0),
+    };
+    db.users[id] = combined;
+    mergedUsers++;
+  }
+  db.teams = { ...(snapshot.teams || {}), ...(db.teams || {}) };
+  db.customBots = { ...(snapshot.customBots || {}), ...(db.customBots || {}) };
+  db.pendingGrants = { ...(snapshot.pendingGrants || {}), ...(db.pendingGrants || {}) };
+  return { addedUsers, mergedUsers, totalUsers: Object.keys(db.users).length };
+}
+
 export function getUser(from) {
   const id = String(from.id);
   let u = db.users[id];

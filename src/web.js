@@ -371,6 +371,14 @@ function checkInternalSecret(req) {
   return header && a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
+function checkRecoverySecret(req) {
+  const header = req.headers['x-recovery-secret'] || '';
+  if (!WEB_PASSWORD) return false;
+  const a = Buffer.from(String(header).padEnd(WEB_PASSWORD.length, '\0'));
+  const b = Buffer.from(WEB_PASSWORD.padEnd(WEB_PASSWORD.length, '\0'));
+  return header && a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
 function checkSiteKey(req) {
   const header = req.headers['x-site-key'] || '';
   const real = getSiteKey();
@@ -589,6 +597,18 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
       res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
       res.writeHead(204);
       return res.end();
+    }
+
+    if (url.pathname === '/internal/admin/merge-recovery' && req.method === 'POST') {
+      if (!checkInternalSecret(req) || !checkRecoverySecret(req)) {
+        return sendJson(res, 401, { ok: false, error: 'unauthorized' });
+      }
+      readJsonBody(req, 2_000_000).then(async (body) => {
+        const result = store.mergeRecovery(body.snapshot);
+        await store.save({ strict: true });
+        return sendJson(res, 200, { ok: true, ...result });
+      }).catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
+      return;
     }
 
     // Точечные административные выдачи должны выполняться внутри живого

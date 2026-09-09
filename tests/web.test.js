@@ -188,6 +188,42 @@ test('protected internal grants mutate the live store for offers and plans', asy
   assert.equal(store.raw().pendingGrants.future_user, undefined);
 });
 
+test('recovery merge requires two secrets and keeps newer live user fields', async () => {
+  user.username = 'live_user';
+  user.plan = 'pro';
+  user.chats = [{ id: 'live-chat', messages: [], updatedAt: Date.now() }];
+  const snapshot = {
+    users: {
+      [user.id]: { ...user, plan: 'free', chats: [{ id: 'old-chat', messages: [], updatedAt: 1 }] },
+      restored: {
+        id: 'restored', username: 'restored_user', plan: 'free', chats: [], usage: [], payments: [],
+        stats: { requests: 0, tokens: 0, errors: 0 },
+      },
+    },
+  };
+  const oneSecret = await fetch(baseUrl + '/internal/admin/merge-recovery', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-internal-secret': process.env.CLOUD_INTERNAL_SECRET },
+    body: JSON.stringify({ snapshot }),
+  });
+  assert.equal(oneSecret.status, 401);
+
+  const response = await fetch(baseUrl + '/internal/admin/merge-recovery', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-internal-secret': process.env.CLOUD_INTERNAL_SECRET,
+      'x-recovery-secret': process.env.WEB_PASSWORD,
+    },
+    body: JSON.stringify({ snapshot }),
+  });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).totalUsers, 2);
+  assert.equal(store.findUser(user.id).plan, 'pro');
+  assert.deepEqual(store.findUser(user.id).chats.map((chat) => chat.id).sort(), ['live-chat', 'old-chat']);
+  assert.equal(store.findUser('restored').username, 'restored_user');
+});
+
 test('serves the public desktop release page and resumable installers without dashboard auth', async () => {
   const page = await fetch(baseUrl + '/download');
   assert.equal(page.status, 200);
