@@ -66,11 +66,12 @@ function providerSummary(provider, health, now, usageSamples = []) {
   const generationSeconds = throughput.reduce((total, sample) => total + sample.durationMs, 0) / 1000;
   let status = health?.ok ? 'operational' : 'unavailable';
   if (health?.ok && last && !last.ok && now - last.at < 10 * 60 * 1000) status = 'degraded';
+  const needsReconnect = provider === 'kimi' && !health?.ok && /требуется вход|oauth|session expired/i.test(String(health?.version || ''));
   return {
     key: provider,
     title: provider === 'gpt' ? 'GPT' : provider === 'kimi' ? 'Kimi' : 'Clop 4',
     status,
-    statusText: status === 'operational' ? 'Работает' : status === 'degraded' ? 'Есть сбои' : 'Недоступен',
+    statusText: status === 'operational' ? 'Работает' : status === 'degraded' ? 'Есть сбои' : needsReconnect ? 'Требуется переподключение' : 'Недоступен',
     checkedAt: now,
     lastSuccessAt: lastSuccess?.at || null,
     lastResponseMs: lastSuccess?.durationMs ?? null,

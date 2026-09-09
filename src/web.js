@@ -187,6 +187,7 @@ const DESKTOP_DOWNLOADS = new Set([
   'Clop-AI-Mobile-1.0.2.apk',
   'Clop-AI-Mobile-1.0.3.apk',
   'Clop-AI-Mobile-1.0.4.apk',
+  'Clop-AI-Mobile-1.0.5.apk',
 ]);
 
 const RELEASE_ASSET_BASE_URL = 'https://github.com/e4172383-cyber/clop-ai/releases/download/v2.4.1';
@@ -556,7 +557,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           windowsUrl: publicDownloadUrl('Clop-Code-Setup-2.4.1.exe'),
           linuxUrl: publicDownloadUrl('Clop-Code-2.4.1-linux-x64.tar.xz'),
         },
-        android: { version: '1.0.4', url: publicDownloadUrl('Clop-AI-Mobile-1.0.4.apk') },
+        android: { version: '1.0.5', url: publicDownloadUrl('Clop-AI-Mobile-1.0.5.apk') },
       });
     }
 

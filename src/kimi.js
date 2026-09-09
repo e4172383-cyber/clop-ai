@@ -187,8 +187,10 @@ export async function healthCheck() {
     else if (response.status === 429 && /insufficient balance|resource_exhausted|quota_exceeded|credits used up/i.test(body)) {
       result = { ok: false, version: 'Кредиты аккаунта Kimi закончились. Лимит Clop не списан.' };
     } else result = { ok: false, version: `Kimi временно недоступен (HTTP ${response.status}). Лимит не списан.` };
-  } catch {
-    result = { ok: false, version: 'Не удалось связаться с Kimi. Лимит не списан.' };
+  } catch (error) {
+    result = /oauth refresh failed|invalid[_ ]auth[_ ]token|session expired/i.test(String(error?.message || error))
+      ? { ok: false, version: 'Требуется повторно подключить Kimi. Лимит не списан.' }
+      : { ok: false, version: 'Не удалось связаться с Kimi. Лимит не списан.' };
   }
   providerProbe = { at: Date.now(), result };
   return result;

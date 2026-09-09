@@ -9,6 +9,7 @@ const SEED = 'clop:kimiauth:seed';
 export const home = () => process.env.KIMI_CODE_HOME || path.join(os.tmpdir(), 'clop-kimi-code');
 const hash = (value) => crypto.createHash('sha256').update(value).digest('hex');
 let lastSaved = null;
+let maintenanceRunning = false;
 
 function hasOAuthCredentials(dir) {
   const credentialsDir = path.join(dir, 'credentials');
@@ -78,11 +79,14 @@ function authHost(dir = home()) {
   }
 }
 
-export async function refreshSessionInfo({ dir = home(), force = false, fetchImpl = fetch, oauthHost = authHost(dir) } = {}) {
+export async function refreshSessionInfo({ dir = home(), force = false, minValidityMs = 15 * 60_000, fetchImpl = fetch, oauthHost = authHost(dir) } = {}) {
+  if (dir === home()) {
+    try { await sync(); } catch (e) { console.warn('[kimi] синхронизация входа:', e.message); }
+  }
   const record = tokenRecord(dir);
   if (!record) return null;
   const expiresAt = Number(record.value.expires_at || 0) * 1000;
-  if (!force && expiresAt > Date.now() + 60_000) return sessionInfo(dir);
+  if (!force && expiresAt > Date.now() + minValidityMs) return sessionInfo(dir);
   const refreshToken = record.value.refresh_token;
   if (typeof refreshToken !== 'string' || refreshToken.length < 20) return sessionInfo(dir);
   const response = await fetchImpl(`${String(oauthHost).replace(/\/+$/, '')}/api/oauth/token`, {
@@ -156,8 +160,8 @@ export async function restore() {
   const redis = redisClient();
   try {
     if (redis) {
-      const [saved, savedSeed] = await Promise.all([redis.get(KEY), redis.get(SEED)]);
-      if (saved && (!seed || savedSeed === seedHash)) {
+      const saved = await redis.get(KEY);
+      if (saved) {
         unpack(saved);
         if (isReady()) {
           lastSaved = hash(saved);
@@ -182,6 +186,17 @@ export async function restore() {
   return false;
 }
 
+export async function sync() {
+  const redis = redisClient();
+  if (!redis) return false;
+  const packed = await redis.get(KEY);
+  if (!packed || hash(packed) === lastSaved) return false;
+  unpack(packed);
+  if (!isReady()) throw new Error('Общий снимок входа Kimi неполный');
+  lastSaved = hash(packed);
+  return true;
+}
+
 export async function save() {
   const redis = redisClient();
   if (!redis) return false;
@@ -194,6 +209,20 @@ export async function save() {
   return true;
 }
 
-export function watch(everyMs = 60_000) {
-  setInterval(() => save().catch((e) => console.warn('[kimi] сохранение входа:', e.message)), everyMs).unref();
+export function watch(everyMs = 5 * 60_000) {
+  const maintain = async () => {
+    if (maintenanceRunning) return;
+    maintenanceRunning = true;
+    try {
+      await sync();
+      await refreshSessionInfo({ minValidityMs: 20 * 60_000 });
+      await save();
+    } catch (e) {
+      console.warn('[kimi] обслуживание входа:', e.message);
+    } finally {
+      maintenanceRunning = false;
+    }
+  };
+  setTimeout(maintain, 15_000).unref();
+  setInterval(maintain, everyMs).unref();
 }

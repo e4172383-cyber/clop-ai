@@ -18,8 +18,8 @@ const DESKTOP_RELEASE = Object.freeze({
   released: '08.09.2026',
   windows: 'Clop-Code-Setup-2.4.1.exe',
   linux: 'Clop-Code-2.4.1-linux-x64.tar.xz',
-  androidVersion: '1.0.4',
-  android: 'Clop-AI-Mobile-1.0.4.apk',
+  androidVersion: '1.0.5',
+  android: 'Clop-AI-Mobile-1.0.5.apk',
 });
 
 // Единая точка входа: Claude-модели идут через Claude CLI, GPT-модели — через
@@ -55,6 +55,7 @@ import * as desk from './desktop.js';
 import { extractFiles } from './files.js';
 import * as vision from './vision.js';
 import * as support from './support.js';
+import { enterSupportMode, isSupportModeActive, leaveSupportMode, leaveTransientModes } from './conversation-modes.js';
 import { isOffice, extractOffice } from './docs.js';
 import { buildZip } from './zip.js';
 import { claimApiKey, resetApiKey, syncPlan, cloudEnabled } from './cloud.js';
@@ -852,7 +853,10 @@ async function handleAsk(u, chatId, text, images = null) {
 
 async function onCommand(u, chatId, cmd, rawText = '') {
   if (u.pending) { u.pending = null; store.saveSoon(); } // любая команда отменяет ожидание промпта картинки
-  if (cmd !== '/bug' && cmd !== '/баг' && u.bugReportMode) { u.bugReportMode = false; store.saveSoon(); }
+  if (leaveTransientModes(u, {
+    keepSupport: cmd === '/support' || cmd === '/поддержка',
+    keepBug: cmd === '/bug' || cmd === '/баг',
+  })) store.saveSoon();
   switch (cmd) {
     case '/grant': {
       if (!ADMIN_IDS.includes(String(u.id))) return void await tg.sendMessage(chatId, 'Неизвестная команда. /help — список команд.');
@@ -899,7 +903,7 @@ async function onCommand(u, chatId, cmd, rawText = '') {
       return void await tg.sendMessage(chatId, usageText(u), { reply_markup: backKb() });
     case '/support':
     case '/поддержка':
-      u.supportMode = true; store.saveSoon();
+      enterSupportMode(u); store.saveSoon();
       return void await tg.sendMessage(chatId, supportText(u), { reply_markup: supportKb() });
     case '/bug':
     case '/баг':
@@ -1207,6 +1211,14 @@ async function onCallback(u, q) {
   const data = q.data || '';
   const edit = (text, kb) => tg.editMessage(chatId, msgId, text, { reply_markup: kb });
 
+  // Любая кнопка вне самой поддержки/формы бага означает, что пользователь
+  // вернулся к обычному боту. Раньше флаг поддержки оставался в профиле и
+  // после выбора модели следующее сообщение ошибочно уходило оператору.
+  if (leaveTransientModes(u, {
+    keepSupport: data === 'support' || data === 'support_off',
+    keepBug: data === 'bug_report',
+  })) store.saveSoon();
+
   if (data === 'menu') {
     if (u.pending) { u.pending = null; store.saveSoon(); }
     await tg.answerCallback(q.id);
@@ -1242,12 +1254,12 @@ async function onCallback(u, q) {
     return void await edit(devicesText(u), devicesKb(u));
   }
   if (data === 'support') {
-    u.supportMode = true; store.saveSoon();
+    enterSupportMode(u); store.saveSoon();
     await tg.answerCallback(q.id);
     return void await edit(supportText(u), supportKb());
   }
   if (data === 'support_off') {
-    u.supportMode = false; store.saveSoon();
+    leaveSupportMode(u); store.saveSoon();
     await tg.answerCallback(q.id, '🚪 Вышли из поддержки');
     return void await edit(startText(u), mainKb(u));
   }
@@ -1717,7 +1729,10 @@ export async function handleUpdate(update) {
       return void await tg.sendMessage(chatId, `⚠️ ${error.message}`);
     }
   }
-  if (u.supportMode && !text.startsWith('/')) {
+  const hadSupportMode = Boolean(u.supportMode);
+  const supportActive = isSupportModeActive(u);
+  if (hadSupportMode && !supportActive) store.saveSoon();
+  if (supportActive && !text.startsWith('/')) {
     return void await handleSupport(u, chatId, text);
   }
   if (text.startsWith('/')) {
