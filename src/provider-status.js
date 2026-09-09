@@ -68,7 +68,7 @@ function providerSummary(provider, health, now, usageSamples = []) {
   if (health?.ok && last && !last.ok && now - last.at < 10 * 60 * 1000) status = 'degraded';
   return {
     key: provider,
-    title: provider === 'gpt' ? 'GPT' : provider === 'kimi' ? 'Kimi' : 'Clop 3.1',
+    title: provider === 'gpt' ? 'GPT' : provider === 'kimi' ? 'Kimi' : 'Clop 4',
     status,
     statusText: status === 'operational' ? 'Работает' : status === 'degraded' ? 'Есть сбои' : 'Недоступен',
     checkedAt: now,

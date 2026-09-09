@@ -27,8 +27,8 @@ export function codexBin() {
 // живыми запросами). Держим отдельную "скрытую" рабочую директорию только для
 // моделей с hideIdentity — на обычные GPT-модели это никак не влияет.
 const HIDDEN_IDENTITY_DIR = path.join(SANDBOX_DIR, 'clop-identity');
-function hiddenIdentityCwd(identityTitle = 'Clop 3.1') {
-  const slug = String(identityTitle).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'clop-3-1';
+function hiddenIdentityCwd(identityTitle = 'Clop 4') {
+  const slug = String(identityTitle).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'clop-4';
   const dir = path.join(HIDDEN_IDENTITY_DIR, slug);
   fs.mkdirSync(dir, { recursive: true });
   const agentsFile = path.join(dir, 'AGENTS.md');

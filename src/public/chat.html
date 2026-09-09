@@ -1463,7 +1463,7 @@ function showApp(data) {
 function renderModelSelect() {
   const sel = document.getElementById('modelSelect');
   const providers = [
-    ['clop', 'Clop 3.1'],
+    ['clop', 'Clop 4'],
     ['gpt', 'GPT'],
     ['kimi', 'Kimi'],
   ];
@@ -1528,7 +1528,7 @@ function renderUsageIndicator() {
   longRow.style.display = long === null ? 'none' : '';
   document.getElementById('usageShort').textContent = short === null ? '—' : short + '%';
   document.getElementById('usageLong').textContent = long === null ? '—' : long + '%';
-  const names = { gpt: 'Лимит GPT', kimi: 'Лимит Kimi', clop: 'Лимит Clop 3.1' };
+  const names = { gpt: 'Лимит GPT', kimi: 'Лимит Kimi', clop: 'Лимит Clop 4' };
   document.getElementById('usageProvider').textContent = names[model.provider] || 'Общий лимит';
 }
 
@@ -2327,7 +2327,7 @@ async function openProfile() {
       <div class="prov-title" style="margin-top:16px"><i class="dot kimi"></i>Все Kimi-модели</div>
       ${limRow('5 часов', p.limits.kimi.short)}
       ${limRow('Неделя', p.limits.kimi.long)}
-      <div class="prov-title" style="margin-top:16px"><i class="dot"></i>Все модели Clop 3.1</div>
+      <div class="prov-title" style="margin-top:16px"><i class="dot"></i>Все модели Clop 4</div>
       ${limRow('5 часов', p.limits.clop.short)}
       ${limRow('Неделя', p.limits.clop.long)}
       <div class="muted-sm" style="margin-top:12px">Картинки сегодня: ${p.images.used} из ${p.images.limit}</div>

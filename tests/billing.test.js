@@ -18,8 +18,8 @@ test('86 Telegram Stars equal one dollar of API balance', () => {
   assert.equal(starsToMicros(86), 1_000_000);
 });
 
-test('Clop 3.1 pay as you go models have complete billing entries', () => {
-  for (const model of ['clop-3-1-pulsar', 'clop-3-1-opus', 'clop-3-1-haiku']) {
+test('Clop 4 pay as you go models have complete billing entries', () => {
+  for (const model of ['clop-4-pulsar', 'clop-4-pro', 'clop-4-flash']) {
     assert.equal(typeof API_PRICES[model].title, 'string');
     assert.ok(chargeMicros(model, { input: 1000, output: 1000 }) > 0);
   }

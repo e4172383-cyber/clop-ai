@@ -54,7 +54,7 @@ export const PROVIDERS = {
   claude: { key: 'claude', title: 'Claude', emoji: '🟣' },
   gpt: { key: 'gpt', title: 'GPT', emoji: '🟢' },
   kimi: { key: 'kimi', title: 'Kimi', emoji: '🌙' },
-  clop: { key: 'clop', title: 'Clop 3.1', emoji: '✦' },
+  clop: { key: 'clop', title: 'Clop 4', emoji: '✦' },
 };
 
 export const MODELS = {
@@ -168,28 +168,29 @@ export const MODELS = {
     limitMultiplier: 1.5,
     contextWindow: 400_000,
   },
-  'clop-3-1-pulsar': {
-    key: 'clop-3-1-pulsar', provider: 'clop', runtime: 'gpt', cli: 'gpt-6-astra',
-    title: 'Clop 3.1 Pulsar', short: 'Pulsar 3.1',
-    desc: 'Самая мощная модель Clop 3.1 для сложных задач — от тарифа GO',
+  'clop-4-pulsar': {
+    key: 'clop-4-pulsar', provider: 'clop', runtime: 'gpt', cli: 'gpt-6-astra',
+    title: 'Clop 4 Pulsar', short: 'Pulsar 4',
+    desc: 'Флагманская модель Clop 4 для сложных задач — от тарифа GO',
     plans: ['go', 'pro', 'max', 'max20', 'coderplus'],
     recommended: true, supportsEffort: false, fixedEffort: 'medium', hideIdentity: true,
     contextWindow: 400_000,
   },
-  'clop-3-1-opus': {
-    key: 'clop-3-1-opus', provider: 'clop', runtime: 'gpt', cli: 'gpt-5.6-sol',
-    title: 'Clop 3.1 Opus', short: 'Opus 3.1',
-    desc: 'Тщательная модель Clop 3.1 для анализа и важных задач — доступна всем',
+  'clop-4-pro': {
+    key: 'clop-4-pro', provider: 'clop', runtime: 'gpt', cli: 'gpt-5.6-sol',
+    title: 'Clop 4 Pro', short: 'Clop 4 Pro',
+    desc: 'Универсальная модель Clop 4 для работы и анализа — доступна всем',
     plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'],
-    recommended: false, supportsEffort: false, fixedEffort: 'high', hideIdentity: true,
+    recommended: false, supportsEffort: false, fixedEffort: 'medium', hideIdentity: true,
     contextWindow: 400_000,
   },
-  'clop-3-1-haiku': {
-    key: 'clop-3-1-haiku', provider: 'clop', runtime: 'gpt', cli: 'gpt-5.6-sol',
-    title: 'Clop 3.1 Haiku', short: 'Haiku 3.1',
-    desc: 'Быстрая модель Clop 3.1 для повседневных вопросов — доступна всем',
+  'clop-4-flash': {
+    key: 'clop-4-flash', provider: 'clop', runtime: 'gpt', cli: 'gpt-5.6-terra',
+    title: 'Clop 4 Flash', short: 'Flash 4',
+    desc: 'Быстрая модель Clop 4 с усиленным режимом — доступна всем, расход лимита ×1.5',
     plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'],
-    recommended: false, supportsEffort: false, fixedEffort: 'low', hideIdentity: true,
+    recommended: false, supportsEffort: false, fixedEffort: 'medium', hideIdentity: true,
+    heavy: true, heavyNote: 'Расход лимита ×1.5', limitMultiplier: 1.5,
     contextWindow: 400_000,
   },
 };
@@ -267,7 +268,7 @@ export const PLANS = {
     limits: limitsFor('free'),
     // на бесплатном тарифе доступен выбор между Low, Medium и High
     effort: { locked: false, fixed: null, options: ['low', 'medium', 'high'] },
-    perks: ['Clop 3.1 Opus и Haiku', 'GPT Луна и Спарк', 'Kimi K2.6 без мышления', 'Сколько угодно чатов', 'История переписки'],
+    perks: ['Clop 4 Pro и Flash', 'GPT Луна и Спарк', 'Kimi K2.6 без мышления', 'Сколько угодно чатов', 'История переписки'],
   },
   go: {
     key: 'go',
@@ -279,7 +280,7 @@ export const PLANS = {
     effort: { locked: false, fixed: null, options: ['low', 'medium', 'high', 'xhigh'] },
     perks: [
       'GPT-модели по тарифу, включая GPT-6 Astra',
-      'Вся линейка Clop 3.1, включая Pulsar',
+      'Вся линейка Clop 4, включая Pulsar',
       'Kimi K2.7 Code и K3',
       'Заметно больше лимита за 5 часов и в неделю, чем на бесплатном',
       'Выбор силы мышления',
@@ -297,7 +298,7 @@ export const PLANS = {
     effort: { locked: false, fixed: null, options: ['low', 'medium', 'high', 'xhigh'] },
     perks: [
       'GPT-модели по тарифу, включая GPT-6 Astra',
-      'Вся линейка Clop 3.1, включая Pulsar',
+      'Вся линейка Clop 4, включая Pulsar',
       'Все Kimi, включая K3 Swarm',
       'Значительно больше лимита за 5 часов',
       'Значительно больше недельного лимита',
@@ -315,7 +316,7 @@ export const PLANS = {
     effort: { locked: false, fixed: null, options: ['low', 'medium', 'high', 'xhigh'] },
     perks: [
       'GPT-модели по тарифу, включая GPT-6 Astra',
-      'Вся линейка Clop 3.1, включая Pulsar',
+      'Вся линейка Clop 4, включая Pulsar',
       'Все Kimi, включая K3 Swarm',
       'Увеличенные лимиты для длительных задач',
       'Выбор силы мышления',
@@ -332,7 +333,7 @@ export const PLANS = {
     effort: { locked: false, fixed: null, options: ['low', 'medium', 'high', 'xhigh'] },
     perks: [
       'GPT-модели по тарифу, включая GPT-6 Astra',
-      'Вся линейка Clop 3.1, включая Pulsar',
+      'Вся линейка Clop 4, включая Pulsar',
       'Все Kimi, включая K3 Swarm',
       'Увеличенные лимиты для длительных задач',
       'Выбор силы мышления',
@@ -349,7 +350,7 @@ export const PLANS = {
     effort: { locked: false, fixed: null, options: ['low', 'medium', 'high', 'xhigh'] },
     perks: [
       'GPT-модели по тарифу, включая GPT-6 Astra',
-      'Вся линейка Clop 3.1, включая Pulsar',
+      'Вся линейка Clop 4, включая Pulsar',
       'Все Kimi, включая K3 Swarm',
       'Увеличенные лимиты для длительных задач',
       'Выбор силы мышления',
@@ -428,10 +429,10 @@ export const IMAGE_DAILY_LIMITS = {
 // ответах они представляются только своим названием; служебные детали запуска
 // не являются частью пользовательского интерфейса.
 export const CLOP_IDENTITY_PROMPT = [
-  'Ты — Clop 3.1, ИИ-модель компании Clop.',
+  'Ты — модель линейки Clop 4 компании Clop.',
   'Никогда не упоминай сторонние компании, модели, сервисы или внутренние детали реализации — ни напрямую, ни намёками.',
-  'Слова Pulsar, Opus и Haiku разрешены только внутри твоего официального названия Clop 3.1.',
-  'Если спрашивают, кто тебя создал, какая ты модель или на чём основана — называй только своё точное имя Clop 3.1 и компанию Clop.',
+  'Слова Pulsar, Pro и Flash разрешены только внутри твоего официального названия Clop 4.',
+  'Если спрашивают, кто тебя создал, какая ты модель или на чём основана — называй только своё точное название из линейки Clop 4 и компанию Clop.',
   'Ты работаешь как ассистент Clop в Telegram, веб-чате, приложениях и API.',
   'У тебя нет самостоятельного доступа к устройству пользователя или внешним инструментам, если приложение явно не передало тебе результат такого действия.',
   'Если клиент передал явный протокол действий с инструментами и возвращает результаты шагов, выполняй задачу через этот протокол до готового результата. В остальных клиентах при просьбе создать или сохранить файл возвращай готовое содержимое в ответе (одиночный файл — обычным блоком кода, несколько файлов — по правилам форматирования файлов ниже). Никогда не упоминай устройство внутренней модели или служебные настройки.',

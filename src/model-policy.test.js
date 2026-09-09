@@ -30,12 +30,16 @@ test('all selectable bot models use GPT, Kimi or the separate Clop pool, never C
     assert.equal(m.fallbackModel,undefined);
   }
 });
-test('Clop 3.1 models have fixed behavior and Pulsar starts at GO', () => {
-  assert.deepEqual(MODELS['clop-3-1-pulsar'].plans, ['go', 'pro', 'max', 'max20', 'coderplus']);
-  assert.equal(MODELS['clop-3-1-pulsar'].fixedEffort, 'medium');
-  assert.equal(MODELS['clop-3-1-opus'].fixedEffort, 'high');
-  assert.equal(MODELS['clop-3-1-haiku'].fixedEffort, 'low');
-  for (const key of ['clop-3-1-pulsar', 'clop-3-1-opus', 'clop-3-1-haiku']) {
+test('Clop 4 models have fixed Medium behavior and Pulsar starts at GO', () => {
+  assert.deepEqual(Object.keys(MODELS).filter((key) => key.startsWith('clop-')), [
+    'clop-4-pulsar', 'clop-4-pro', 'clop-4-flash',
+  ]);
+  assert.deepEqual(MODELS['clop-4-pulsar'].plans, ['go', 'pro', 'max', 'max20', 'coderplus']);
+  assert.equal(MODELS['clop-4-pulsar'].fixedEffort, 'medium');
+  assert.equal(MODELS['clop-4-pro'].fixedEffort, 'medium');
+  assert.equal(MODELS['clop-4-flash'].fixedEffort, 'medium');
+  assert.equal(MODELS['clop-4-flash'].limitMultiplier, 1.5);
+  for (const key of ['clop-4-pulsar', 'clop-4-pro', 'clop-4-flash']) {
     assert.equal(MODELS[key].provider, 'clop');
     assert.equal(MODELS[key].runtime, 'gpt');
     assert.equal(MODELS[key].supportsEffort, false);
@@ -49,7 +53,7 @@ test('Clop 3.1 models have fixed behavior and Pulsar starts at GO', () => {
 });
 test('old Claude and free Astra selections safely use the default', () => {
   const promo = { models: ['gpt-astra'], from: 1000, until: 2000 };
-  for (const old of ['sonnet-5','clop-2-5-haiku','fable-5']) {
+  for (const old of ['sonnet-5','clop-2-5-haiku','clop-3-1-opus','fable-5']) {
     assert.equal(selectModel(MODELS,old,'free',DEFAULT_MODEL,Object.keys(PLANS),promo,1500).key, DEFAULT_MODEL);
   }
   assert.equal(selectModel(MODELS,'gpt-astra','free',DEFAULT_MODEL,Object.keys(PLANS),promo,1500).key,DEFAULT_MODEL);

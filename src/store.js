@@ -3,6 +3,11 @@ import { DEFAULT_MODEL, DEFAULT_EFFORT, DAY, PLANS, PROMO_PRO_UNTIL, corporatePl
 
 const PAID_PLAN_KEYS = new Set(Object.keys(PLANS).filter((k) => k !== 'free'));
 const USAGE_RETENTION = 60 * DAY;
+const MODEL_MIGRATIONS = Object.freeze({
+  'clop-3-1-pulsar': 'clop-4-pulsar',
+  'clop-3-1-opus': 'clop-4-pro',
+  'clop-3-1-haiku': 'clop-4-flash',
+});
 
 // Пользователи/чаты/лимиты хранятся в Upstash Redis, а не на диске Render —
 // диск бесплатного инстанса сбрасывается при каждом деплое/рестарте, Redis — нет.
@@ -16,11 +21,35 @@ if (!hasRedis) {
 let db = { users: {}, teams: {}, customBots: {}, updatedAt: 0 };
 let saveTimer = null;
 
+function migrateModelSelections() {
+  let changed = false;
+  for (const user of Object.values(db.users || {})) {
+    if (MODEL_MIGRATIONS[user.model]) {
+      user.model = MODEL_MIGRATIONS[user.model];
+      changed = true;
+    }
+    for (const chat of user.chats || []) {
+      if (!MODEL_MIGRATIONS[chat.model]) continue;
+      chat.model = MODEL_MIGRATIONS[chat.model];
+      chat.sessionId = null;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 export async function load() {
   if (redis) {
     try {
       const v = await redis.get(STORE_KEY);
-      if (v && typeof v === 'object') { db = v; if (!db.users) db.users = {}; if (!db.teams) db.teams = {}; if (!db.customBots) db.customBots = {}; return db; }
+      if (v && typeof v === 'object') {
+        db = v;
+        if (!db.users) db.users = {};
+        if (!db.teams) db.teams = {};
+        if (!db.customBots) db.customBots = {};
+        if (migrateModelSelections()) await redis.set(STORE_KEY, db);
+        return db;
+      }
     } catch (e) {
       console.error('[store] load failed', e.message);
     }

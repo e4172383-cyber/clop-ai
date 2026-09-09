@@ -7,6 +7,12 @@ const UNLIMITED_MODELS = new Set(Object.keys(MODELS).filter((k) => MODELS[k].unl
 
 // Все платные тарифы, кроме free — чтобы не перечислять их поштучно всякий раз
 const PAID_PLANS = new Set(Object.keys(PLANS).filter((k) => k !== 'free'));
+const LEGACY_MODEL_PROVIDERS = Object.freeze({
+  'clop-3-1-pulsar': 'clop',
+  'clop-3-1-opus': 'clop',
+  'clop-3-1-haiku': 'clop',
+});
+const providerOfEvent = (event) => MODELS[event?.model]?.provider || LEGACY_MODEL_PROVIDERS[event?.model] || null;
 
 export function planOf(u) {
   const team = store.activeTeamFor(u);
@@ -60,7 +66,7 @@ function countableUsage(u, windowMs, provider, now) {
     if (manualResetAt && e.ts <= manualResetAt) return false;
     if (UNLIMITED_MODELS.has(e.model)) return false;
     if (e.offerBonus === true) return false;
-    return (MODELS[e.model]?.provider) === provider;
+    return providerOfEvent(e) === provider;
   });
 }
 
@@ -76,7 +82,7 @@ function combinedUsed(user, windowMs, now, joinedAt = 0) {
   let sum = 0;
   for (const e of user.usage || []) {
     if (Number(e.ts || 0) < from || (manualResetAt && Number(e.ts || 0) <= manualResetAt) || UNLIMITED_MODELS.has(e.model) || e.offerBonus === true) continue;
-    const provider = MODELS[e.model]?.provider;
+    const provider = providerOfEvent(e);
     if (provider) sum += eventBillable(e, provider);
   }
   return sum;
@@ -91,7 +97,7 @@ function corporateUsageEvents(team, windowMs, now, onlyUserId = null) {
     const manualResetAt = windowMs === WINDOWS.short.ms ? Number(member?.shortUsageResetAt || 0) : 0;
     for (const e of member?.usage || []) {
       if (Number(e.ts || 0) < from || (manualResetAt && Number(e.ts || 0) <= manualResetAt) || UNLIMITED_MODELS.has(e.model) || e.offerBonus === true) continue;
-      if (MODELS[e.model]?.provider) events.push(e);
+      if (providerOfEvent(e)) events.push(e);
     }
   }
   return events.sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0));
