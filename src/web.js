@@ -640,6 +640,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
         }
 
         if (body.action === 'offer') {
+          delete store.raw().pendingGrants?.[normalized.toLowerCase()];
           const offer = grantOffer(u);
           u.limitedOffer.grantedBy = 'internal-admin';
           u.limitedOffer.grantReason = String(body.reason || 'manual-offer').slice(0, 80);
@@ -656,6 +657,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           const planKey = String(body.planKey || '');
           const days = Math.min(366, Math.max(1, Math.floor(Number(body.days) || 30)));
           if (!PLANS[planKey] || planKey === 'free') return sendJson(res, 400, { ok: false, error: 'invalid plan' });
+          delete store.raw().pendingGrants?.[normalized.toLowerCase()];
           store.grantPlan(u, planKey, days, {
             source: 'internal_admin_grant',
             reason: String(body.reason || 'manual-plan').slice(0, 80),

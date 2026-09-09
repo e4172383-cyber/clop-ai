@@ -201,6 +201,9 @@ export function mergeRecovery(snapshot) {
   db.teams = { ...(snapshot.teams || {}), ...(db.teams || {}) };
   db.customBots = { ...(snapshot.customBots || {}), ...(db.customBots || {}) };
   db.pendingGrants = { ...(snapshot.pendingGrants || {}), ...(db.pendingGrants || {}) };
+  // Если восстановленный снимок вернул пользователя, применяем ожидавшую его
+  // выдачу сразу, а не второй раз при следующем сообщении.
+  for (const user of Object.values(db.users)) applyPendingGrant(user);
   return { addedUsers, mergedUsers, totalUsers: Object.keys(db.users).length };
 }
 

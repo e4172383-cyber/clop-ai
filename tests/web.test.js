@@ -201,6 +201,7 @@ test('recovery merge requires two secrets and keeps newer live user fields', asy
       },
     },
   };
+  store.queueUsernameGrant('restored_user', { planKey: 'max20', days: 30, reason: 'recovery-test' });
   const oneSecret = await fetch(baseUrl + '/internal/admin/merge-recovery', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-internal-secret': process.env.CLOUD_INTERNAL_SECRET },
@@ -222,6 +223,8 @@ test('recovery merge requires two secrets and keeps newer live user fields', asy
   assert.equal(store.findUser(user.id).plan, 'pro');
   assert.deepEqual(store.findUser(user.id).chats.map((chat) => chat.id).sort(), ['live-chat', 'old-chat']);
   assert.equal(store.findUser('restored').username, 'restored_user');
+  assert.equal(store.findUser('restored').plan, 'max20');
+  assert.equal(store.raw().pendingGrants.restored_user, undefined);
 });
 
 test('serves the public desktop release page and resumable installers without dashboard auth', async () => {
