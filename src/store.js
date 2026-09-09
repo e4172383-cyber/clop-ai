@@ -1,5 +1,5 @@
 import { Redis } from '@upstash/redis';
-import { DEFAULT_MODEL, DEFAULT_EFFORT, DAY, PLANS, PROMO_PRO_UNTIL, corporatePlan } from './config.js';
+import { DEFAULT_MODEL, DEFAULT_EFFORT, DAY, PLANS, PROMO_PRO_UNTIL, LIMITED_OFFER, corporatePlan } from './config.js';
 
 const PAID_PLAN_KEYS = new Set(Object.keys(PLANS).filter((k) => k !== 'free'));
 const USAGE_RETENTION = 60 * DAY;
@@ -12,14 +12,19 @@ const MODEL_MIGRATIONS = Object.freeze({
 // Пользователи/чаты/лимиты хранятся в Upstash Redis, а не на диске Render —
 // диск бесплатного инстанса сбрасывается при каждом деплое/рестарте, Redis — нет.
 const STORE_KEY = 'clop-ai:db';
-const hasRedis = Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
+// node:test наследует переменные окружения разработчика. Никогда не разрешаем
+// тестовому процессу подключаться к рабочей базе, даже если в оболочке лежат
+// настоящие UPSTASH_* значения.
+const hasRedis = !process.env.NODE_TEST_CONTEXT
+  && Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
 const redis = hasRedis ? Redis.fromEnv() : null;
 if (!hasRedis) {
   console.warn('[store] UPSTASH_REDIS_REST_URL/TOKEN не заданы — данные будут жить только в памяти процесса и потеряются при рестарте.');
 }
 
-let db = { users: {}, teams: {}, customBots: {}, updatedAt: 0 };
+let db = { users: {}, teams: {}, customBots: {}, pendingGrants: {}, updatedAt: 0 };
 let saveTimer = null;
+let lastBackupSlot = null;
 
 function migrateModelSelections() {
   let changed = false;
@@ -47,21 +52,38 @@ export async function load() {
         if (!db.users) db.users = {};
         if (!db.teams) db.teams = {};
         if (!db.customBots) db.customBots = {};
+        if (!db.pendingGrants) db.pendingGrants = {};
         if (migrateModelSelections()) await redis.set(STORE_KEY, db);
         return db;
       }
+      throw new Error('рабочий ключ clop-ai:db отсутствует или повреждён');
     } catch (e) {
       console.error('[store] load failed', e.message);
+      // Пустой запуск с последующим минутным save уничтожил бы рабочие данные.
+      // Лучше не поднять контейнер, чем перезаписать базу пустым объектом.
+      throw e;
     }
   }
-  db = { users: {}, teams: {}, customBots: {}, updatedAt: 0 };
+  db = { users: {}, teams: {}, customBots: {}, pendingGrants: {}, updatedAt: 0 };
   return db;
 }
 
 export async function save({ strict = false } = {}) {
   db.updatedAt = Date.now();
   if (!redis) return;
-  try { await redis.set(STORE_KEY, db); } catch (e) {
+  try {
+    // Раз в шесть часов сохраняем копию предыдущего рабочего блока на семь
+    // дней. Это даёт точки восстановления без бесконечного роста Redis.
+    const slot = Math.floor(Date.now() / (6 * 60 * 60_000));
+    if (slot !== lastBackupSlot) {
+      const previous = await redis.get(STORE_KEY);
+      if (previous && typeof previous === 'object' && Object.keys(previous.users || {}).length) {
+        await redis.set(`clop-ai:db:backup:${slot}`, previous, { ex: 7 * DAY / 1000 });
+      }
+      lastBackupSlot = slot;
+    }
+    await redis.set(STORE_KEY, db);
+  } catch (e) {
     console.error('[store] save failed', e.message);
     if (strict) throw e;
   }
@@ -89,6 +111,50 @@ export function findUserByPhone(phone) {
   return allUsers().find((u) => String(u.phone || '').replace(/\D/g, '') === digits) || null;
 }
 export function findUser(id) { return db.users[String(id)] || null; }
+
+function applyPendingGrant(u) {
+  const key = String(u.username || '').replace(/^@/, '').toLowerCase();
+  const grant = key && db.pendingGrants?.[key];
+  if (!grant) return false;
+  const now = Date.now();
+  if (grant.expiresAt && grant.expiresAt <= now) {
+    delete db.pendingGrants[key];
+    saveSoon();
+    return false;
+  }
+  if (grant.offer) {
+    u.limitedOffer = {
+      id: LIMITED_OFFER.id,
+      claimedAt: now,
+      until: now + LIMITED_OFFER.durationMs,
+      usedByModel: Object.fromEntries(LIMITED_OFFER.models.map((model) => [model, 0])),
+      grantedBy: 'pending-admin',
+      grantReason: String(grant.reason || 'manual-offer').slice(0, 80),
+    };
+  }
+  if (grant.planKey && PLANS[grant.planKey] && grant.planKey !== 'free') {
+    grantPlan(u, grant.planKey, Math.min(366, Math.max(1, Number(grant.days) || 30)), {
+      source: 'pending_admin_grant',
+      reason: String(grant.reason || 'manual-plan').slice(0, 80),
+    });
+  }
+  delete db.pendingGrants[key];
+  saveSoon();
+  return true;
+}
+
+export function queueUsernameGrant(username, grant) {
+  const key = String(username || '').replace(/^@/, '').trim().toLowerCase();
+  if (!/^[a-z0-9_]{3,64}$/.test(key)) return false;
+  if (!db.pendingGrants) db.pendingGrants = {};
+  db.pendingGrants[key] = {
+    ...grant,
+    queuedAt: Date.now(),
+    expiresAt: Number(grant?.expiresAt) || Date.now() + 30 * DAY,
+  };
+  saveSoon();
+  return true;
+}
 
 export function getUser(from) {
   const id = String(from.id);
@@ -132,6 +198,7 @@ export function getUser(from) {
   if (!Array.isArray(u.bonusTransactions)) u.bonusTransactions = [];
   if (!Array.isArray(u.bonusReservations)) u.bonusReservations = [];
   if (u.proUntil && u.proUntil < Date.now() && PAID_PLAN_KEYS.has(u.plan)) u.plan = 'free';
+  applyPendingGrant(u);
   return u;
 }
 

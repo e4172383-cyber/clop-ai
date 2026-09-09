@@ -603,7 +603,21 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
         if (reloadEachRequest) await store.load();
         const normalized = identifier.replace(/^@/, '');
         const u = /^\d+$/.test(normalized) ? store.findUser(normalized) : store.findUserByUsername(normalized);
-        if (!u) return sendJson(res, 404, { ok: false, error: 'user not found' });
+        if (!u) {
+          if (body.allowPending && !/^\d+$/.test(normalized)) {
+            const queued = store.queueUsernameGrant(normalized, body.action === 'offer'
+              ? { offer: true, reason: String(body.reason || 'manual-offer').slice(0, 80) }
+              : {
+                  planKey: String(body.planKey || ''),
+                  days: Math.min(366, Math.max(1, Math.floor(Number(body.days) || 30))),
+                  reason: String(body.reason || 'manual-plan').slice(0, 80),
+                });
+            if (!queued) return sendJson(res, 400, { ok: false, error: 'invalid pending grant' });
+            await store.save({ strict: true });
+            return sendJson(res, 202, { ok: true, pending: true, username: '@' + normalized, action: body.action });
+          }
+          return sendJson(res, 404, { ok: false, error: 'user not found' });
+        }
 
         if (body.action === 'offer') {
           const offer = grantOffer(u);

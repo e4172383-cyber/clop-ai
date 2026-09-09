@@ -45,6 +45,8 @@ try {
 }
 const [web, store, webchat, config, desktop, limitedOffer] = modules;
 
+assert.equal(store.redisClient(), null, 'node:test must never connect to a configured production Redis');
+
 let server;
 let baseUrl;
 let user;
@@ -174,6 +176,16 @@ test('protected internal grants mutate the live store for offers and plans', asy
   assert.equal(planBody.plan, 'max20');
   assert.equal(user.plan, 'max20');
   assert.ok(user.proUntil > Date.now() + 29 * config.DAY);
+
+  const pendingResponse = await fetch(baseUrl + '/internal/admin/grant', {
+    method: 'POST', headers,
+    body: JSON.stringify({ identifier: '@future_user', action: 'offer', allowPending: true }),
+  });
+  assert.equal(pendingResponse.status, 202);
+  assert.equal((await pendingResponse.json()).pending, true);
+  const future = store.getUser({ id: 'future-user-id', username: 'future_user', first_name: 'Future' });
+  assert.equal(limitedOffer.offerState(future).active, true);
+  assert.equal(store.raw().pendingGrants.future_user, undefined);
 });
 
 test('serves the public desktop release page and resumable installers without dashboard auth', async () => {
