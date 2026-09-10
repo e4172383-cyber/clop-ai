@@ -13,6 +13,8 @@ import * as vision from './vision.js';
 import * as relay from './relay.js';
 import * as support from './support.js';
 import * as remote from './remote.js';
+import * as vms from './vms.js';
+import * as cloudStorage from './cloud-storage.js';
 
 // Ответ оператора должен дойти до человека в бота — иначе заявка теряет
 // смысл. Ошибку доставки глушим: панель не должна падать из-за Telegram.
@@ -944,6 +946,65 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
         return;
       }
 
+      if (url.pathname === '/desk/storage' && req.method === 'GET') {
+        authed().then((u) => {
+          if (!u) return sendJson(res, 401, { ok: false, error: 'нужен вход' });
+          return sendJson(res, 200, cloudStorage.summary(u.id, planOf(u).key));
+        }).catch((e) => sendJson(res, 500, { ok: false, error: String(e.message || e) }));
+        return;
+      }
+
+      if (url.pathname === '/desk/storage/file' && req.method === 'GET') {
+        authed().then((u) => {
+          if (!u) return sendJson(res, 401, { ok: false, error: 'нужен вход' });
+          const item = cloudStorage.file(u.id, url.searchParams.get('id'));
+          if (!item) return sendJson(res, 404, { ok: false, error: 'файл не найден' });
+          res.writeHead(200, {
+            'content-type': item.mime,
+            'content-length': item.size,
+            'content-disposition': attachmentDisposition(item.name),
+            'cache-control': 'private, no-store',
+            'x-content-type-options': 'nosniff',
+          });
+          return fs.createReadStream(item.path).pipe(res);
+        }).catch((e) => sendJson(res, 500, { ok: false, error: String(e.message || e) }));
+        return;
+      }
+
+      if (url.pathname === '/desk/storage/upload' && req.method === 'POST') {
+        readJsonBody(req, 29_000_000).then(async (body) => {
+          const u = await authed();
+          if (!u) return sendJson(res, 401, { ok: false, error: 'нужен вход' });
+          return sendJson(res, 201, cloudStorage.upload(u.id, planOf(u).key, body));
+        }).catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
+        return;
+      }
+
+      if (url.pathname === '/desk/storage/delete' && req.method === 'POST') {
+        readJsonBody(req, 4_000).then(async (body) => {
+          const u = await authed();
+          if (!u) return sendJson(res, 401, { ok: false, error: 'нужен вход' });
+          return sendJson(res, 200, cloudStorage.remove(u.id, planOf(u).key, body.id));
+        }).catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
+        return;
+      }
+
+      if (url.pathname === '/desk/storage/optimize' && req.method === 'POST') {
+        authed().then((u) => {
+          if (!u) return sendJson(res, 401, { ok: false, error: 'нужен вход' });
+          return sendJson(res, 200, cloudStorage.optimize(u.id, planOf(u).key));
+        }).catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
+        return;
+      }
+
+      if (url.pathname === '/desk/storage/backup' && req.method === 'POST') {
+        authed().then((u) => {
+          if (!u) return sendJson(res, 401, { ok: false, error: 'нужен вход' });
+          return sendJson(res, 201, cloudStorage.backupChats(u, planOf(u).key));
+        }).catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
+        return;
+      }
+
       if (url.pathname === '/desk/bugs' && req.method === 'GET') {
         authed().then((u) => {
           if (!u) return sendJson(res, 401, { ok: false, error: 'нужен вход' });
@@ -1506,6 +1567,130 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
         remote.endSession(u.id, body.deviceId, body.sessionId || '');
         return sendJson(res, 200, { ok: true });
       }).catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
+      return;
+    }
+
+    // Beta VM работает в отдельном ограниченном сервисе. Telegram id берём
+    // только из подписанной web-сессии: клиент не может запросить чужую машину.
+    if (url.pathname === '/chat/api/vm/status' && req.method === 'GET') {
+      (async () => {
+        if (reloadEachRequest) await store.load();
+        const userId = sessionUserId(req);
+        const u = userId && store.findUser(userId);
+        if (!u) return sendJson(res, 401, { ok: false, error: 'not logged in' });
+        return sendJson(res, 200, await vms.status(u.id));
+      })().catch((e) => sendJson(res, 500, { ok: false, error: String(e.message || e) }));
+      return;
+    }
+
+    if (url.pathname === '/chat/api/vm/start' && req.method === 'POST') {
+      (async () => {
+        if (reloadEachRequest) await store.load();
+        const userId = sessionUserId(req);
+        const u = userId && store.findUser(userId);
+        if (!u) return sendJson(res, 401, { ok: false, error: 'not logged in' });
+        const result = await vms.start(u.id);
+        return sendJson(res, result.ok ? 200 : 400, result);
+      })().catch((e) => sendJson(res, 500, { ok: false, error: String(e.message || e) }));
+      return;
+    }
+
+    if (url.pathname === '/chat/api/vm/stop' && req.method === 'POST') {
+      (async () => {
+        if (reloadEachRequest) await store.load();
+        const userId = sessionUserId(req);
+        const u = userId && store.findUser(userId);
+        if (!u) return sendJson(res, 401, { ok: false, error: 'not logged in' });
+        const result = await vms.stop(u.id);
+        return sendJson(res, result.ok ? 200 : 400, result);
+      })().catch((e) => sendJson(res, 500, { ok: false, error: String(e.message || e) }));
+      return;
+    }
+
+    if (url.pathname === '/chat/api/vm/command' && req.method === 'POST') {
+      readJsonBody(req, 4_000).then(async (body) => {
+        if (reloadEachRequest) await store.load();
+        const userId = sessionUserId(req);
+        const u = userId && store.findUser(userId);
+        if (!u) return sendJson(res, 401, { ok: false, error: 'not logged in' });
+        const result = await vms.command(u.id, body.command);
+        return sendJson(res, result.ok ? 200 : 400, result);
+      }).catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
+      return;
+    }
+
+    if (url.pathname === '/chat/api/storage' && req.method === 'GET') {
+      (async () => {
+        if (reloadEachRequest) await store.load();
+        const userId = sessionUserId(req);
+        const u = userId && store.findUser(userId);
+        if (!u) return sendJson(res, 401, { ok: false, error: 'not logged in' });
+        return sendJson(res, 200, cloudStorage.summary(u.id, planOf(u).key));
+      })().catch((e) => sendJson(res, 500, { ok: false, error: String(e.message || e) }));
+      return;
+    }
+
+    if (url.pathname === '/chat/api/storage/file' && req.method === 'GET') {
+      (async () => {
+        if (reloadEachRequest) await store.load();
+        const userId = sessionUserId(req);
+        const u = userId && store.findUser(userId);
+        if (!u) return sendJson(res, 401, { ok: false, error: 'not logged in' });
+        const item = cloudStorage.file(u.id, url.searchParams.get('id'));
+        if (!item) return sendJson(res, 404, { ok: false, error: 'файл не найден' });
+        res.writeHead(200, {
+          'content-type': item.mime,
+          'content-length': item.size,
+          'content-disposition': attachmentDisposition(item.name),
+          'cache-control': 'private, no-store',
+          'x-content-type-options': 'nosniff',
+        });
+        return fs.createReadStream(item.path).pipe(res);
+      })().catch((e) => sendJson(res, 500, { ok: false, error: String(e.message || e) }));
+      return;
+    }
+
+    if (url.pathname === '/chat/api/storage/upload' && req.method === 'POST') {
+      readJsonBody(req, 29_000_000).then(async (body) => {
+        if (reloadEachRequest) await store.load();
+        const userId = sessionUserId(req);
+        const u = userId && store.findUser(userId);
+        if (!u) return sendJson(res, 401, { ok: false, error: 'not logged in' });
+        return sendJson(res, 201, cloudStorage.upload(u.id, planOf(u).key, body));
+      }).catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
+      return;
+    }
+
+    if (url.pathname === '/chat/api/storage/delete' && req.method === 'POST') {
+      readJsonBody(req, 4_000).then(async (body) => {
+        if (reloadEachRequest) await store.load();
+        const userId = sessionUserId(req);
+        const u = userId && store.findUser(userId);
+        if (!u) return sendJson(res, 401, { ok: false, error: 'not logged in' });
+        return sendJson(res, 200, cloudStorage.remove(u.id, planOf(u).key, body.id));
+      }).catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
+      return;
+    }
+
+    if (url.pathname === '/chat/api/storage/optimize' && req.method === 'POST') {
+      (async () => {
+        if (reloadEachRequest) await store.load();
+        const userId = sessionUserId(req);
+        const u = userId && store.findUser(userId);
+        if (!u) return sendJson(res, 401, { ok: false, error: 'not logged in' });
+        return sendJson(res, 200, cloudStorage.optimize(u.id, planOf(u).key));
+      })().catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
+      return;
+    }
+
+    if (url.pathname === '/chat/api/storage/backup' && req.method === 'POST') {
+      (async () => {
+        if (reloadEachRequest) await store.load();
+        const userId = sessionUserId(req);
+        const u = userId && store.findUser(userId);
+        if (!u) return sendJson(res, 401, { ok: false, error: 'not logged in' });
+        return sendJson(res, 201, cloudStorage.backupChats(u, planOf(u).key));
+      })().catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
       return;
     }
 

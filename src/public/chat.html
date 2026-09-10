@@ -849,6 +849,8 @@
   body.remote-active:after{content:"";position:fixed;z-index:5000;inset:0;border:5px solid #ff7a36;box-shadow:inset 0 0 24px rgba(255,122,54,.3);pointer-events:none;animation:remoteBorder 2.2s ease-in-out infinite}
   @keyframes remotePulse{50%{opacity:.5;transform:scale(.75)}}@keyframes remoteBorder{50%{border-color:#ffa06a;box-shadow:inset 0 0 34px rgba(255,122,54,.4)}}
   @media(max-width:680px){.remote-device{align-items:flex-start;flex-wrap:wrap}.remote-device button{width:100%}.remote-screen-wrap{min-height:190px}.remote-input-row{grid-template-columns:1fr}.remote-ai-box button{width:100%}}
+  .vm-modal{width:min(820px,96vw)}.vm-body{display:grid;gap:14px}.vm-hero{padding:18px;border:1px solid rgba(218,111,69,.24);border-radius:18px;background:linear-gradient(135deg,rgba(218,111,69,.12),transparent)}.vm-hero h3{margin:0 0 7px;font-size:22px}.vm-hero p{margin:0;line-height:1.55}.vm-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}.vm-stat{padding:13px;border:1px solid var(--line);border-radius:14px;background:var(--surface)}.vm-stat span{display:block;color:var(--muted);font-size:11px;margin-bottom:5px}.vm-stat b{font-size:17px}.vm-status-line{display:flex;align-items:center;justify-content:space-between;gap:12px}.vm-state{display:flex;align-items:center;gap:8px;font-weight:750}.vm-state i{width:10px;height:10px;border-radius:50%;background:#91857d}.vm-state.running i{background:#55bd77;box-shadow:0 0 0 5px rgba(85,189,119,.13)}.vm-progress{height:12px;overflow:hidden;border-radius:999px;background:var(--surface-2);border:1px solid var(--line)}.vm-progress i{display:block;width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,#df7447,#f2a36e);transition:width .35s ease}.vm-actions{display:flex;gap:8px;flex-wrap:wrap}.vm-actions button,.vm-command-row button{border:1px solid var(--line);border-radius:11px;background:var(--surface-2);color:var(--text);padding:10px 14px;cursor:pointer}.vm-actions .primary{background:var(--accent);border-color:transparent;color:#fff;font-weight:800}.vm-actions button:disabled,.vm-command-row button:disabled{opacity:.45;cursor:not-allowed}.vm-terminal{overflow:auto;min-height:190px;max-height:340px;margin:0;padding:16px;border-radius:15px;background:#12100f;color:#f4e7dd;border:1px solid rgba(255,255,255,.08);font:12.5px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap}.vm-command-row{display:grid;grid-template-columns:1fr auto;gap:8px}.vm-command-row input{width:100%;border:1px solid var(--line);border-radius:11px;background:var(--surface-2);color:var(--text);padding:11px;outline:none;font:13px ui-monospace,SFMono-Regular,Consolas,monospace}.vm-note{font-size:11px;color:var(--muted)}@media(max-width:620px){.vm-stats{grid-template-columns:1fr}.vm-command-row{grid-template-columns:1fr}.vm-command-row button{width:100%}}
+  .storage-modal{width:min(860px,96vw)}.storage-body{display:grid;gap:14px}.storage-summary{padding:18px;border:1px solid var(--line);border-radius:18px;background:linear-gradient(135deg,rgba(106,143,198,.12),transparent)}.storage-summary-head{display:flex;align-items:end;justify-content:space-between;gap:12px;margin-bottom:12px}.storage-summary h3{margin:0 0 5px}.storage-meter{height:13px;overflow:hidden;border:1px solid var(--line);border-radius:999px;background:var(--surface-2)}.storage-meter i{display:block;width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,#6e91c8,#e08458);transition:width .35s}.storage-actions{display:flex;gap:8px;flex-wrap:wrap}.storage-actions button,.storage-row button{border:1px solid var(--line);border-radius:10px;background:var(--surface-2);color:var(--text);padding:9px 12px;cursor:pointer}.storage-actions .primary{background:var(--accent);border-color:transparent;color:#fff;font-weight:800}.storage-list{display:grid;gap:8px;max-height:360px;overflow:auto}.storage-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:10px;padding:11px;border:1px solid var(--line);border-radius:13px;background:var(--surface)}.storage-icon{display:grid;place-items:center;width:38px;height:38px;border-radius:11px;background:rgba(106,143,198,.13);color:#7fa2d6}.storage-copy{min-width:0}.storage-copy b,.storage-copy small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.storage-copy small{color:var(--muted);margin-top:3px}.storage-row a{color:var(--accent);text-decoration:none;font-size:12px;font-weight:750}@media(max-width:620px){.storage-summary-head{align-items:flex-start;flex-direction:column}.storage-row{grid-template-columns:auto minmax(0,1fr) auto}.storage-row a{grid-column:2}.storage-row button{grid-column:3;grid-row:1/3}}
 </style>
 <link rel="stylesheet" href="/workspace.css?v=20260909-1">
 </head>
@@ -942,6 +944,14 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4M8 10h8m-3-3 3 3-3 3"/></svg>
           Remote <small class="beta-nav">1.1 Beta</small>
         </button>
+        <button id="vmBtn">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="m7 9 3 3-3 3M12.5 15H17"/></svg>
+          Виртуальная машина <small class="beta-nav">Beta</small>
+        </button>
+        <button id="storageBtn">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7.5A4.5 4.5 0 0 1 9.4 3a5.3 5.3 0 0 1 9.9 2.7A4 4 0 0 1 19 13.6H7A3.5 3.5 0 0 1 5 7.5Z"/><path d="M12 10v9m-3-3 3 3 3-3"/></svg>
+          Облачное хранилище
+        </button>
         <button id="apiBtn">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="12" r="3.2"/><path d="M11.2 12H21M17.5 12v3M14.5 12v2.2"/></svg>
           Мой API
@@ -1014,6 +1024,33 @@
       </div>
     </div>
   </main>
+</div>
+
+<div id="vmOverlay" class="overlay" role="dialog" aria-modal="true" aria-labelledby="vmTitle">
+  <div class="api-modal glass vm-modal">
+    <div class="api-head"><b id="vmTitle">Clop Virtual Machine <span class="remote-beta">Beta</span></b><button class="modal-close" data-close="vmOverlay" aria-label="Закрыть">✕</button></div>
+    <div class="api-body vm-body">
+      <section class="vm-hero"><h3>Личная Linux-машина в браузере</h3><p class="muted-sm">Запускается за несколько секунд. Одна машина на аккаунт, 1,5 ГБ RAM и один общий час в неделю. Все машины вместе работают в пуле до 2 потоков CPU.</p></section>
+      <div class="vm-stats"><div class="vm-stat"><span>ПАМЯТЬ</span><b>1,5 ГБ RAM</b></div><div class="vm-stat"><span>НЕДЕЛЬНЫЙ ЛИМИТ</span><b id="vmRemaining">60 мин</b></div><div class="vm-stat"><span>ОБЩИЙ CPU-ПУЛ</span><b>2 потока</b></div></div>
+      <div class="vm-status-line"><span class="vm-state" id="vmState"><i></i><span>Проверяем…</span></span><span class="muted-sm" id="vmReset">—</span></div>
+      <div class="vm-progress" aria-label="Использование недельного времени"><i id="vmProgress"></i></div>
+      <div class="vm-actions"><button type="button" class="primary" id="vmStart">Запустить машину</button><button type="button" class="danger-button" id="vmStop" disabled>Остановить</button><button type="button" id="vmRefresh">Обновить</button></div>
+      <pre class="vm-terminal" id="vmTerminal">Clop VM Beta\nВойдите и нажмите «Запустить машину».</pre>
+      <div class="vm-command-row"><input id="vmCommand" maxlength="1000" autocomplete="off" spellcheck="false" placeholder="Например: uname -a"><button type="button" id="vmRun" disabled>Выполнить</button></div>
+      <div class="vm-note">Машина изолирована от сервера, домашние файлы временные, интернет в бета-версии отключён. Время считается только пока машина запущена.</div>
+    </div>
+  </div>
+</div>
+
+<div id="storageOverlay" class="overlay" role="dialog" aria-modal="true" aria-labelledby="storageTitle">
+  <div class="api-modal glass storage-modal">
+    <div class="api-head"><b id="storageTitle">Облачное хранилище Clop</b><button class="modal-close" data-close="storageOverlay" aria-label="Закрыть">✕</button></div>
+    <div class="api-body storage-body">
+      <section class="storage-summary"><div class="storage-summary-head"><div><h3>Фото, файлы и резервные копии чатов</h3><span class="muted-sm" id="storageUsage">Загрузка…</span></div><b id="storagePlanSize">—</b></div><div class="storage-meter"><i id="storageProgress"></i></div></section>
+      <div class="storage-actions"><button type="button" class="primary" id="storageUpload">Загрузить файл</button><button type="button" id="storageBackup">Сохранить чаты</button><button type="button" id="storageOptimize">Оптимизировать</button><span class="muted-sm" id="storageActionState"></span><input id="storageFileInput" type="file" accept="image/*,.txt,.md,.pdf,.json,.zip" hidden></div>
+      <div class="storage-list" id="storageList"><div class="muted-sm">Загрузка…</div></div>
+    </div>
+  </div>
 </div>
 
 <div id="bugOverlay" class="overlay" role="dialog" aria-modal="true" aria-labelledby="bugTitle">
@@ -1304,6 +1341,8 @@ async function boot() {
     showApp(data);
     if (location.hash === '#bug') window.setTimeout(openBugs, 0);
     if (location.hash === '#remote') window.setTimeout(openRemote, 0);
+    if (location.hash === '#vm') window.setTimeout(openVm, 0);
+    if (location.hash === '#storage') window.setTimeout(openStorage, 0);
   } else showLogin();
 }
 
@@ -2679,6 +2718,147 @@ document.getElementById('remoteScreen').addEventListener('click', event => {
   sendRemoteCommand('click',{x,y}); setTimeout(() => sendRemoteCommand('screenshot'),700);
 });
 window.addEventListener('hashchange', () => { if (location.hash === '#remote' && document.getElementById('app').style.display !== 'none') openRemote(); });
+
+/* ---------------- Clop Virtual Machine Beta ---------------- */
+const vmUi = { running:false, busy:false, timer:null };
+
+function vmMinutes(ms) {
+  const seconds = Math.max(0, Math.ceil(Number(ms || 0) / 1000));
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
+function renderVm(data) {
+  const stateEl = document.getElementById('vmState');
+  const stateText = stateEl.querySelector('span');
+  const terminal = document.getElementById('vmTerminal');
+  const available = data?.available !== false;
+  vmUi.running = Boolean(data?.running);
+  stateEl.classList.toggle('running', vmUi.running);
+  stateText.textContent = !available ? 'Сервис временно недоступен' : vmUi.running ? 'Машина запущена' : 'Машина остановлена';
+  document.getElementById('vmRemaining').textContent = data?.quota ? vmMinutes(data.quota.remainingMs) : '—';
+  document.getElementById('vmProgress').style.width = `${Math.max(0, Math.min(100, Number(data?.quota?.percent || 0)))}%`;
+  document.getElementById('vmReset').textContent = data?.quota?.resetAt ? `Сброс: ${new Date(data.quota.resetAt).toLocaleString('ru-RU', {weekday:'short',hour:'2-digit',minute:'2-digit'})}` : '—';
+  document.getElementById('vmStart').disabled = vmUi.busy || !available || vmUi.running || Number(data?.quota?.remainingMs || 0) <= 0;
+  document.getElementById('vmStop').disabled = vmUi.busy || !vmUi.running;
+  document.getElementById('vmRun').disabled = vmUi.busy || !vmUi.running;
+  if (data?.error) terminal.textContent = `Ошибка: ${data.error}`;
+}
+
+async function vmRequest(path, options) {
+  return fetch(path, options).then(r => r.json()).catch(() => ({ ok:false, available:false, error:'Нет связи с сервером VM.' }));
+}
+
+async function loadVm() {
+  if (vmUi.busy) return;
+  const data = await vmRequest('/chat/api/vm/status');
+  renderVm(data);
+}
+
+async function vmAction(path, message) {
+  if (vmUi.busy) return;
+  vmUi.busy = true;
+  document.getElementById('vmTerminal').textContent = message;
+  renderVm({ running:vmUi.running, available:true });
+  const data = await vmRequest(path, { method:'POST', headers:{'content-type':'application/json'}, body:'{}' });
+  vmUi.busy = false;
+  renderVm(data);
+  if (data?.ok) document.getElementById('vmTerminal').textContent = data.running ? 'Clop VM Beta готова.\nВведите команду ниже.' : 'Машина остановлена. Использованное время сохранено.';
+}
+
+async function runVmCommand() {
+  const input = document.getElementById('vmCommand');
+  const command = input.value.trim();
+  if (!command || vmUi.busy || !vmUi.running) return;
+  vmUi.busy = true;
+  document.getElementById('vmRun').disabled = true;
+  const terminal = document.getElementById('vmTerminal');
+  terminal.textContent += `\n\n$ ${command}\n`;
+  const data = await vmRequest('/chat/api/vm/command', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ command }) });
+  vmUi.busy = false;
+  input.value = '';
+  if (data?.output) terminal.textContent += data.output;
+  else if (data?.error) terminal.textContent += `Ошибка: ${data.error}`;
+  renderVm(data);
+  terminal.scrollTop = terminal.scrollHeight;
+}
+
+async function openVm() {
+  openModal('vmOverlay');
+  await loadVm();
+  clearInterval(vmUi.timer);
+  vmUi.timer = setInterval(() => {
+    if (document.getElementById('vmOverlay').style.display === 'flex') loadVm();
+  }, 5000);
+}
+
+document.getElementById('vmBtn').addEventListener('click', openVm);
+document.getElementById('vmStart').addEventListener('click', () => vmAction('/chat/api/vm/start', 'Запускаем изолированную Linux-машину…'));
+document.getElementById('vmStop').addEventListener('click', () => vmAction('/chat/api/vm/stop', 'Останавливаем машину и сохраняем использованное время…'));
+document.getElementById('vmRefresh').addEventListener('click', loadVm);
+document.getElementById('vmRun').addEventListener('click', runVmCommand);
+document.getElementById('vmCommand').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); runVmCommand(); } });
+window.addEventListener('hashchange', () => { if (location.hash === '#vm' && document.getElementById('app').style.display !== 'none') openVm(); });
+
+/* ---------------- Облачное хранилище ---------------- */
+function bytesLabel(value) {
+  const bytes = Math.max(0, Number(value || 0));
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toLocaleString('ru-RU', { maximumFractionDigits: 2 })} ГБ`;
+  return `${(bytes / 1024 ** 2).toLocaleString('ru-RU', { maximumFractionDigits: 1 })} МБ`;
+}
+
+function renderStorage(data) {
+  if (!data?.ok) {
+    document.getElementById('storageActionState').textContent = data?.error || 'Не удалось загрузить хранилище.';
+    return;
+  }
+  document.getElementById('storageUsage').textContent = `${bytesLabel(data.usedBytes)} занято · ${bytesLabel(data.freeBytes)} свободно`;
+  document.getElementById('storagePlanSize').textContent = `из ${bytesLabel(data.quotaBytes)}`;
+  document.getElementById('storageProgress').style.width = `${Math.max(0, Math.min(100, Number(data.percent || 0)))}%`;
+  const list = document.getElementById('storageList');
+  list.innerHTML = data.files?.length ? data.files.map(file => `<div class="storage-row"><span class="storage-icon">${file.kind === 'photo' ? '▧' : file.kind === 'chat-backup' ? '↻' : '↓'}</span><span class="storage-copy"><b>${escapeHtml(file.name)}</b><small>${bytesLabel(file.size)} · ${new Date(file.createdAt).toLocaleString('ru-RU')}</small></span><a href="${escapeHtml(file.downloadUrl)}">Скачать</a><button type="button" data-storage-delete="${escapeHtml(file.id)}">Удалить</button></div>`).join('') : '<div class="muted-sm">Хранилище пустое. Загрузите фото или сохраните резервную копию чатов.</div>';
+  list.querySelectorAll('[data-storage-delete]').forEach(button => button.addEventListener('click', async () => {
+    button.disabled = true;
+    const result = await vmRequest('/chat/api/storage/delete', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ id:button.dataset.storageDelete }) });
+    renderStorage(result);
+  }));
+}
+
+async function loadStorage() {
+  const data = await vmRequest('/chat/api/storage');
+  renderStorage(data);
+}
+
+async function openStorage() {
+  openModal('storageOverlay');
+  document.getElementById('storageActionState').textContent = '';
+  await loadStorage();
+}
+
+document.getElementById('storageBtn').addEventListener('click', openStorage);
+document.getElementById('storageUpload').addEventListener('click', () => document.getElementById('storageFileInput').click());
+document.getElementById('storageFileInput').addEventListener('change', async event => {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  const status = document.getElementById('storageActionState');
+  if (file.size > 20 * 1024 * 1024) { status.textContent = 'Файл больше 20 МБ.'; event.target.value = ''; return; }
+  status.textContent = 'Загружаем…';
+  const data = await new Promise(resolve => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => resolve(''); reader.readAsDataURL(file); });
+  const result = await vmRequest('/chat/api/storage/upload', { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ name:file.name, mime:file.type || 'application/octet-stream', kind:file.type.startsWith('image/') ? 'photo' : 'file', data }) });
+  status.textContent = result?.ok ? (result.deduplicated ? 'Файл добавлен без повторного расхода места.' : 'Файл сохранён.') : result?.error || 'Ошибка загрузки.';
+  event.target.value = '';
+  renderStorage(result);
+});
+document.getElementById('storageBackup').addEventListener('click', async () => {
+  const status = document.getElementById('storageActionState'); status.textContent = 'Сохраняем чаты…';
+  const result = await vmRequest('/chat/api/storage/backup', { method:'POST', headers:{'content-type':'application/json'}, body:'{}' });
+  status.textContent = result?.ok ? 'Резервная копия чатов сохранена.' : result?.error || 'Ошибка.'; renderStorage(result);
+});
+document.getElementById('storageOptimize').addEventListener('click', async () => {
+  const status = document.getElementById('storageActionState'); status.textContent = 'Оптимизируем…';
+  const result = await vmRequest('/chat/api/storage/optimize', { method:'POST', headers:{'content-type':'application/json'}, body:'{}' });
+  status.textContent = result?.ok ? `Освобождено ${bytesLabel(result.optimizedBytes)}.` : result?.error || 'Ошибка.'; renderStorage(result);
+});
+window.addEventListener('hashchange', () => { if (location.hash === '#storage' && document.getElementById('app').style.display !== 'none') openStorage(); });
 
 document.getElementById('fastToggle').addEventListener('click', async () => {
   const r = await fetch('/chat/api/profile', {

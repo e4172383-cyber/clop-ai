@@ -32,6 +32,7 @@
     'themeSelect', 'animationsSetting', 'agentVisibleSetting', 'remoteRequestsSetting', 'enterSendsSetting', 'approvalModeSetting', 'modelSelect', 'effortSelect',
     'fastSetting', 'shellTimeoutSetting', 'emptyLoginButton',
     'settingsModeName', 'settingsModeDescription', 'changeModeButton', 'openBackups',
+    'cloudStorageUsage', 'cloudStorageQuota', 'cloudStorageProgress', 'cloudUploadButton', 'cloudBackupButton', 'cloudOptimizeButton', 'cloudStorageState', 'cloudFileList',
     'openTermsSettings', 'openWebsite', 'openBotBuilder', 'logoutButton', 'toastStack',
   ]) elements[id] = byId(id);
 
@@ -2144,7 +2145,55 @@
   function switchSettingsTab(tab) {
     all('[data-settings-tab]').forEach((button) => button.classList.toggle('active', button.dataset.settingsTab === tab));
     all('[data-settings-pane]').forEach((pane) => pane.classList.toggle('active', pane.dataset.settingsPane === tab));
-    elements.settingsTitle.textContent = ({ general: 'Основные', model: 'Модель', privacy: 'Доступ и данные', about: 'О приложении' })[tab] || 'Настройки';
+    elements.settingsTitle.textContent = ({ general: 'Основные', model: 'Модель', privacy: 'Доступ и данные', cloud: 'Облачное хранилище', about: 'О приложении' })[tab] || 'Настройки';
+    if (tab === 'cloud') loadCloudStorage();
+  }
+
+  function cloudBytes(value) {
+    const bytes = Math.max(0, Number(value || 0));
+    if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toLocaleString('ru-RU', { maximumFractionDigits:2 })} ГБ`;
+    return `${(bytes / 1024 ** 2).toLocaleString('ru-RU', { maximumFractionDigits:1 })} МБ`;
+  }
+
+  function renderCloudStorage(result = {}) {
+    if (!result.ok) {
+      elements.cloudStorageState.textContent = result.error || (state.loggedIn ? 'Не удалось загрузить хранилище.' : 'Нужен вход через Telegram.');
+      return;
+    }
+    elements.cloudStorageUsage.textContent = `${cloudBytes(result.usedBytes)} занято · ${cloudBytes(result.freeBytes)} свободно`;
+    elements.cloudStorageQuota.textContent = `из ${cloudBytes(result.quotaBytes)}`;
+    elements.cloudStorageProgress.style.width = `${Math.max(0, Math.min(100, Number(result.percent || 0)))}%`;
+    elements.cloudFileList.replaceChildren();
+    const files = Array.isArray(result.files) ? result.files : [];
+    if (!files.length) {
+      elements.cloudFileList.append(node('div', 'cloud-empty', 'Загрузите фото или сохраните резервную копию чатов.'));
+      return;
+    }
+    for (const file of files) {
+      const row = node('div', 'cloud-file');
+      const copy = node('span');
+      copy.append(node('b', '', file.name || 'Файл'), node('small', '', `${cloudBytes(file.size)} · ${new Date(file.createdAt).toLocaleString('ru-RU')}`));
+      const download = node('button', '', 'Скачать');
+      const remove = node('button', '', 'Удалить');
+      download.addEventListener('click', async () => {
+        try { const saved = await api.cloudDownload({ id:file.id, name:file.name }); if (saved?.ok) toast(`Сохранено: ${saved.path}`); }
+        catch (error) { toast(errorText(error), 'error'); }
+      });
+      remove.addEventListener('click', async () => {
+        if (!window.confirm(`Удалить «${file.name}» из облака?`)) return;
+        try { renderCloudStorage(await api.cloudDelete(file.id)); }
+        catch (error) { toast(errorText(error), 'error'); }
+      });
+      row.append(copy, download, remove);
+      elements.cloudFileList.append(row);
+    }
+  }
+
+  async function loadCloudStorage() {
+    if (!state.loggedIn) return renderCloudStorage({ ok:false });
+    elements.cloudStorageState.textContent = 'Синхронизация…';
+    try { const result = await api.cloudStorage(); elements.cloudStorageState.textContent = ''; renderCloudStorage(result); }
+    catch (error) { renderCloudStorage({ ok:false, error:errorText(error) }); }
   }
 
   function openSettings(tab = 'general') {
@@ -2754,6 +2803,21 @@
 
     elements.settingsButton.addEventListener('click', () => openSettings('general'));
     all('[data-settings-tab]').forEach((button) => button.addEventListener('click', () => switchSettingsTab(button.dataset.settingsTab)));
+    elements.cloudUploadButton.addEventListener('click', async () => {
+      try { elements.cloudStorageState.textContent = 'Загрузка…'; const result = await api.cloudUpload(); if (!result?.canceled) { renderCloudStorage(result); toast(result?.deduplicated ? 'Файл добавлен без повторного расхода места.' : 'Файл сохранён в облаке.'); } }
+      catch (error) { toast(errorText(error), 'error'); }
+      finally { elements.cloudStorageState.textContent = ''; }
+    });
+    elements.cloudBackupButton.addEventListener('click', async () => {
+      try { elements.cloudStorageState.textContent = 'Сохраняем чаты…'; renderCloudStorage(await api.cloudBackup()); toast('Резервная копия чатов сохранена.'); }
+      catch (error) { toast(errorText(error), 'error'); }
+      finally { elements.cloudStorageState.textContent = ''; }
+    });
+    elements.cloudOptimizeButton.addEventListener('click', async () => {
+      try { elements.cloudStorageState.textContent = 'Оптимизация…'; const result = await api.cloudOptimize(); renderCloudStorage(result); toast(`Освобождено ${cloudBytes(result.optimizedBytes)}.`); }
+      catch (error) { toast(errorText(error), 'error'); }
+      finally { elements.cloudStorageState.textContent = ''; }
+    });
     elements.changeModeButton.addEventListener('click', () => { hideModal(elements.settingsModal); document.querySelector(`[data-mode="${state.mode}"]`)?.focus(); });
     elements.openBackups.addEventListener('click', openBackups);
     const openServiceLink = async (kind) => {

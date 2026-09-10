@@ -2270,6 +2270,54 @@ function registerIpc() {
     if (request.action === 'save') return saveResponseFile(fileId);
     throw new Error('Неизвестное действие с файлом.');
   });
+  handle('cloud-storage', async () => {
+    ensureAuthenticated();
+    return apiJson('/desk/storage', { auth: true });
+  });
+  handle('cloud-upload', async () => {
+    ensureAuthenticated();
+    const picked = await dialog.showOpenDialog(mainWindow, {
+      title: 'Загрузить в облако Clop',
+      properties: ['openFile'],
+    });
+    if (picked.canceled || !picked.filePaths[0]) return { ok: false, canceled: true };
+    const filePath = picked.filePaths[0];
+    const stat = await fsp.stat(filePath);
+    if (!stat.isFile()) throw new Error('Выбранный путь не является файлом.');
+    if (stat.size > 20 * 1024 * 1024) throw new Error('Один облачный файл не может быть больше 20 МБ.');
+    const extension = path.extname(filePath).toLowerCase();
+    const mime = imageMime(filePath) || ({ '.pdf':'application/pdf', '.json':'application/json', '.txt':'text/plain', '.md':'text/markdown', '.zip':'application/zip' }[extension]) || 'application/octet-stream';
+    const content = await fsp.readFile(filePath);
+    return apiJson('/desk/storage/upload', {
+      method: 'POST', auth: true,
+      body: { name:path.basename(filePath), mime, kind:mime.startsWith('image/') ? 'photo' : 'file', data:content.toString('base64') },
+    });
+  });
+  handle('cloud-download', async (item = {}) => {
+    ensureAuthenticated();
+    const idValue = String(item.id || '');
+    if (!/^[a-f0-9-]{20,64}$/i.test(idValue)) throw new Error('Некорректный файл.');
+    const picked = await dialog.showSaveDialog(mainWindow, { title:'Сохранить из облака Clop', defaultPath:path.basename(String(item.name || 'clop-file')) });
+    if (picked.canceled || !picked.filePath) return { ok:false, canceled:true };
+    const response = await fetchWithTimeout(`${SERVER}/desk/storage/file?id=${encodeURIComponent(idValue)}`, { headers:{ Authorization:`Bearer ${token}` } }, 60_000);
+    if (!response.ok) await parseResponseError(response);
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.length > 20 * 1024 * 1024) throw new Error('Облачный файл превышает допустимый размер.');
+    await fsp.writeFile(picked.filePath, buffer);
+    return { ok:true, path:picked.filePath };
+  });
+  handle('cloud-delete', async (idValue) => {
+    ensureAuthenticated();
+    return apiJson('/desk/storage/delete', { method:'POST', auth:true, body:{ id:String(idValue || '') } });
+  });
+  handle('cloud-optimize', async () => {
+    ensureAuthenticated();
+    return apiJson('/desk/storage/optimize', { method:'POST', auth:true, body:{} });
+  });
+  handle('cloud-backup', async () => {
+    ensureAuthenticated();
+    return apiJson('/desk/storage/backup', { method:'POST', auth:true, body:{} });
+  });
   handle('chat-new', async () => {
     const chat = createChat();
     emit('chat', { chat, chats });
