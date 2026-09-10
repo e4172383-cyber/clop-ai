@@ -41,4 +41,12 @@ targets:
       - path: ClopIOSTests
     dependencies:
       - target: ClopIOS
-
+schemes:
+  ClopIOS:
+    build:
+      targets:
+        ClopIOS: all
+        ClopIOSTests: [test]
+    test:
+      targets:
+        - ClopIOSTests
