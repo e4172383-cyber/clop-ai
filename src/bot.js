@@ -12,6 +12,8 @@ import { wantsGeneratedImage } from './image-intent.js';
 import { createImageJob, imageJobRecoveryAction, prepareImageJobRetry } from './image-job.js';
 import { addOfferUsage, claimOffer, offerActiveFor, offerState } from './limited-offer.js';
 import { recordProviderResult } from './provider-status.js';
+import * as vms from './vms.js';
+import { runVmAgent, vmSafeDelta } from './vm-agent.js';
 
 const DESKTOP_RELEASE = Object.freeze({
   version: '2.4.4',
@@ -28,26 +30,47 @@ const DESKTOP_RELEASE = Object.freeze({
 // английскую ошибку про токен и не понял бы, что делать
 const AUTH_BROKEN = /revoked|refresh|unauthorized|401|not logged in|log in again|re-login|no credential configured|authorization grant is invalid|invalid_grant/i;
 
-export async function askModel({ chat, model, effortKey, prompt, onDelta, images, fast = false, signal, client = 'chat' }) {
+export async function askModel({ chat, model, effortKey, prompt, onDelta, images, fast = false, signal, client = 'chat', userId = null }) {
   return runModelJob(async () => {
-    if (model?.runtime === 'kimi') {
-      const r = await kimiAsk({ chat, modelCli: model.cli, kimiEffort: model.kimiEffort, prompt, onDelta, signal, client });
-      recordProviderResult('kimi', r);
-      if (!r.ok && AUTH_BROKEN.test(String(r.error || ''))) {
-        return { ...r, provider: 'kimi', error: 'Вход Kimi временно недоступен. Владелец сервиса уже может проверить авторизацию.' };
+    const workingChat = { ...chat, messages: [...(chat.messages || [])] };
+    let modelCalls = 0;
+    const invokeModel = async (nextPrompt, nextDelta = undefined) => {
+      const callImages = modelCalls === 0 ? images : undefined;
+      modelCalls += 1;
+      let result;
+      if (model?.runtime === 'kimi') {
+        const r = await kimiAsk({ chat: workingChat, modelCli: model.cli, kimiEffort: model.kimiEffort, prompt: nextPrompt, onDelta: nextDelta, signal, client });
+        recordProviderResult('kimi', r);
+        result = !r.ok && AUTH_BROKEN.test(String(r.error || ''))
+          ? { ...r, provider: 'kimi', error: 'Вход Kimi временно недоступен. Владелец сервиса уже может проверить авторизацию.' }
+          : { ...r, provider: 'kimi' };
+      } else {
+        const selected = model?.runtime === 'gpt' || model?.provider === 'gpt' ? model : MODELS[DEFAULT_MODEL];
+        const r = await gptAsk({ chat: workingChat, modelCli: selected.cli, prompt: nextPrompt, onDelta: nextDelta, images: callImages,
+          fixedEffort: selected.fixedEffort || (selected.supportsEffort ? effortKey : undefined),
+          hideIdentity: selected.hideIdentity, identityTitle: selected.hideIdentity ? selected.title : undefined,
+          fast, signal });
+        recordProviderResult(selected.provider, r);
+        result = !r.ok && AUTH_BROKEN.test(String(r.error || ''))
+          ? { ...r, provider: selected.provider, runtime: 'gpt', error: 'Модель временно недоступна. Владелец сервиса уже может проверить подключение.' }
+          : { ...r, provider: selected.provider, runtime: 'gpt' };
       }
-      return { ...r, provider: 'kimi' };
-    }
-    const selected = model?.runtime === 'gpt' || model?.provider === 'gpt' ? model : MODELS[DEFAULT_MODEL];
-    const r = await gptAsk({ chat, modelCli: selected.cli, prompt, onDelta, images,
-      fixedEffort: selected.fixedEffort || (selected.supportsEffort ? effortKey : undefined),
-      hideIdentity: selected.hideIdentity, identityTitle: selected.hideIdentity ? selected.title : undefined,
-      fast, signal });
-    recordProviderResult(selected.provider, r);
-    if (!r.ok && AUTH_BROKEN.test(String(r.error || ""))) {
-      return { ...r, provider: selected.provider, runtime: 'gpt', error: 'Модель временно недоступна. Владелец сервиса уже может проверить подключение.' };
-    }
-    return { ...r, provider: selected.provider, runtime: 'gpt' };
+      if (result.ok) {
+        if (result.runtime === 'gpt' && result.threadId) workingChat.gptThreadId = result.threadId;
+        workingChat.messages.push({ role: 'user', content: nextPrompt }, { role: 'assistant', content: result.text });
+      }
+      return result;
+    };
+
+    if (!userId || !vms.enabled()) return invokeModel(prompt, onDelta);
+    const session = vms.onDemandSession(userId);
+    return runVmAgent({
+      prompt,
+      invokeModel: (nextPrompt) => invokeModel(nextPrompt, vmSafeDelta(onDelta)),
+      executeCommand: (commandText) => session.execute(commandText),
+      cleanup: () => session.cleanup(),
+      onDelta,
+    });
   }, signal);
 }
 import * as sites from './sites.js';
@@ -63,6 +86,11 @@ import { claimCode } from './weblogin.js';
 import { STARS_PER_USD, MIN_TOPUP_STARS, MAX_TOPUP_STARS, starsToMicros, microsToUsd, purchaseBonus } from './billing.js';
 
 const busy = new Set();
+const siteQuotaPlan = (u) => {
+  const effective = planOf(u);
+  const personalPaid = u.plan && u.plan !== 'free' && (!u.proUntil || u.proUntil > Date.now());
+  return effective.teamId || personalPaid ? 'paid' : 'free';
+};
 
 // Render работает в UTC, поэтому часовой пояс указываем явно. Иначе даты в
 // сообщениях бота отстают от времени пользователя в Киеве.
@@ -750,7 +778,7 @@ async function handleAsk(u, chatId, text, images = null) {
 
   try {
     const fast = model.provider === 'gpt' && u.fast === true;
-    const res = await askModel({ chat, model, effortKey: effort.key, prompt: text, onDelta, images, fast });
+    const res = await askModel({ chat, model, effortKey: effort.key, prompt: text, onDelta, images, fast, userId: u.id });
     clearInterval(spinTicker);
     clearInterval(typingTicker);
 
@@ -799,11 +827,14 @@ async function handleAsk(u, chatId, text, images = null) {
     let siteLine = '';
     const foundSite = sites.findSite(res.text, files);
     if (foundSite) {
-      const pub = await sites.publish(u.id, foundSite);
+      const pub = await sites.publish(u.id, foundSite, siteQuotaPlan(u));
       if (pub.ok) siteLine = `
 
 🌐 Сайт опубликован — постоянная ссылка: ${pub.url}`;
-      else console.warn('[sites]', pub.error);
+      else {
+        console.warn('[sites]', pub.error);
+        siteLine = `\n\n⚠️ ${pub.error}`;
+      }
     }
     console.log(`[files] найдено=${files.length} truncated=${truncated || '-'} stopReason=${res.stopReason || '-'}`);
 
@@ -987,11 +1018,12 @@ async function onCommand(u, chatId, cmd, rawText = '') {
 
 async function sitesText(u) {
   const list = await sites.listSites(u.id);
+  const limit = sites.siteLimit(siteQuotaPlan(u));
   const lines = ['🌐 *Мои сайты*', ''];
   if (!list.length) {
     lines.push('Пока пусто. Попросите сделать сайт — например «сделай сайт-визитку про кофейню» — и в ответ придёт постоянная ссылка.');
   } else {
-    lines.push(`Опубликовано: *${list.length}* из ${sites.MAX_SITES_PER_USER}. Ссылки постоянные, пока их не удалить.`, '');
+    lines.push(`Опубликовано: *${list.length}* из ${limit}. Ссылки постоянные, пока их не удалить.`, '');
     for (const it of list) lines.push(`• [${it.title}](${PUBLIC_URL}/s/${it.slug})`);
   }
   return lines.join('\n');

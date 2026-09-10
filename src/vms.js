@@ -32,3 +32,22 @@ export const status = (userId) => request('/v1/status', userId);
 export const start = (userId) => request('/v1/start', userId);
 export const stop = (userId) => request('/v1/stop', userId);
 export const command = (userId, commandText) => request('/v1/command', userId, { command: String(commandText || '') });
+
+export function onDemandSession(userId) {
+  let startedHere = false;
+  return {
+    async execute(commandText) {
+      let current = await status(userId);
+      if (!current.ok) return current;
+      if (!current.running) {
+        current = await start(userId);
+        if (!current.ok) return current;
+        startedHere = true;
+      }
+      return command(userId, commandText);
+    },
+    async cleanup() {
+      if (startedHere) await stop(userId);
+    },
+  };
+}

@@ -22,7 +22,13 @@ const mem = new Map();
 const memIdx = new Map();
 
 export const MAX_SITE_BYTES = 1_000_000;
-export const MAX_SITES_PER_USER = 60;
+export const FREE_SITES_PER_USER = 3;
+export const PAID_SITES_PER_USER = 10;
+export const MAX_SITES_PER_USER = PAID_SITES_PER_USER;
+
+export function siteLimit(planKey) {
+  return String(planKey || 'free') === 'free' ? FREE_SITES_PER_USER : PAID_SITES_PER_USER;
+}
 
 const TYPES = {
   html: 'text/html; charset=utf-8', htm: 'text/html; charset=utf-8',
@@ -111,13 +117,14 @@ function titleOf(html) {
   return (m ? m[1] : '').trim() || 'Сайт';
 }
 
-export async function publish(userId, site) {
+export async function publish(userId, site, planKey = 'free') {
   const total = Object.values(site.files).reduce((n, c) => n + Buffer.byteLength(c, 'utf8'), 0);
   if (total > MAX_SITE_BYTES) return { ok: false, error: 'сайт слишком большой' };
 
   const list = await readIndex(userId);
-  if (list.length >= MAX_SITES_PER_USER) {
-    return { ok: false, error: `можно хранить не больше ${MAX_SITES_PER_USER} сайтов — удалите старые через /sites` };
+  const limit = siteLimit(planKey);
+  if (list.length >= limit) {
+    return { ok: false, error: `Достигнут лимит: ${limit} сайтов на вашем тарифе. Удалите старый сайт через /sites и повторите публикацию.` };
   }
 
   let slug = slugId();
@@ -132,7 +139,7 @@ export async function publish(userId, site) {
 
   list.unshift({ slug, title, ts: Date.now() });
   await writeIndex(userId, list);
-  return { ok: true, slug, url: `${PUBLIC_URL}/s/${slug}`, title, bytes: total };
+  return { ok: true, slug, url: `${PUBLIC_URL}/s/${slug}`, title, bytes: total, limit, count: list.length };
 }
 
 export async function getFile(slug, path) {

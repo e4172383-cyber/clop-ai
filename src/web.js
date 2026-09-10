@@ -1255,7 +1255,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
             u.effort = effortKey;
             if (typeof body.fast === 'boolean') u.fast = body.fast;
             const fast = model.provider === 'gpt' && u.fast === true;
-            const r = await askModelImpl({ chat, model, effortKey, prompt, images, onDelta: sendDelta, fast, signal: requestAbort.signal, client: 'desktop' });
+            const r = await askModelImpl({ chat, model, effortKey, prompt, images, onDelta: sendDelta, fast, signal: requestAbort.signal, client: 'desktop', userId: u.id });
             if (clientGone) {
               chat.messages.splice(chatBefore.length);
               chat.title = chatBefore.title;
@@ -2106,7 +2106,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           const fast = model.provider === 'gpt' && u.fast === true;
           // Текущий prompt передаётся отдельным аргументом и появится в истории
           // только после успеха, поэтому transcript не повторяет его дважды.
-          const r = await askModelImpl({ chat, model, effortKey, prompt, images: siteImages, fast });
+          const r = await askModelImpl({ chat, model, effortKey, prompt, images: siteImages, fast, userId: u.id });
           if (!r.ok) return sendJson(res, 502, { ok: false, error: r.error });
           const tokens = r.tokens || {};
 
@@ -2123,11 +2123,16 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           }
           // Если в ответе лежит готовый сайт — издаём его и дописываем ссылку
           let siteUrl = null;
+          let siteError = '';
           const found = sites.findSite(r.text, files);
           if (found) {
-            const pub = await sites.publish(u.id, found);
+            const personalPaid = u.plan && u.plan !== 'free' && (!u.proUntil || u.proUntil > Date.now());
+            const pub = await sites.publish(u.id, found, plan.teamId || personalPaid ? 'paid' : 'free');
             if (pub.ok) siteUrl = pub.url;
-            else console.warn('[sites]', pub.error);
+            else {
+              console.warn('[sites]', pub.error);
+              siteError = pub.error;
+            }
           }
           let displayText = (files.length || truncated)
             ? (cleanText || (files.length ? `📦 Готово — ${files.length} файл(ов), архив ниже.` : ''))
@@ -2136,6 +2141,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
             const notice = `⚠️ Файл «${truncated}» не был завершён моделью; частичный текст сохранён в контексте.`;
             displayText = [displayText, notice].filter(Boolean).join('\n\n');
           }
+          if (siteError) displayText = [displayText, `⚠️ ${siteError}`].filter(Boolean).join('\n\n');
           if (siteUrl) displayText += `
 
 🌐 Сайт опубликован — постоянная ссылка: ${siteUrl}`;

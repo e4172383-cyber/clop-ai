@@ -9,7 +9,7 @@ const SECRET = process.env.VM_INTERNAL_SECRET || '';
 const DATA_DIR = process.env.DATA_DIR || '/data';
 const STATE_FILE = path.join(DATA_DIR, 'usage.json');
 const DOCKER_SOCKET = process.env.DOCKER_SOCKET || '/var/run/docker.sock';
-const VM_IMAGE = process.env.VM_IMAGE || 'alpine:3.20';
+const VM_IMAGE = process.env.VM_IMAGE || 'clop-vm-runtime:1';
 const VM_MEMORY = 1536 * 1024 * 1024;
 const VM_CPU = 2_000_000_000;
 const MAX_BODY = 16_000;
@@ -99,7 +99,7 @@ function publicState(userId, now = Date.now(), error = '') {
     ok: !error,
     version: '0.1 Beta',
     running: Boolean(record.containerId && record.activeStartedAt),
-    machine: { os: 'Clop Linux Beta', ramMb: 1536, cpuPool: 2, network: false },
+    machine: { os: 'Clop Linux Beta', ramMb: 1536, cpuPool: 2, network: false, runtimes: ['shell', 'nodejs-22', 'python3'] },
     quota,
     ...(error ? { error } : {}),
   };
@@ -148,6 +148,7 @@ async function startVm(userId) {
   try { await docker('DELETE', `/containers/${encodeURIComponent(name)}?force=true&v=true`); } catch {}
   const created = await docker('POST', `/containers/create?name=${encodeURIComponent(name)}`, {
     Image: VM_IMAGE,
+    User: '1000:1000',
     Cmd: ['sh', '-lc', 'trap : TERM INT; while :; do sleep 3600; done'],
     WorkingDir: '/home/clop',
     Labels: { 'clop.vm': 'beta', 'clop.vm.user': suffix },
@@ -164,7 +165,7 @@ async function startVm(userId) {
       CgroupParent: 'clop-vms.slice',
       Tmpfs: {
         '/tmp': 'rw,noexec,nosuid,nodev,size=256m,mode=1777',
-        '/home/clop': 'rw,nosuid,nodev,size=768m,mode=0700',
+        '/home/clop': 'rw,nosuid,nodev,size=768m,mode=0700,uid=1000,gid=1000',
       },
     },
   });
@@ -200,7 +201,12 @@ async function runCommand(userId, commandText) {
     Cmd: ['timeout', '15', 'sh', '-lc', command],
   });
   const output = await docker('POST', `/exec/${encodeURIComponent(created.Id)}/start`, { Detach: false, Tty: true }, { timeoutMs: 18_000 });
-  return { ...publicState(userId), output: String(output || '').slice(-64_000) };
+  const inspected = await docker('GET', `/exec/${encodeURIComponent(created.Id)}/json`).catch(() => null);
+  return {
+    ...publicState(userId),
+    output: String(output || '').slice(-64_000),
+    exitCode: Number.isInteger(inspected?.ExitCode) ? inspected.ExitCode : null,
+  };
 }
 
 async function withLock(userId, operation) {

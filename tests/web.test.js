@@ -68,6 +68,7 @@ const okResult = (overrides = {}) => ({
 async function fakeAsk(args) {
   modelCalls.push({
     client: args.client || 'chat',
+    userId: args.userId || null,
     prompt: args.prompt,
     messages: args.chat.messages.map((message) => ({ role: message.role, content: message.content })),
     imageDir: args.images?.dir || null,
@@ -481,6 +482,7 @@ test('/desk/chat marks the request as a desktop action client', async () => {
   assert.equal(response.status, 200);
   assert.equal((await response.json()).ok, true);
   assert.equal(modelCalls[0].client, 'desktop');
+  assert.equal(modelCalls[0].userId, user.id);
 });
 
 test('a user can submit a bug and the admin can accept it with one idempotent reward', async () => {

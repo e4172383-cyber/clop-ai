@@ -1030,14 +1030,14 @@
   <div class="api-modal glass vm-modal">
     <div class="api-head"><b id="vmTitle">Clop Virtual Machine <span class="remote-beta">Beta</span></b><button class="modal-close" data-close="vmOverlay" aria-label="Закрыть">✕</button></div>
     <div class="api-body vm-body">
-      <section class="vm-hero"><h3>Личная Linux-машина в браузере</h3><p class="muted-sm">Запускается за несколько секунд. Одна машина на аккаунт, 1,5 ГБ RAM и один общий час в неделю. Все машины вместе работают в пуле до 2 потоков CPU.</p></section>
+      <section class="vm-hero"><h3>Linux-машина для вас и ИИ</h3><p class="muted-sm">Запускайте команды вручную или просто попросите ИИ проверить код, выполнить вычисление либо воспроизвести ошибку — Clop сам включит VM по необходимости. Одна машина на аккаунт, 1,5 ГБ RAM и один общий час в неделю.</p></section>
       <div class="vm-stats"><div class="vm-stat"><span>ПАМЯТЬ</span><b>1,5 ГБ RAM</b></div><div class="vm-stat"><span>НЕДЕЛЬНЫЙ ЛИМИТ</span><b id="vmRemaining">60 мин</b></div><div class="vm-stat"><span>ОБЩИЙ CPU-ПУЛ</span><b>2 потока</b></div></div>
       <div class="vm-status-line"><span class="vm-state" id="vmState"><i></i><span>Проверяем…</span></span><span class="muted-sm" id="vmReset">—</span></div>
       <div class="vm-progress" aria-label="Использование недельного времени"><i id="vmProgress"></i></div>
       <div class="vm-actions"><button type="button" class="primary" id="vmStart">Запустить машину</button><button type="button" class="danger-button" id="vmStop" disabled>Остановить</button><button type="button" id="vmRefresh">Обновить</button></div>
       <pre class="vm-terminal" id="vmTerminal">Clop VM Beta\nВойдите и нажмите «Запустить машину».</pre>
       <div class="vm-command-row"><input id="vmCommand" maxlength="1000" autocomplete="off" spellcheck="false" placeholder="Например: uname -a"><button type="button" id="vmRun" disabled>Выполнить</button></div>
-      <div class="vm-note">Машина изолирована от сервера, домашние файлы временные, интернет в бета-версии отключён. Время считается только пока машина запущена.</div>
+      <div class="vm-note">Машина изолирована от сервера, домашние файлы временные, интернет в бета-версии отключён. Если VM запустил ИИ, она автоматически остановится после ответа и не будет расходовать время в фоне.</div>
     </div>
   </div>
 </div>
