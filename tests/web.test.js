@@ -578,6 +578,48 @@ test('the limited offer unlocks Astra and keeps its covered usage outside plan l
   assert.equal((await answer.json()).limits.gpt.short.percent, 0);
 });
 
+test('cloud API recognizes the Astra offer and charges its own balance first', async () => {
+  user.limitedOffer = {
+    id: config.LIMITED_OFFER.id,
+    claimedAt: Date.now(),
+    until: Date.now() + 60_000,
+    usedByModel: { 'gpt-astra': 0, 'kimi-k3': 0 },
+  };
+  const headers = {
+    'content-type': 'application/json',
+    'x-internal-secret': process.env.CLOUD_INTERNAL_SECRET,
+  };
+
+  const gateResponse = await fetch(baseUrl + '/internal/limit-check', {
+    method: 'POST', headers,
+    body: JSON.stringify({ telegramUserId: user.id, provider: 'gpt', model: 'gpt-astra', billingMode: 'subscription' }),
+  });
+  assert.equal(gateResponse.status, 200);
+  const gate = await gateResponse.json();
+  assert.equal(gate.allowed, true);
+  assert.equal(gate.modelAllowed, true);
+  assert.equal(gate.offerActive, true);
+  assert.ok(gate.availableModels.includes('gpt-astra'));
+
+  const usageResponse = await fetch(baseUrl + '/internal/api-usage', {
+    method: 'POST', headers,
+    body: JSON.stringify({
+      telegramUserId: user.id,
+      model: 'gpt-astra',
+      rawBillable: 18,
+      billable: 108,
+      billingMode: 'subscription',
+      requestId: 'offer-cloud-api-test',
+    }),
+  });
+  assert.equal(usageResponse.status, 200);
+  assert.equal(user.limitedOffer.usedByModel['gpt-astra'], 18);
+  assert.equal(user.usage.at(-1).offerCovered, 18);
+  assert.equal(user.usage.at(-1).offerBonus, true);
+  assert.equal(user.usage.at(-1).billable, 0);
+  assert.equal(user.usage.at(-1).total, 18);
+});
+
 test('offer claim and expiry are calculated from server time', () => {
   assert.deepEqual(config.LIMITED_OFFER.budgets, { 'gpt-astra': 10_000_000, 'kimi-k3': 1_000_000 });
   assert.equal(config.LIMITED_OFFER.claimDurationMs, 60 * 60 * 1000);

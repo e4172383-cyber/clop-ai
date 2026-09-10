@@ -696,12 +696,25 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           return sendJson(res, 200, { ok: true, allowed, plan: 'coderplus', billingMode: 'payg', reason: allowed ? null : priced ? 'Недостаточно средств. Пополните баланс минимум на $1.' : 'Для этой модели не настроена цена.' });
         }
         const plan = planOf(u);
+        const requestedModel = MODELS[String(body.model || '')] || null;
+        const modelAllowed = requestedModel ? modelAvailableTo(u, requestedModel) : true;
+        const usingOffer = requestedModel ? offerActiveFor(u, requestedModel.key) : false;
+        const availableModels = Object.values(MODELS)
+          .filter((model) => modelAvailableTo(u, model))
+          .map((model) => model.key);
         const { blocked } = checkLimits(u, provider);
+        const allowed = modelAllowed && (usingOffer || !blocked);
         return sendJson(res, 200, {
           ok: true,
-          allowed: !blocked,
+          allowed,
           plan: plan.key,
-          reason: blocked
+          requestedModel: requestedModel?.key || '',
+          modelAllowed,
+          availableModels,
+          offerActive: usingOffer,
+          reason: !modelAllowed
+            ? 'Модель недоступна на вашем тарифе.'
+            : blocked && !usingOffer
             ? `Общий лимит на ${blocked.title} исчерпан — обновится через ${humanLeft(blocked.resetAt - Date.now())}.`
             : null,
         });
@@ -737,11 +750,22 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           await store.save({ strict: true });
           return sendJson(res, 200, { ok: true, duplicate: true });
         }
+        // billable уже содержит вес модели для общего тарифа, rawBillable —
+        // фактические токены. Акция расходуется в фактических токенах; обычный
+        // лимит получает только взвешенный остаток, который акция не покрыла.
+        const rawBillable = Math.max(0, Number(body.rawBillable ?? billable) || 0);
+        const offerCovered = addOfferUsage(u, modelKey, rawBillable);
+        const uncoveredRatio = rawBillable > 0
+          ? Math.max(0, rawBillable - offerCovered) / rawBillable
+          : 1;
+        const chargeableBillable = Math.max(0, Math.round(billable * uncoveredRatio));
+        const offerBonus = offerCovered > 0 && chargeableBillable === 0;
         store.addUsage(u, {
           ts: Date.now(), chatId: null, model: modelKey || DEFAULT_MODEL,
           effort: null, plan: planOf(u).key,
           input: 0, output: 0, cacheWrite: 0, cacheRead: 0,
-          total: billable, billable, billingVersion: BILLING_VERSION,
+          total: rawBillable, billable: chargeableBillable, billingVersion: BILLING_VERSION,
+          offerBonus, offerCovered,
           costUsd: 0, durationMs: 0, source: 'cloud-api', requestId,
         });
         await store.save({ strict: true });
