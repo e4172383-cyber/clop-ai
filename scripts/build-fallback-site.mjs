@@ -13,6 +13,7 @@ let html = fs.readFileSync(sourcePath, 'utf8');
 html = html
   .replaceAll('href="/downloads/', `href="${releaseBase}/`)
   .replaceAll('href="/chat#bots"', 'href="#service-status"')
+  .replaceAll('href="/chat#iphone"', `href="${apiBase}/chat#iphone"`)
   .replaceAll('href="/chat#remote"', 'href="#service-status"')
   .replaceAll('href="/chat#bug"', `href="${releasePage}"`)
   .replace('>Создать Telegram-бота <span>↗</span></a>', '>Чат временно переносится <span>↗</span></a>')

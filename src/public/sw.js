@@ -1,10 +1,10 @@
 // Минимальный service worker: нужен, чтобы приложение считалось
 // устанавливаемым и показывало понятный экран без сети.
 // Ответы ИИ и данные аккаунта НЕ кэшируем — они всегда идут с сервера.
-const SHELL = 'clop-shell-v3';
+const SHELL = 'clop-shell-v4';
 const WORKSPACE_CSS = '/workspace.css?v=20260906-6';
-const ASSETS = ['/chat', WORKSPACE_CSS, '/icon-192.png', '/icon-512.png', '/manifest.webmanifest'];
-const CACHEABLE_PATHS = new Set(['/chat', '/workspace.css', '/icon-192.png', '/icon-512.png', '/manifest.webmanifest']);
+const ASSETS = ['/chat', WORKSPACE_CSS, '/icon-180.png', '/icon-192.png', '/icon-512.png', '/manifest.webmanifest'];
+const CACHEABLE_PATHS = new Set(['/chat', '/workspace.css', '/icon-180.png', '/icon-192.png', '/icon-512.png', '/manifest.webmanifest']);
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(SHELL).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));

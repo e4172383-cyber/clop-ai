@@ -233,6 +233,9 @@ test('serves the public desktop release page and resumable installers without da
   assert.match(page.headers.get('content-type'), /^text\/html/);
   const html = await page.text();
   assert.match(html, /Android 8/);
+  assert.match(html, /iPhone/);
+  assert.match(html, /Beta 1\.0 · PWA/);
+  assert.match(html, /href="\/chat#iphone"/);
   assert.match(html, /Clop-Code-Setup-2\.4\.3\.exe/);
   assert.match(html, /Clop-Code-2\.4\.3-linux-x64\.tar\.xz/);
   assert.match(html, /Clop-AI-Mobile-1\.0\.7\.apk/);
@@ -265,6 +268,29 @@ test('serves the public desktop release page and resumable installers without da
   const missing = await fetch(baseUrl + '/downloads/private.env');
   assert.equal(missing.status, 404);
   await missing.text();
+});
+
+test('publishes an installable iPhone beta shell with Apple metadata', async () => {
+  const chat = await fetch(baseUrl + '/chat#iphone');
+  assert.equal(chat.status, 200);
+  const html = await chat.text();
+  assert.match(html, /apple-mobile-web-app-capable" content="yes"/);
+  assert.match(html, /apple-mobile-web-app-status-bar-style" content="black-translucent"/);
+  assert.match(html, /rel="apple-touch-icon" href="\/icon-180\.png"/);
+  assert.match(html, /location\.hash === '#iphone'/);
+
+  const manifestResponse = await fetch(baseUrl + '/manifest.webmanifest');
+  assert.equal(manifestResponse.status, 200);
+  const manifest = await manifestResponse.json();
+  assert.equal(manifest.id, '/chat');
+  assert.equal(manifest.start_url, '/chat');
+  assert.equal(manifest.display, 'standalone');
+  assert.ok(manifest.icons.some((icon) => icon.sizes === '180x180'));
+
+  const worker = await fetch(baseUrl + '/sw.js');
+  assert.equal(worker.status, 200);
+  assert.equal(worker.headers.get('service-worker-allowed'), '/');
+  assert.match(await worker.text(), /clop-shell-v4/);
 });
 
 test('public status reports API and model routes without secrets or quota sizes', async () => {

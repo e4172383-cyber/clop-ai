@@ -1343,6 +1343,7 @@ async function boot() {
     if (location.hash === '#remote') window.setTimeout(openRemote, 0);
     if (location.hash === '#vm') window.setTimeout(openVm, 0);
     if (location.hash === '#storage') window.setTimeout(openStorage, 0);
+    if (location.hash === '#iphone') window.setTimeout(() => openAppInstall('ios'), 0);
   } else showLogin();
 }
 
@@ -2963,9 +2964,14 @@ function renderApp(platform) {
     .forEach((b) => b.addEventListener('click', () => renderApp(b.dataset.plat)));
 }
 
-document.getElementById('appBtn').addEventListener('click', () => {
+function openAppInstall(platform = detectPlatform()) {
   openModal('appOverlay');
-  renderApp(detectPlatform());
+  renderApp(platform);
+}
+
+document.getElementById('appBtn').addEventListener('click', () => openAppInstall());
+window.addEventListener('hashchange', () => {
+  if (location.hash === '#iphone' && document.getElementById('app').style.display !== 'none') openAppInstall('ios');
 });
 
 // Без service worker браузер не считает сайт устанавливаемым приложением
