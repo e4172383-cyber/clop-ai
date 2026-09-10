@@ -13,8 +13,9 @@ import { setBotUsername } from './src/botinfo.js';
 import { initializeLimitedOffer } from './src/limited-offer.js';
 
 const args = process.argv.slice(2);
-const noBot = args.includes('--no-bot');
-const noWeb = args.includes('--no-web');
+const envFlag = (name) => /^(1|true|yes|on)$/i.test(String(process.env[name] || '').trim());
+const noBot = args.includes('--no-bot') || envFlag('NO_BOT');
+const noWeb = args.includes('--no-web') || envFlag('NO_WEB');
 
 ensureDirs();
 await store.load();
