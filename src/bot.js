@@ -12,14 +12,12 @@ import { wantsGeneratedImage } from './image-intent.js';
 import { createImageJob, imageJobRecoveryAction, prepareImageJobRetry } from './image-job.js';
 import { addOfferUsage, claimOffer, offerActiveFor, offerState } from './limited-offer.js';
 import { recordProviderResult } from './provider-status.js';
-import * as vms from './vms.js';
-import { runVmAgent, vmSafeDelta } from './vm-agent.js';
 
 const DESKTOP_RELEASE = Object.freeze({
-  version: '2.4.4',
+  version: '2.4.5',
   released: '10.09.2026',
-  windows: 'Clop-Code-Setup-2.4.4.exe',
-  linux: 'Clop-Code-2.4.4-linux-x64.tar.xz',
+  windows: 'Clop-Code-Setup-2.4.5.exe',
+  linux: 'Clop-Code-2.4.5-linux-x64.tar.xz',
   androidVersion: '1.0.7',
   android: 'Clop-AI-Mobile-1.0.7.apk',
 });
@@ -62,15 +60,7 @@ export async function askModel({ chat, model, effortKey, prompt, onDelta, images
       return result;
     };
 
-    if (!userId || !vms.enabled()) return invokeModel(prompt, onDelta);
-    const session = vms.onDemandSession(userId);
-    return runVmAgent({
-      prompt,
-      invokeModel: (nextPrompt) => invokeModel(nextPrompt, vmSafeDelta(onDelta)),
-      executeCommand: (commandText) => session.execute(commandText),
-      cleanup: () => session.cleanup(),
-      onDelta,
-    });
+    return invokeModel(prompt, onDelta);
   }, signal);
 }
 import * as sites from './sites.js';
@@ -814,7 +804,6 @@ async function handleAsk(u, chatId, text, images = null) {
     const after = offerBonus ? [] : checkLimits(u, model.provider).states;
     const warn = after.find((s) => s.percent >= 85);
     let footer = warn ? `\n\n_Общий лимит · ${warn.title}: использовано ${warn.percent}%_` : '';
-    if (res.vm?.used) footer += `\n\n_Clop VM · выполнено команд: ${res.vm.commands.length}_`;
     // Контекст диалога почти заполнил окно модели — предлагаем сжать
     const ctxPercent = contextPercent(chat, model);
     if (ctxPercent >= 99) {

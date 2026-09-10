@@ -39,11 +39,12 @@ try {
     import('../src/config.js'),
     import('../src/desktop.js'),
     import('../src/limited-offer.js'),
+    import('../src/sites.js'),
   ]);
 } finally {
   globalThis.setInterval = realSetInterval;
 }
-const [web, store, webchat, config, desktop, limitedOffer] = modules;
+const [web, store, webchat, config, desktop, limitedOffer, sites] = modules;
 
 assert.equal(store.redisClient(), null, 'node:test must never connect to a configured production Redis');
 
@@ -143,6 +144,60 @@ test('/chat/api/plans publishes corporate prices and seats without exposing toke
   assert.equal(body.plans.some((p) => Object.hasOwn(p, 'limits')), false);
 });
 
+test('site management lists, renames and deletes only the signed-in user sites', async () => {
+  const made = await sites.publish(user.id, {
+    files: { 'index.html': '<!doctype html><title>Первый сайт</title><p>ok</p>' },
+    entry: 'index.html',
+  }, 'free');
+  assert.equal(made.ok, true);
+
+  const listed = await authed('/chat/api/sites').then((response) => response.json());
+  assert.equal(listed.ok, true);
+  assert.equal(listed.limit, 3);
+  assert.equal(listed.sites.some((site) => site.slug === made.slug && site.url.endsWith(`/s/${made.slug}`)), true);
+
+  const renamed = await authed('/chat/api/sites/rename', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ slug: made.slug, title: 'Новый заголовок' }),
+  }).then((response) => response.json());
+  assert.equal(renamed.ok, true);
+  assert.equal((await sites.listSites(user.id)).find((site) => site.slug === made.slug).title, 'Новый заголовок');
+
+  const deleted = await authed('/chat/api/sites/delete', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ slug: made.slug }),
+  }).then((response) => response.json());
+  assert.equal(deleted.ok, true);
+  assert.equal(await sites.getFile(made.slug, ''), null);
+});
+
+test('web chat deletes the latest owned site without calling a model or charging quota', async () => {
+  const made = await sites.publish(user.id, {
+    files: { 'index.html': '<!doctype html><title>Магазин</title><p>ok</p>' },
+    entry: 'index.html',
+  }, 'free');
+  assert.equal(made.ok, true);
+  const beforeUsage = user.usage.length;
+
+  const response = await authed('/chat/api/message', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ text: 'удали сайт', model: 'gpt-luna' }),
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.match(body.text, /Магазин.*удалён/);
+  assert.deepEqual(body.usage, { input: 0, output: 0, total: 0 });
+  assert.equal(modelCalls.length, 0);
+  assert.equal(user.usage.length, beforeUsage);
+  assert.equal(await sites.getFile(made.slug, ''), null);
+});
+
+test('retired virtual-machine routes are unavailable', async () => {
+  const response = await authed('/chat/api/vm/status');
+  assert.equal(response.status, 410);
+  assert.match((await response.json()).error, /отключены/i);
+});
+
 test('protected internal grants mutate the live store for offers and plans', async () => {
   user.username = 'grant_target';
   const unauthorized = await fetch(baseUrl + '/internal/admin/grant', {
@@ -237,19 +292,19 @@ test('serves the public desktop release page and resumable installers without da
   assert.match(html, /iPhone/);
   assert.match(html, /Beta 1\.0 · PWA/);
   assert.match(html, /href="\/chat#iphone"/);
-  assert.match(html, /Clop-Code-Setup-2\.4\.4\.exe/);
-  assert.match(html, /Clop-Code-2\.4\.4-linux-x64\.tar\.xz/);
+  assert.match(html, /Clop-Code-Setup-2\.4\.5\.exe/);
+  assert.match(html, /Clop-Code-2\.4\.5-linux-x64\.tar\.xz/);
   assert.match(html, /Clop-AI-Mobile-1\.0\.7\.apk/);
-  assert.match(html, /href="\/downloads\/Clop-Code-Setup-2\.4\.4\.exe"/);
+  assert.match(html, /href="\/downloads\/Clop-Code-Setup-2\.4\.5\.exe"/);
   assert.doesNotMatch(html, /release-assets\.githubusercontent\.com/);
   assert.doesNotMatch(html, /\d[\d ]{3,}\s*токен/iu);
 
   const releases = await fetch(baseUrl + '/releases.json');
   assert.equal(releases.status, 200);
   const releaseData = await releases.json();
-  assert.equal(releaseData.desktop.version, '2.4.4');
-  assert.match(releaseData.desktop.windowsUrl, /\/downloads\/Clop-Code-Setup-2\.4\.4\.exe$/);
-  assert.match(releaseData.desktop.linuxUrl, /\/downloads\/Clop-Code-2\.4\.4-linux-x64\.tar\.xz$/);
+  assert.equal(releaseData.desktop.version, '2.4.5');
+  assert.match(releaseData.desktop.windowsUrl, /\/downloads\/Clop-Code-Setup-2\.4\.5\.exe$/);
+  assert.match(releaseData.desktop.linuxUrl, /\/downloads\/Clop-Code-2\.4\.5-linux-x64\.tar\.xz$/);
 
   const partial = await fetch(baseUrl + '/downloads/Clop-Code-Setup-2.4.0.exe', {
     headers: { range: 'bytes=0-31' },
@@ -849,7 +904,7 @@ test('/chat/api/message keeps the current prompt out of history, cleans vision t
   assert.equal(modelCalls[1].messages.some((message) => message.content === 'Продолжай'), false);
 });
 
-test('/chat/api/message returns the percentage limits after recording usage', async () => {
+test('/chat/api/message reflects the doubled GPT allowance after recording usage', async () => {
   user.fast = false;
   const limit = config.PLANS.free.limits.gpt.short;
   const billable = Math.ceil(limit / 2);
@@ -864,7 +919,7 @@ test('/chat/api/message returns the percentage limits after recording usage', as
   });
   assert.equal(response.status, 200);
   const body = await response.json();
-  assert.equal(body.limits.gpt.short.percent, Math.round((billable / limit) * 100));
+  assert.equal(body.limits.gpt.short.percent, Math.round((billable / 2 / limit) * 100));
   assert.equal(body.limits.gpt.short.exceeded, false);
   assert.deepEqual(Object.keys(body.limits.gpt.short).sort(), ['exceeded', 'percent', 'resetAt', 'title']);
 

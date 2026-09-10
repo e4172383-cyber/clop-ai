@@ -27,3 +27,14 @@ test('free accounts cannot publish a fourth site while paid accounts can publish
   assert.equal(paidBlocked.ok, false);
   assert.match(paidBlocked.error, /10 сайтов/);
 });
+
+test('only the owner can rename or delete a site', async () => {
+  const owner = `sites-owner-${Date.now()}`;
+  const made = await sites.publish(owner, sample('До переименования'), 'free');
+  assert.equal(made.ok, true);
+  assert.equal((await sites.renameSite('someone-else', made.slug, 'Чужое название')).ok, false);
+  assert.equal(await sites.removeSite('someone-else', made.slug), false);
+  assert.equal((await sites.renameSite(owner, made.slug, 'После переименования')).ok, true);
+  assert.equal((await sites.listSites(owner))[0].title, 'После переименования');
+  assert.equal(await sites.removeSite(owner, made.slug), true);
+});

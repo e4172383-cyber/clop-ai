@@ -1,4 +1,5 @@
 export const BILLING_VERSION = 3;
+export const GPT_LIMIT_BOOST = 2;
 
 const amount = (value) => {
   const number = Number(value || 0);
@@ -41,7 +42,10 @@ export function countCodexTokens(usage = {}, { prompt, imageCount = 0 } = {}) {
 // saved events at read time, so existing users do not keep the inflated usage.
 export function eventBillable(event = {}, provider = '') {
   const stored = amount(event.billable ?? event.total);
-  if (provider !== 'gpt' || Number(event.billingVersion || 0) >= BILLING_VERSION) return stored;
+  let normalized = stored;
+  if (provider !== 'gpt' || Number(event.billingVersion || 0) >= BILLING_VERSION) {
+    return provider === 'gpt' ? Math.round(normalized / GPT_LIMIT_BOOST) : normalized;
+  }
 
   const input = amount(event.input);
   const output = amount(event.output);
@@ -49,12 +53,13 @@ export function eventBillable(event = {}, provider = '') {
   const nonCachedInput = Math.max(0, input - cacheRead);
   const version = Number(event.billingVersion || 0);
   const previouslyCountedBase = version >= 2 ? nonCachedInput + output : input + output;
-  if (!previouslyCountedBase) return stored;
+  if (!previouslyCountedBase) return Math.round(stored / GPT_LIMIT_BOOST);
 
   // Старые записи не содержат размер конкретного сообщения. Консервативно
   // отделяем его от многократно присланного контекста по размеру ответа.
   const inferredFreshInput = Math.min(nonCachedInput, Math.max(256, output * 8));
   const correctedBase = inferredFreshInput + output;
   const appliedMultiplier = stored / previouslyCountedBase;
-  return Math.round(correctedBase * appliedMultiplier);
+  normalized = Math.round(correctedBase * appliedMultiplier);
+  return Math.round(normalized / GPT_LIMIT_BOOST);
 }

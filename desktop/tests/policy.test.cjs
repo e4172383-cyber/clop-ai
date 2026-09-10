@@ -64,6 +64,8 @@ test('needsActionRecovery catches code returned instead of creating the requeste
   assert.equal(requiresComputerAction('Создай HTML файл с игрой'), true);
   assert.equal(requiresComputerAction('Добавь ИИ и сделай стеклянную тему интерфейса'), true);
   assert.equal(requiresComputerAction('Оптимизируй мод для Minecraft'), true);
+  assert.equal(requiresComputerAction('Видишь ли ты мой ПК экран?'), true);
+  assert.equal(requiresComputerAction('Посмотри, что сейчас открыто на экране'), true);
   assert.equal(looksLikeCodeDelivery('Готово. Путь: C:\\site\\index.html'), false);
 });
 

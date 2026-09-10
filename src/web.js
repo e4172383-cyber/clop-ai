@@ -13,7 +13,6 @@ import * as vision from './vision.js';
 import * as relay from './relay.js';
 import * as support from './support.js';
 import * as remote from './remote.js';
-import * as vms from './vms.js';
 import * as cloudStorage from './cloud-storage.js';
 
 // Ответ оператора должен дойти до человека в бота — иначе заявка теряет
@@ -176,7 +175,7 @@ const DESKTOP_DOWNLOADS = new Set([
   'Clop-Code-Setup-2.4.1.exe',
   'Clop-Code-Setup-2.4.2.exe',
   'Clop-Code-Setup-2.4.3.exe',
-  'Clop-Code-Setup-2.4.4.exe',
+  'Clop-Code-Setup-2.4.5.exe',
   'Clop-Code-2.0.6-linux-x64.tar.xz',
   'Clop-Code-2.0.9-linux-x64.tar.xz',
   'Clop-Code-2.0.10-linux-x64.tar.xz',
@@ -189,7 +188,7 @@ const DESKTOP_DOWNLOADS = new Set([
   'Clop-Code-2.4.1-linux-x64.tar.xz',
   'Clop-Code-2.4.2-linux-x64.tar.xz',
   'Clop-Code-2.4.3-linux-x64.tar.xz',
-  'Clop-Code-2.4.4-linux-x64.tar.xz',
+  'Clop-Code-2.4.5-linux-x64.tar.xz',
   'Clop-AI-Mobile-1.0.0.apk',
   'Clop-AI-Mobile-1.0.1.apk',
   'Clop-AI-Mobile-1.0.2.apk',
@@ -222,7 +221,7 @@ async function proxyReleaseAsset(req, res, name) {
   });
 
   try {
-    const requestHeaders = { 'user-agent': 'Clop-Download-Proxy/2.4.4' };
+    const requestHeaders = { 'user-agent': 'Clop-Download-Proxy/2.4.5' };
     if (req.headers.range) requestHeaders.range = req.headers.range;
     const upstream = await fetch(`${RELEASE_ASSET_BASE_URL}/${releaseTagForAsset(name)}/${encodeURIComponent(name)}`, {
       method: req.method,
@@ -576,10 +575,10 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
     if (url.pathname === '/releases.json' && req.method === 'GET') {
       return sendJson(res, 200, {
         desktop: {
-          version: '2.4.4',
-          url: publicDownloadUrl('Clop-Code-Setup-2.4.4.exe'),
-          windowsUrl: publicDownloadUrl('Clop-Code-Setup-2.4.4.exe'),
-          linuxUrl: publicDownloadUrl('Clop-Code-2.4.4-linux-x64.tar.xz'),
+          version: '2.4.5',
+          url: publicDownloadUrl('Clop-Code-Setup-2.4.5.exe'),
+          windowsUrl: publicDownloadUrl('Clop-Code-Setup-2.4.5.exe'),
+          linuxUrl: publicDownloadUrl('Clop-Code-2.4.5-linux-x64.tar.xz'),
         },
         android: { version: '1.0.7', url: publicDownloadUrl('Clop-AI-Mobile-1.0.7.apk') },
       });
@@ -1275,7 +1274,6 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
                 ? `Файл «${extracted.truncated}» не был завершён моделью. Попросите продолжить.`
                 : `Готово — создано файлов: ${extracted.files.length}.`))
               : r.text;
-            if (r.vm?.used) displayText += `\n\nClop VM · выполнено команд: ${r.vm.commands.length}`;
             // Ответ desktop-агенту должен содержать действие, если клиент
             // явно запросил работу в папке или полный доступ. Пустая отписка
             // возвращается приложению для автоматического повтора, но квоту
@@ -1585,51 +1583,52 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
       return;
     }
 
-    // Beta VM работает в отдельном ограниченном сервисе. Telegram id берём
-    // только из подписанной web-сессии: клиент не может запросить чужую машину.
-    if (url.pathname === '/chat/api/vm/status' && req.method === 'GET') {
+    if (url.pathname.startsWith('/chat/api/vm/')) {
+      return sendJson(res, 410, { ok: false, error: 'Виртуальные машины отключены.' });
+    }
+
+    // Управление публикациями доступно только владельцу текущей подписанной
+    // web-сессии. Чужой slug нельзя переименовать или удалить прямым запросом.
+    if (url.pathname === '/chat/api/sites' && req.method === 'GET') {
       (async () => {
         if (reloadEachRequest) await store.load();
         const userId = sessionUserId(req);
         const u = userId && store.findUser(userId);
         if (!u) return sendJson(res, 401, { ok: false, error: 'not logged in' });
-        return sendJson(res, 200, await vms.status(u.id));
+        const effective = planOf(u);
+        const personalPaid = u.plan && u.plan !== 'free' && (!u.proUntil || u.proUntil > Date.now());
+        const limit = sites.siteLimit(effective.teamId || personalPaid ? 'paid' : 'free');
+        const list = await sites.listSites(u.id);
+        return sendJson(res, 200, {
+          ok: true,
+          limit,
+          count: list.length,
+          sites: list.map((site) => ({ ...site, url: `${PUBLIC_URL}/s/${site.slug}` })),
+        });
       })().catch((e) => sendJson(res, 500, { ok: false, error: String(e.message || e) }));
       return;
     }
 
-    if (url.pathname === '/chat/api/vm/start' && req.method === 'POST') {
-      (async () => {
-        if (reloadEachRequest) await store.load();
-        const userId = sessionUserId(req);
-        const u = userId && store.findUser(userId);
-        if (!u) return sendJson(res, 401, { ok: false, error: 'not logged in' });
-        const result = await vms.start(u.id);
-        return sendJson(res, result.ok ? 200 : 400, result);
-      })().catch((e) => sendJson(res, 500, { ok: false, error: String(e.message || e) }));
-      return;
-    }
-
-    if (url.pathname === '/chat/api/vm/stop' && req.method === 'POST') {
-      (async () => {
-        if (reloadEachRequest) await store.load();
-        const userId = sessionUserId(req);
-        const u = userId && store.findUser(userId);
-        if (!u) return sendJson(res, 401, { ok: false, error: 'not logged in' });
-        const result = await vms.stop(u.id);
-        return sendJson(res, result.ok ? 200 : 400, result);
-      })().catch((e) => sendJson(res, 500, { ok: false, error: String(e.message || e) }));
-      return;
-    }
-
-    if (url.pathname === '/chat/api/vm/command' && req.method === 'POST') {
+    if (url.pathname === '/chat/api/sites/rename' && req.method === 'POST') {
       readJsonBody(req, 4_000).then(async (body) => {
         if (reloadEachRequest) await store.load();
         const userId = sessionUserId(req);
         const u = userId && store.findUser(userId);
         if (!u) return sendJson(res, 401, { ok: false, error: 'not logged in' });
-        const result = await vms.command(u.id, body.command);
-        return sendJson(res, result.ok ? 200 : 400, result);
+        const result = await sites.renameSite(u.id, String(body.slug || ''), body.title);
+        return sendJson(res, result.ok ? 200 : 404, result);
+      }).catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
+      return;
+    }
+
+    if (url.pathname === '/chat/api/sites/delete' && req.method === 'POST') {
+      readJsonBody(req, 4_000).then(async (body) => {
+        if (reloadEachRequest) await store.load();
+        const userId = sessionUserId(req);
+        const u = userId && store.findUser(userId);
+        if (!u) return sendJson(res, 401, { ok: false, error: 'not logged in' });
+        const ok = await sites.removeSite(u.id, String(body.slug || ''));
+        return sendJson(res, ok ? 200 : 404, { ok, error: ok ? undefined : 'Сайт не найден.' });
       }).catch((e) => sendJson(res, 400, { ok: false, error: String(e.message || e) }));
       return;
     }
@@ -2081,6 +2080,40 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
         const requestedKey = body.model && MODELS[body.model] ? body.model : modelOf(u).key;
         const model = availableModelOf(u, requestedKey);
 
+        // Короткая команда управления публикацией должна выполняться самим
+        // сервисом, а не уходить модели: модель не владеет ключами хранилища и
+        // раньше закономерно отвечала, что удалить уже изданный сайт не может.
+        // Принимаем только однозначную команду, а slug всё равно проверяется на
+        // принадлежность текущей подписанной сессии внутри removeSite().
+        const deleteSiteCommand = /^(?:удали|удалить)\s+(?:(?:этот|последний|мой)\s+)?сайт(?:\s+\S+)?[.!?]?$/iu.test(userText);
+        if (deleteSiteCommand) {
+          const explicitSlug = /\/s\/([a-z0-9]{4,12})(?:\/|\b)/iu.exec(userText)?.[1] || '';
+          const ownedSites = await sites.listSites(u.id);
+          const target = explicitSlug
+            ? ownedSites.find((site) => site.slug === explicitSlug)
+            : ownedSites[0];
+          const removed = target ? await sites.removeSite(u.id, target.slug) : false;
+          const displayText = removed
+            ? `Сайт «${target.title || 'Сайт'}» удалён. Публичная ссылка больше не открывается.`
+            : 'Сайт не найден. Откройте «Мои сайты», чтобы посмотреть текущие публикации.';
+          const chat = resolveChat(u, body.chatId);
+          chat.model = model.key;
+          store.pushMessage(chat, 'user', userText);
+          store.pushMessage(chat, 'assistant', displayText, { tokens: 0, model: model.key });
+          await store.save();
+          return sendJson(res, 200, {
+            ok: true,
+            text: displayText,
+            model: model.key,
+            chatId: chat.id,
+            zip: null,
+            zipName: null,
+            artifacts: [],
+            limits: publicLimits(u),
+            ...publicUsage({}, 0),
+          });
+        }
+
         const usingOffer = offerActiveFor(u, model.key);
         if (!model.unlimited && !usingOffer) {
           const { blocked } = checkLimits(u, model.provider);
@@ -2138,7 +2171,6 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           let displayText = (files.length || truncated)
             ? (cleanText || (files.length ? `📦 Готово — ${files.length} файл(ов), архив ниже.` : ''))
             : r.text;
-          if (r.vm?.used) displayText += `\n\nClop VM · выполнено команд: ${r.vm.commands.length}`;
           if (truncated) {
             const notice = `⚠️ Файл «${truncated}» не был завершён моделью; частичный текст сохранён в контексте.`;
             displayText = [displayText, notice].filter(Boolean).join('\n\n');

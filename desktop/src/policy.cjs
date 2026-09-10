@@ -37,8 +37,10 @@ function requiresComputerAction(userText) {
   const request = String(userText || '');
   const creationIntent = /(?:созд(?:ай|ать|а[йт]е)|сдел(?:ай|ать|а[йт]е)|добав(?:ь|ить|ьте)|собер(?:и|ите|ать)|разработ(?:ай|ать|айте)|напиш(?:и|ите)|сгенерир(?:уй|уйте)|передел(?:ай|ать|айте)|измен(?:и|ить|ите)|исправ(?:ь|ить|ьте)|оптимиз(?:ируй|ировать|ируйте)|установ(?:и|ить|ите)|create|add|build|implement|write|save|edit|fix|optimize|install)/iu.test(request);
   const computerArtifact = /(?:файл|папк|сайт|страниц|приложен|проект|игр|код|функц|мод(?:\s|$)|тем[ауеы]|интерфейс|оптимиз|hud|html|css|javascript|typescript|python|скрипт|репозитор|file|folder|website|page|app|project|game|code|function|module|theme|interface|optimiz|script|repository)/iu.test(request);
+  const screenIntent = /(?:вид(?:ишь|но)|посмотр(?:и|еть)|проверь|покаж(?:и|и)|что\s+(?:сейчас\s+)?(?:на|видно\s+на)\s+(?:мо[её]м\s+)?экран|(?:мой|моего|на мо[её]м)\s+(?:пк\s+)?экран|screenshot|screen)/iu.test(request)
+    && /(?:экран|рабоч(?:ий|его)\s+стол|окн[оа]|курсор|screen|desktop|window)/iu.test(request);
   const explanationOnly = /^(?:объясни|расскажи|покажи\s+пример|как\s+(?:работает|устроен|написать|создать)|what\s+is|explain|show\s+an?\s+example)\b/iu.test(request.trim());
-  return creationIntent && computerArtifact && !explanationOnly;
+  return (creationIntent && computerArtifact || screenIntent) && !explanationOnly;
 }
 function isUnnecessaryClarification(userText, responseText) {
   if (!requiresComputerAction(userText)) return false;

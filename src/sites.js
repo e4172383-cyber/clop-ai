@@ -137,7 +137,7 @@ export async function publish(userId, site, planKey = 'free') {
   });
   if (!ok) return { ok: false, error: 'не удалось сохранить сайт' };
 
-  list.unshift({ slug, title, ts: Date.now() });
+  list.unshift({ slug, title, ts: Date.now(), bytes: total });
   await writeIndex(userId, list);
   return { ok: true, slug, url: `${PUBLIC_URL}/s/${slug}`, title, bytes: total, limit, count: list.length };
 }
@@ -152,7 +152,30 @@ export async function getFile(slug, path) {
 }
 
 export async function listSites(userId) {
-  return readIndex(userId);
+  const list = await readIndex(userId);
+  // Старые записи индекса создавались без размера. Подтягиваем метаданные из
+  // самого сайта, чтобы панель управления одинаково показывала все публикации.
+  return Promise.all(list.map(async (item) => {
+    if (Number.isFinite(Number(item.bytes))) return item;
+    const site = await readSite(item.slug);
+    return site && site.owner === String(userId)
+      ? { ...item, title: site.title || item.title, bytes: Number(site.bytes || 0) }
+      : item;
+  }));
+}
+
+export async function renameSite(userId, slug, nextTitle) {
+  const title = String(nextTitle || '').replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+  if (!title) return { ok: false, error: 'Введите название сайта.' };
+  const site = await readSite(slug);
+  if (!site || site.owner !== String(userId)) return { ok: false, error: 'Сайт не найден.' };
+  site.title = title;
+  if (!(await writeSite(slug, site))) return { ok: false, error: 'Не удалось сохранить название.' };
+  const list = await readIndex(userId);
+  const item = list.find((entry) => entry.slug === slug);
+  if (item) item.title = title;
+  await writeIndex(userId, list);
+  return { ok: true, slug, title };
 }
 
 export async function removeSite(userId, slug) {

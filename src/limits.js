@@ -71,7 +71,7 @@ function countableUsage(u, windowMs, _provider, now) {
 
 export function usedIn(u, windowMs, provider, now = Date.now()) {
   let sum = 0;
-  for (const e of countableUsage(u, windowMs, provider, now)) sum += eventBillable(e, provider);
+  for (const e of countableUsage(u, windowMs, provider, now)) sum += eventBillable(e, providerOfEvent(e) || provider);
   return sum;
 }
 
