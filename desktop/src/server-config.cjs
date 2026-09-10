@@ -1,6 +1,6 @@
 'use strict';
 
-const DEFAULT_SERVER = 'https://clop-ai-bot-production.up.railway.app';
+const DEFAULT_SERVER = 'https://clop.195-201-169-74.sslip.io';
 const SERVER_CONFIG_URL = 'https://e4172383-cyber.github.io/clop-ai/server.json';
 const GITHUB_RELEASE_PREFIX = '/e4172383-cyber/clop-ai/releases/download/';
 

@@ -286,10 +286,10 @@ export const FREE_GO_UNTIL = Date.UTC(2026, 8, 1, 12, 0, 0); // 15:00 МСК = 1
 export const freeGoActive = () => Date.now() < FREE_GO_UNTIL;
 
 // Публичный адрес сервиса — из него собираются ссылки на изданные сайты
-export const PUBLIC_URL = (process.env.PUBLIC_URL || 'https://clop-ai-bot-production.up.railway.app').replace(/\/+$/, '');
+export const PUBLIC_URL = (process.env.PUBLIC_URL || 'https://clop.195-201-169-74.sslip.io').replace(/\/+$/, '');
 export const DOWNLOAD_BASE_URL = (
   process.env.DOWNLOAD_BASE_URL
-  || 'https://github.com/e4172383-cyber/clop-ai/releases/download/v2.4.2'
+  || 'https://github.com/e4172383-cyber/clop-ai/releases/download/v2.4.3'
 ).replace(/\/+$/, '');
 
 export const MODEL_PROMO = {
