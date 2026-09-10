@@ -1,0 +1,38 @@
+name: iOS Native Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios-native-build.yml"
+  workflow_dispatch:
+
+jobs:
+  simulator:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        run: xcodegen generate --spec ios/project.yml
+      - name: Build and test native app
+        run: >-
+          xcodebuild test
+          -project ios/ClopIOS.xcodeproj
+          -scheme ClopIOS
+          -destination 'platform=iOS Simulator,name=iPhone 16 Pro'
+          -configuration Debug
+          CODE_SIGNING_ALLOWED=NO
+      - name: Package simulator build
+        run: |
+          APP_PATH=$(find "$HOME/Library/Developer/Xcode/DerivedData" -path '*/Build/Products/Debug-iphonesimulator/Clop.app' -type d | head -1)
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" Clop-iOS-1.0.0-simulator.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Clop-iOS-1.0.0-simulator
+          path: Clop-iOS-1.0.0-simulator.zip
+          if-no-files-found: error
+

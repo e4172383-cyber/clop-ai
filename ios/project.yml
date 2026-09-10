@@ -1,0 +1,44 @@
+name: ClopIOS
+options:
+  bundleIdPrefix: ai.clop
+  deploymentTarget:
+    iOS: "16.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+targets:
+  ClopIOS:
+    type: application
+    platform: iOS
+    sources:
+      - path: ClopIOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ai.clop.ios
+        PRODUCT_NAME: Clop
+        MARKETING_VERSION: 1.0.0
+        CURRENT_PROJECT_VERSION: 1
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_STYLE: Automatic
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    info:
+      path: ClopIOS/Info.plist
+      properties:
+        CFBundleDisplayName: Clop
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        ITSAppUsesNonExemptEncryption: false
+  ClopIOSTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: ClopIOSTests
+    dependencies:
+      - target: ClopIOS
+
