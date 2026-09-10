@@ -2455,6 +2455,9 @@
   function handleEvent(event) {
     if (!event || typeof event !== 'object') return;
     switch (event.type) {
+      case 'focus-composer':
+        if (!visibleModal()) requestAnimationFrame(() => elements.promptInput.focus({ preventScroll: true }));
+        break;
       case 'settings':
         state.settings = { ...state.settings, ...(event.settings || {}) };
         renderSettings();

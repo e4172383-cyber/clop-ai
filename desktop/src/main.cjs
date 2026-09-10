@@ -666,7 +666,17 @@ function showMainWindow() {
   if (!mainWindow || mainWindow.isDestroyed()) createWindow();
   if (mainWindow.isMinimized()) mainWindow.restore();
   mainWindow.show();
-  mainWindow.focus();
+  const focusComposer = () => {
+    if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible()) return;
+    // The floating agent receives the mouse-up after its click handler. On
+    // Windows that used to return keyboard focus to the agent just after the
+    // main window opened, leaving the composer visible but unable to type.
+    mainWindow.focus();
+    mainWindow.webContents.focus();
+    emit('focus-composer');
+  };
+  focusComposer();
+  setTimeout(focusComposer, 80);
 }
 
 function positionAgent() {
@@ -780,7 +790,10 @@ function createAgentWindow() {
     fullscreenable: false,
     alwaysOnTop: true,
     skipTaskbar: true,
-    focusable: true,
+    // The agent remains draggable/clickable, but must never own the keyboard.
+    // Otherwise opening Clop from the agent can leave the main composer
+    // without an OS text-input target.
+    focusable: false,
     hasShadow: false,
     autoHideMenuBar: true,
     title: 'Clop Agent',
