@@ -1270,11 +1270,12 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
             // приложению отдаём чистый текст и отдельные base64-вложения.
             const extracted = extractFiles(r.text);
             const outputFiles = filesForJson(extracted.files);
-            const displayText = (extracted.files.length || extracted.truncated)
+            let displayText = (extracted.files.length || extracted.truncated)
               ? (extracted.cleanText || (extracted.truncated
                 ? `Файл «${extracted.truncated}» не был завершён моделью. Попросите продолжить.`
                 : `Готово — создано файлов: ${extracted.files.length}.`))
               : r.text;
+            if (r.vm?.used) displayText += `\n\nClop VM · выполнено команд: ${r.vm.commands.length}`;
             // Ответ desktop-агенту должен содержать действие, если клиент
             // явно запросил работу в папке или полный доступ. Пустая отписка
             // возвращается приложению для автоматического повтора, но квоту
@@ -2137,6 +2138,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           let displayText = (files.length || truncated)
             ? (cleanText || (files.length ? `📦 Готово — ${files.length} файл(ов), архив ниже.` : ''))
             : r.text;
+          if (r.vm?.used) displayText += `\n\nClop VM · выполнено команд: ${r.vm.commands.length}`;
           if (truncated) {
             const notice = `⚠️ Файл «${truncated}» не был завершён моделью; частичный текст сохранён в контексте.`;
             displayText = [displayText, notice].filter(Boolean).join('\n\n');

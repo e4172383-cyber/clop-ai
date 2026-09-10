@@ -814,6 +814,7 @@ async function handleAsk(u, chatId, text, images = null) {
     const after = offerBonus ? [] : checkLimits(u, model.provider).states;
     const warn = after.find((s) => s.percent >= 85);
     let footer = warn ? `\n\n_Общий лимит · ${warn.title}: использовано ${warn.percent}%_` : '';
+    if (res.vm?.used) footer += `\n\n_Clop VM · выполнено команд: ${res.vm.commands.length}_`;
     // Контекст диалога почти заполнил окно модели — предлагаем сжать
     const ctxPercent = contextPercent(chat, model);
     if (ctxPercent >= 99) {
