@@ -4,7 +4,7 @@ import os from 'node:os';
 import { BOT_NAME, ensureDirs, WEB_HOST, WEB_PORT, initializeModelPromo } from './src/config.js';
 import * as store from './src/store.js';
 import * as tg from './src/telegram.js';
-import { finalizeGiveawayAndNotify, handleUpdate, recoverInterruptedImageJobs } from './src/bot.js';
+import { finalizeGiveawayAndNotify, handleUpdate, notifyMailRecipient, recoverInterruptedImageJobs } from './src/bot.js';
 import { startWeb } from './src/web.js';
 import * as codexAuth from './src/codexauth.js';
 import * as kimiAuth from './src/kimiauth.js';
@@ -12,6 +12,7 @@ import { healthCheck as healthCheckGpt } from './src/gpt.js';
 import { setBotUsername } from './src/botinfo.js';
 import { initializeLimitedOffer } from './src/limited-offer.js';
 import { initializeGiveaway } from './src/giveaway.js';
+import { startMailSmtp } from './src/mail-smtp.js';
 
 const args = process.argv.slice(2);
 const envFlag = (name) => /^(1|true|yes|on)$/i.test(String(process.env[name] || '').trim());
@@ -46,6 +47,7 @@ async function startBot() {
     return;
   }
   tg.setToken(auth);
+  startMailSmtp({ notify: notifyMailRecipient });
 
   const healthGpt = await healthCheckGpt();
   console.log(healthGpt.ok ? `[gpt] codex cli: ${healthGpt.version}` : `[gpt] ВНИМАНИЕ: codex cli недоступен (${healthGpt.version})`);
@@ -73,6 +75,7 @@ async function startBot() {
         { command: 'phone', description: 'Сохранить номер для приглашения' },
         { command: 'buy', description: 'Купить тариф' },
         { command: 'myapi', description: 'Мой личный API-ключ' },
+        { command: 'mail', description: 'Почта Clop' },
         { command: 'download', description: 'Скачать Clop Code' },
         { command: 'image', description: 'Сгенерировать изображение' },
         { command: 'help', description: 'Помощь' },

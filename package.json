@@ -18,6 +18,9 @@
   },
   "dependencies": {
     "@moonshot-ai/kimi-code": "^0.42.0",
-    "@upstash/redis": "^1.38.3"
+    "@upstash/redis": "^1.38.3",
+    "mailparser": "^3.9.25",
+    "nodemailer": "^10.0.8",
+    "smtp-server": "^3.19.11"
   }
 }

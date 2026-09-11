@@ -77,6 +77,8 @@ import { claimCode } from './weblogin.js';
 import { STARS_PER_USD, MIN_TOPUP_STARS, MAX_TOPUP_STARS, starsToMicros, microsToUsd, purchaseBonus } from './billing.js';
 import { getServerMetrics, formatServerStatus } from './server-metrics.js';
 import { drawGiveaway, giveawayNeedsAnnouncement, giveawayState, joinGiveaway, markGiveawayAnnounced, participantIds } from './giveaway.js';
+import * as mail from './clop-mail.js';
+import { sendInternetMail } from './mail-smtp.js';
 
 const busy = new Set();
 const siteQuotaPlan = (u) => planOf(u).key;
@@ -163,6 +165,7 @@ function mainKb(u) {
       [{ text: '🏢 Моя команда', callback_data: 'team' }],
       ...(showOffer ? [[{ text: offer.claimed ? '🎁 Бонус Astra + Kimi активен' : '🎁 Получить бонус Astra + Kimi', callback_data: 'offer_claim' }]] : []),
       [{ text: '🖼 Сгенерировать (бета)', callback_data: 'imagegen' }],
+      [{ text: `📧 Почта Clop${mail.mailState(u, planOf(u).key).unread ? ` · ${mail.mailState(u, planOf(u).key).unread} новых` : ''}`, callback_data: 'mail' }],
       [{ text: '🌐 Чат на сайте (бета)', url: `${PUBLIC_URL}/chat` }],
       [{ text: '🖥 Состояние сервера', callback_data: 'server_status' }],
       [{ text: `💻 Скачать Clop Code · v${DESKTOP_RELEASE.version}`, callback_data: 'app_download' }],
@@ -429,6 +432,7 @@ function helpText() {
     '/phone — сохранить свой номер для приглашения',
     '/buy — купить Pro',
     '/myapi — получить свой личный API-ключ (можно сбросить/перевыпустить кнопкой)',
+    '/mail — создать адрес @clop, читать и отправлять письма',
     '/balance — баланс API и пополнение через Telegram Stars',
     '/download — скачать Clop Code для Windows или Linux',
     '/menu — главное меню',
@@ -553,6 +557,198 @@ function giveawayKb(u) {
   if (state.active) rows.push([{ text: state.joined ? '✅ Вы участвуете' : '🎉 Присоединиться', callback_data: state.joined ? 'giveaway' : 'giveaway_join' }]);
   rows.push([{ text: '🔄 Обновить', callback_data: 'giveaway' }]);
   return backKb(rows);
+}
+
+function formatMailBytes(bytes) {
+  const value = Math.max(0, Number(bytes) || 0);
+  if (value < 1024 ** 2) return `${Math.max(0.01, value / 1024 ** 2).toFixed(2)} МБ`;
+  if (value < 1024 ** 3) return `${(value / 1024 ** 2).toFixed(1)} МБ`;
+  return `${(value / 1024 ** 3).toFixed(2)} ГБ`;
+}
+
+function mailText(u) {
+  const plan = planOf(u);
+  const state = mail.mailState(u, plan.key);
+  const addresses = state.mailboxes.length
+    ? state.mailboxes.map((box) => `• *${box.address}*\n  для интернета: \`${mail.publicAddress(box.address)}\``).join('\n')
+    : '_Ящиков пока нет._';
+  return [
+    '📧 *Почта Clop*', '',
+    addresses, '',
+    `Ящики: *${state.mailboxCount} из ${state.mailboxLimit}*`,
+    `Общее хранилище: *${formatMailBytes(state.usedBytes)} из ${formatMailBytes(state.storageBytes)}* (${state.storagePercent}%)`,
+    `Непрочитанные: *${state.unread}*`, '',
+    'Короткие адреса `name@clop` работают между пользователями Clop.',
+    `Из Gmail и других сервисов используйте полный адрес вида \`name@${mail.MAIL_PUBLIC_DOMAIN}\`.`,
+    'Одно письмо может содержать файл размером до 20 МБ.',
+  ].join('\n');
+}
+
+function mailKb(u) {
+  const state = mail.mailState(u, planOf(u).key);
+  const rows = [
+    [{ text: `📥 Входящие${state.unread ? ` (${state.unread})` : ''}`, callback_data: 'mail_inbox' }, { text: '📤 Отправленные', callback_data: 'mail_sent' }],
+    [{ text: '✉️ Написать письмо', callback_data: 'mail_compose' }],
+    [{ text: '➕ Создать адрес', callback_data: 'mail_create' }, { text: '⚙️ Управление', callback_data: 'mail_manage' }],
+    [{ text: '🔄 Обновить', callback_data: 'mail' }],
+  ];
+  return backKb(rows);
+}
+
+function mailListText(u, folder) {
+  const messages = folder === 'sent' ? mail.sent(u, 15) : mail.inbox(u, 15);
+  const title = folder === 'sent' ? '📤 *Отправленные*' : '📥 *Входящие*';
+  if (!messages.length) return `${title}\n\nПисем пока нет.`;
+  return [title, '', ...messages.map((message) => {
+    const unread = folder === 'inbox' && !message.readAt ? '🔵' : '▫️';
+    const peer = folder === 'sent' ? `Кому: ${message.to}` : `От: ${message.from}`;
+    return `${unread} *${message.subject || 'Без темы'}*\n${peer} · ${dt(message.createdAt)}`;
+  })].join('\n\n');
+}
+
+function mailListKb(u, folder) {
+  const messages = folder === 'sent' ? mail.sent(u, 15) : mail.inbox(u, 15);
+  const rows = messages.map((message) => [{
+    text: `${folder === 'inbox' && !message.readAt ? '🔵 ' : ''}${String(message.subject || 'Без темы').slice(0, 36)}`,
+    callback_data: `mail_msg:${message.id}`,
+  }]);
+  rows.push([{ text: '⬅️ Почта Clop', callback_data: 'mail' }]);
+  return { inline_keyboard: rows };
+}
+
+function mailManageText(u) {
+  const boxes = mail.listMailboxes(u);
+  return boxes.length
+    ? `⚙️ *Управление адресами*\n\nВыберите ящик, который хотите удалить. Входящие этого ящика также будут удалены.`
+    : '⚙️ *Управление адресами*\n\nУ вас пока нет созданных ящиков.';
+}
+
+function mailManageKb(u) {
+  const rows = mail.listMailboxes(u).map((box) => [{ text: `🗑 ${box.address}`, callback_data: `mail_delete:${box.local}` }]);
+  rows.push([{ text: '⬅️ Почта Clop', callback_data: 'mail' }]);
+  return { inline_keyboard: rows };
+}
+
+function mailMessageText(message) {
+  const delivery = message.source === 'outbound'
+    ? `\nСтатус: *${message.deliveryStatus === 'sent' ? 'доставлено серверу получателя' : message.deliveryStatus === 'failed' ? 'ошибка доставки' : 'отправляется'}*`
+    : '';
+  const files = message.attachments?.length
+    ? `\n\nФайлы:\n${message.attachments.map((item) => `• ${item.filename} · ${formatMailBytes(item.size)}`).join('\n')}`
+    : '';
+  return [
+    `✉️ *${message.subject || 'Без темы'}*`, '',
+    `От: \`${message.from}\``,
+    `Кому: \`${message.to}\``,
+    `Дата: ${dt(message.createdAt)}${delivery}`, '',
+    String(message.text || 'Письмо без текста').slice(0, 2800), files,
+  ].join('\n');
+}
+
+function mailMessageKb(u, message) {
+  const rows = (message.attachments || []).slice(0, 5).map((item, index) => [{
+    text: `📎 ${String(item.filename).slice(0, 40)}`, callback_data: `mail_file:${message.id}:${index}`,
+  }]);
+  rows.push([{ text: '🗑 Удалить письмо', callback_data: `mail_msg_delete:${message.id}` }]);
+  rows.push([{ text: '⬅️ К письмам', callback_data: String(message.fromOwnerId) === String(u.id) ? 'mail_sent' : 'mail_inbox' }]);
+  return { inline_keyboard: rows };
+}
+
+async function mailAttachmentFromMessage(msg) {
+  let item = null;
+  if (msg.document) item = { fileId: msg.document.file_id, filename: msg.document.file_name || 'document', contentType: msg.document.mime_type, size: msg.document.file_size };
+  else if (msg.photo?.length) {
+    const photo = msg.photo.at(-1);
+    item = { fileId: photo.file_id, filename: `photo-${Date.now()}.jpg`, contentType: 'image/jpeg', size: photo.file_size };
+  } else if (msg.audio) item = { fileId: msg.audio.file_id, filename: msg.audio.file_name || `audio-${Date.now()}.mp3`, contentType: msg.audio.mime_type, size: msg.audio.file_size };
+  else if (msg.video) item = { fileId: msg.video.file_id, filename: msg.video.file_name || `video-${Date.now()}.mp4`, contentType: msg.video.mime_type, size: msg.video.file_size };
+  if (!item) return [];
+  if (Number(item.size || 0) > mail.MAIL_MAX_ATTACHMENT_BYTES) throw new Error('Файл больше 20 МБ.');
+  const remote = await tg.getFile(item.fileId);
+  const content = await tg.downloadFile(remote.file_path);
+  if (content.length > mail.MAIL_MAX_ATTACHMENT_BYTES) throw new Error('Файл больше 20 МБ.');
+  return [{ filename: item.filename, contentType: item.contentType, size: content.length, content }];
+}
+
+function mailModeActive(u) {
+  if (!u.mailMode) return false;
+  if (Date.now() - Number(u.mailMode.at || 0) <= 30 * 60_000) return true;
+  u.mailMode = null;
+  store.saveSoon();
+  return false;
+}
+
+async function handleMailCompose(u, chatId, msg, text) {
+  if (!mailModeActive(u)) return false;
+  const mode = u.mailMode;
+  if (mode.type === 'create') {
+    const result = mail.createMailbox(u, text, planOf(u).key);
+    if (!result.ok) {
+      const error = result.reason === 'taken' ? 'Этот адрес уже занят.' : result.reason === 'limit' ? `Лимит вашего тарифа — ${result.limit} ящиков.` : 'Используйте 3–32 латинских символа, цифры, точку, дефис или подчёркивание.';
+      await tg.sendMessage(chatId, `⚠️ ${error}\n\nОтправьте другое имя или вернитесь в /mail.`);
+      return true;
+    }
+    u.mailMode = null;
+    await store.save({ strict: true });
+    await tg.sendMessage(chatId, `✅ Создано: *${result.mailbox.address}*\n\nВнешний адрес: \`${mail.publicAddress(result.mailbox.address)}\``, { reply_markup: mailKb(u) });
+    return true;
+  }
+  if (mode.type === 'recipient') {
+    const recipient = String(text || '').trim().toLowerCase();
+    if (!mail.shortAddress(recipient) && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) {
+      await tg.sendMessage(chatId, '⚠️ Неверный адрес. Пример: `friend@clop` или `friend@gmail.com`.');
+      return true;
+    }
+    u.mailMode = { ...mode, type: 'subject', to: mail.shortAddress(recipient) || recipient, at: Date.now() };
+    store.saveSoon();
+    await tg.sendMessage(chatId, `Кому: \`${u.mailMode.to}\`\n\nТеперь отправьте тему письма.`);
+    return true;
+  }
+  if (mode.type === 'subject') {
+    if (!text) { await tg.sendMessage(chatId, 'Отправьте тему обычным текстом.'); return true; }
+    u.mailMode = { ...mode, type: 'body', subject: text.slice(0, 120), at: Date.now() };
+    store.saveSoon();
+    await tg.sendMessage(chatId, 'Теперь отправьте текст письма. Можно прикрепить один документ, фотографию, аудио или видео до 20 МБ; подпись станет текстом письма.');
+    return true;
+  }
+  if (mode.type === 'body') {
+    let attachments = [];
+    try { attachments = await mailAttachmentFromMessage(msg); }
+    catch (error) { await tg.sendMessage(chatId, `⚠️ ${error.message}`); return true; }
+    const body = String(text || '').trim();
+    if (!body && !attachments.length) { await tg.sendMessage(chatId, 'Письмо пустое. Отправьте текст или файл.'); return true; }
+    const internal = mail.shortAddress(mode.to);
+    const placeholder = await tg.sendMessage(chatId, internal ? '⏳ Сохраняю письмо…' : '⏳ Передаю письмо во внешний почтовый сервер…');
+    const result = internal
+      ? await mail.deliverInternal({ fromUser: u, from: mode.from, to: internal, subject: mode.subject, text: body, attachments })
+      : await sendInternetMail({ fromUser: u, from: mode.from, to: mode.to, subject: mode.subject, text: body, attachments });
+    u.mailMode = null;
+    store.saveSoon();
+    if (!result.ok) {
+      const error = result.reason === 'recipient' ? 'Ящик получателя не найден.'
+        : result.reason === 'recipient_storage' ? 'Хранилище получателя заполнено.'
+          : result.reason === 'sender_storage' ? 'Ваше почтовое хранилище заполнено.'
+            : result.reason === 'delivery' ? `Внешний сервер отклонил письмо: ${String(result.error || 'ошибка SMTP').slice(0, 180)}`
+              : 'Не удалось отправить письмо.';
+      await tg.editMessage(chatId, placeholder.message_id, `⚠️ ${error}`, { reply_markup: mailKb(u) });
+      return true;
+    }
+    if (internal) await notifyMailRecipient(result.message, result.recipient);
+    await tg.editMessage(chatId, placeholder.message_id, `✅ Письмо отправлено на \`${mode.to}\`.`, { reply_markup: mailKb(u) });
+    return true;
+  }
+  return false;
+}
+
+export async function notifyMailRecipient(message, recipient) {
+  if (!recipient) return;
+  await tg.sendMessage(Number(recipient.id), [
+    '📬 *Новое письмо в Clop Mail*', '',
+    `От: \`${message.from}\``,
+    `Кому: \`${message.to}\``,
+    `Тема: *${message.subject || 'Без темы'}*`,
+    message.attachments?.length ? `Вложений: ${message.attachments.length}` : '',
+  ].filter(Boolean).join('\n'), { reply_markup: { inline_keyboard: [[{ text: 'Открыть письмо', callback_data: `mail_msg:${message.id}` }]] } }).catch(() => {});
 }
 
 /* ---------------- legacy ---------------- */
@@ -920,6 +1116,7 @@ async function handleAsk(u, chatId, text, images = null) {
 
 async function onCommand(u, chatId, cmd, rawText = '') {
   if (u.pending) { u.pending = null; store.saveSoon(); } // любая команда отменяет ожидание промпта картинки
+  if (u.mailMode) { u.mailMode = null; store.saveSoon(); }
   if (leaveTransientModes(u, {
     keepSupport: cmd === '/support' || cmd === '/поддержка',
     keepBug: cmd === '/bug' || cmd === '/баг',
@@ -950,6 +1147,9 @@ async function onCommand(u, chatId, cmd, rawText = '') {
     case '/giveaway':
     case '/розыгрыш':
       return void await tg.sendMessage(chatId, giveawayText(u), { reply_markup: giveawayKb(u) });
+    case '/mail':
+    case '/почта':
+      return void await tg.sendMessage(chatId, mailText(u), { reply_markup: mailKb(u) });
     case '/new': {
       const c = store.newChat(u);
       return void await tg.sendMessage(chatId, `💬 Создан новый чат «${c.title}». Контекст очищен.`, { reply_markup: mainKb(u) });
@@ -1302,6 +1502,7 @@ async function onCallback(u, q) {
     keepSupport: data === 'support' || data === 'support_off',
     keepBug: data === 'bug_report',
   })) store.saveSoon();
+  if (!(data === 'mail' || data.startsWith('mail_')) && u.mailMode) { u.mailMode = null; store.saveSoon(); }
 
   if (data === 'menu') {
     if (u.pending) { u.pending = null; store.saveSoon(); }
@@ -1366,6 +1567,82 @@ async function onCallback(u, q) {
   }
   if (data === 'devices') { await tg.answerCallback(q.id); return void await edit(devicesText(u), devicesKb(u)); }
   if (data === 'sites') { await tg.answerCallback(q.id); return void await edit(await sitesText(u), await sitesKb(u)); }
+  if (data === 'mail') {
+    u.mailMode = null; store.saveSoon();
+    await tg.answerCallback(q.id);
+    return void await edit(mailText(u), mailKb(u));
+  }
+  if (data === 'mail_create') {
+    const state = mail.mailState(u, planOf(u).key);
+    if (state.mailboxCount >= state.mailboxLimit) return void await tg.answerCallback(q.id, `Лимит тарифа — ${state.mailboxLimit} ящиков`, true);
+    u.mailMode = { type: 'create', at: Date.now() }; store.saveSoon();
+    await tg.answerCallback(q.id);
+    return void await edit('➕ *Новый адрес Clop*\n\nОтправьте имя ящика без `@clop`.\n\nРазрешены 3–32 латинских символа, цифры, точка, дефис и подчёркивание. Например: `hame`.', backKb([[{ text: '⬅️ Почта Clop', callback_data: 'mail' }]]));
+  }
+  if (data === 'mail_compose') {
+    const boxes = mail.listMailboxes(u);
+    if (!boxes.length) return void await tg.answerCallback(q.id, 'Сначала создайте адрес', true);
+    u.mailMode = null; store.saveSoon();
+    await tg.answerCallback(q.id);
+    return void await edit('✉️ *Новое письмо*\n\nВыберите адрес отправителя:', { inline_keyboard: [
+      ...boxes.map((box) => [{ text: box.address, callback_data: `mail_from:${box.local}` }]),
+      [{ text: '⬅️ Почта Clop', callback_data: 'mail' }],
+    ] });
+  }
+  if (data.startsWith('mail_from:')) {
+    const local = mail.normalizeLocal(data.slice(10));
+    const box = local && mail.listMailboxes(u).find((item) => item.local === local);
+    if (!box) return void await tg.answerCallback(q.id, 'Адрес не найден', true);
+    u.mailMode = { type: 'recipient', from: box.address, at: Date.now() }; store.saveSoon();
+    await tg.answerCallback(q.id);
+    return void await edit(`✉️ Отправитель: \`${box.address}\`\n\nВведите получателя: короткий адрес \`name@clop\` или обычную интернет-почту.`, backKb([[{ text: '⬅️ Почта Clop', callback_data: 'mail' }]]));
+  }
+  if (data === 'mail_inbox' || data === 'mail_sent') {
+    u.mailMode = null; store.saveSoon();
+    const folder = data === 'mail_sent' ? 'sent' : 'inbox';
+    await tg.answerCallback(q.id);
+    return void await edit(mailListText(u, folder), mailListKb(u, folder));
+  }
+  if (data === 'mail_manage') {
+    u.mailMode = null; store.saveSoon();
+    await tg.answerCallback(q.id);
+    return void await edit(mailManageText(u), mailManageKb(u));
+  }
+  if (data.startsWith('mail_delete:')) {
+    const local = mail.normalizeLocal(data.slice(12));
+    const box = local && mail.listMailboxes(u).find((item) => item.local === local);
+    if (!box) return void await tg.answerCallback(q.id, 'Ящик не найден', true);
+    await tg.answerCallback(q.id);
+    return void await edit(`🗑 *Удалить ${box.address}?*\n\nАдрес освободится, а все входящие письма этого ящика будут удалены.`, { inline_keyboard: [
+      [{ text: 'Да, удалить', callback_data: `mail_delete_yes:${box.local}` }],
+      [{ text: 'Отмена', callback_data: 'mail_manage' }],
+    ] });
+  }
+  if (data.startsWith('mail_delete_yes:')) {
+    const local = mail.normalizeLocal(data.slice(16));
+    const ok = local && await mail.deleteMailbox(u, `${local}@clop`);
+    await tg.answerCallback(q.id, ok ? 'Ящик удалён' : 'Ящик не найден', !ok);
+    return void await edit(mailText(u), mailKb(u));
+  }
+  if (data.startsWith('mail_file:')) {
+    const [, id, index] = data.split(':');
+    const file = await mail.attachmentData(u, id, index);
+    if (!file) return void await tg.answerCallback(q.id, 'Файл не найден', true);
+    await tg.answerCallback(q.id, 'Отправляю файл…');
+    await tg.sendDocument(chatId, file.content, file.filename, { contentType: file.contentType });
+    return;
+  }
+  if (data.startsWith('mail_msg_delete:')) {
+    const ok = await mail.deleteMessage(u, data.slice(16));
+    await tg.answerCallback(q.id, ok ? 'Письмо удалено' : 'Письмо не найдено', !ok);
+    return void await edit(mailListText(u, 'inbox'), mailListKb(u, 'inbox'));
+  }
+  if (data.startsWith('mail_msg:')) {
+    const message = mail.getMessage(u, data.slice(9));
+    if (!message) return void await tg.answerCallback(q.id, 'Письмо не найдено', true);
+    await tg.answerCallback(q.id);
+    return void await edit(mailMessageText(message), mailMessageKb(u, message));
+  }
   if (data.startsWith('site_del:')) {
     const ok = await sites.removeSite(u.id, data.split(':')[1]);
     await tg.answerCallback(q.id, ok ? '🗑 Сайт удалён, ссылка больше не открывается' : 'Не удалось удалить', !ok);
@@ -1812,6 +2089,12 @@ export async function handleUpdate(update) {
     ].join('\n'), { reply_markup: mainKb(u) });
   }
 
+  const rawText = (msg.text || msg.caption || '').trim();
+  if (u.mailMode && !rawText.startsWith('/')) {
+    const handled = await handleMailCompose(u, chatId, msg, rawText);
+    if (handled) return;
+  }
+
   if (msg.document) {
     return void await handleDocument(u, chatId, msg);
   }
@@ -1822,7 +2105,7 @@ export async function handleUpdate(update) {
     return void await tg.sendMessage(chatId, '🙂 Понимаю текст, картинки и документы Word, Excel, PowerPoint. Видео и голосовые — пока нет.');
   }
 
-  const text = (msg.text || msg.caption || '').trim();
+  const text = rawText;
   if (msg.contact) {
     if (String(msg.contact.user_id || '') !== String(u.id)) return void await tg.sendMessage(chatId, 'Отправьте именно свой контакт, чтобы сохранить ваш номер для приглашений в команду.');
     const ok = store.savePhone(u, msg.contact.phone_number);

@@ -25,14 +25,14 @@ export async function api(method, params = {}, { timeoutMs = 65_000 } = {}) {
   }
 }
 
-export async function sendDocument(chatId, buffer, filename, { caption, timeoutMs = 120_000 } = {}) {
+export async function sendDocument(chatId, buffer, filename, { caption, timeoutMs = 120_000, contentType = 'application/zip' } = {}) {
   const form = new FormData();
   form.append('chat_id', String(chatId));
   if (caption) {
     form.append('caption', caption.slice(0, 1024));
     form.append('parse_mode', 'Markdown');
   }
-  form.append('document', new Blob([buffer], { type: 'application/zip' }), filename);
+  form.append('document', new Blob([buffer], { type: contentType }), filename);
 
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
