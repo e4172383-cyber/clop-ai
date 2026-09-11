@@ -48,8 +48,8 @@ test('legacy GPT events are corrected while preserving their model multiplier', 
     cacheRead: 17_900,
     billable: Math.round(18_025 * 1.2),
   };
-  assert.equal(eventBillable(legacy, 'gpt'), 75);
-  assert.equal(eventBillable({ ...legacy, billingVersion: BILLING_VERSION }, 'gpt'), Math.round(legacy.billable / 2));
+  assert.equal(eventBillable(legacy, 'gpt'), 50);
+  assert.equal(eventBillable({ ...legacy, billingVersion: BILLING_VERSION }, 'gpt'), Math.round(legacy.billable / 3));
   assert.equal(eventBillable(legacy, 'kimi'), legacy.billable);
 });
 
@@ -61,7 +61,7 @@ test('version 2 GPT events are reduced when resumed context was charged repeated
     billable: 42_753,
     billingVersion: 2,
   };
-  assert.equal(eventBillable(event, 'gpt'), 216);
+  assert.equal(eventBillable(event, 'gpt'), 144);
 });
 
 test('invalid or excessive cached counts cannot create negative usage', () => {

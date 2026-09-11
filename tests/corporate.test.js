@@ -52,12 +52,12 @@ test('corporate short window is per member and weekly window is shared across pr
 
   const ownerState = limits.checkLimits(owner, 'gpt');
   const memberState = limits.checkLimits(member, 'kimi');
-  assert.equal(ownerState.states.find((x) => x.key === 'short').percent, 20);
+  assert.equal(ownerState.states.find((x) => x.key === 'short').percent, 13);
   assert.equal(memberState.states.find((x) => x.key === 'short').blocked, undefined);
   assert.equal(memberState.states.find((x) => x.key === 'short').percent, 50);
   assert.equal(memberState.states.find((x) => x.key === 'short').exceeded, false);
-  assert.equal(ownerState.states.find((x) => x.key === 'long').percent, 35);
-  assert.equal(memberState.states.find((x) => x.key === 'long').percent, 35);
+  assert.equal(ownerState.states.find((x) => x.key === 'long').percent, 32);
+  assert.equal(memberState.states.find((x) => x.key === 'long').percent, 32);
   assert.equal(memberState.blocked, null);
 });
 

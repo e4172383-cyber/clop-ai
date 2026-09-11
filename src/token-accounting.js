@@ -1,5 +1,7 @@
 export const BILLING_VERSION = 3;
-export const GPT_LIMIT_BOOST = 2;
+// GPT получает втрое больше эффективной квоты: в общий пул попадает треть
+// взвешенного расхода. Применяется и к новым, и к сохранённым событиям.
+export const GPT_LIMIT_BOOST = 3;
 
 const amount = (value) => {
   const number = Number(value || 0);

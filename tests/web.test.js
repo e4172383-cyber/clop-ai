@@ -960,7 +960,7 @@ test('/chat/api/message keeps the current prompt out of history, cleans vision t
   assert.equal(modelCalls[1].messages.some((message) => message.content === 'Продолжай'), false);
 });
 
-test('/chat/api/message reflects the doubled GPT allowance after recording usage', async () => {
+test('/chat/api/message reflects the tripled GPT allowance after recording usage', async () => {
   user.fast = false;
   const limit = config.PLANS.free.limits.gpt.short;
   const billable = Math.ceil(limit / 2);
@@ -975,7 +975,7 @@ test('/chat/api/message reflects the doubled GPT allowance after recording usage
   });
   assert.equal(response.status, 200);
   const body = await response.json();
-  assert.equal(body.limits.gpt.short.percent, Math.round((billable / 2 / limit) * 100));
+  assert.equal(body.limits.gpt.short.percent, Math.round((billable / 3 / limit) * 100));
   assert.equal(body.limits.gpt.short.exceeded, false);
   assert.deepEqual(Object.keys(body.limits.gpt.short).sort(), ['exceeded', 'percent', 'resetAt', 'title']);
 
