@@ -51,7 +51,7 @@ test('Clop 4 models have fixed Medium behavior and Pulsar starts at GO', () => {
     assert.equal(MODELS[key].supportsEffort, false);
     assert.equal(MODELS[key].hideIdentity, true);
   }
-  assert.ok(MODELS['gpt-5-4-mini'].plans.includes('free'));
+  assert.ok(MODELS['gpt-luna'].plans.includes('free'));
   assert.ok(MODELS['gpt-terra'].plans.includes('free'));
   assert.deepEqual(MODELS['gpt-terra'].plans, ['free', 'go', 'pro', 'max', 'max20', 'coderplus']);
   assert.equal(MODELS['gpt-5-5'].plans.includes('free'), false);
@@ -59,7 +59,7 @@ test('Clop 4 models have fixed Medium behavior and Pulsar starts at GO', () => {
 });
 test('old Claude and free Astra selections safely use the default', () => {
   const promo = { models: ['gpt-astra'], from: 1000, until: 2000 };
-  for (const old of ['sonnet-5','clop-2-5-haiku','clop-3-1-opus','fable-5']) {
+  for (const old of ['gpt-5-4-mini','sonnet-5','clop-2-5-haiku','clop-3-1-opus','fable-5']) {
     assert.equal(selectModel(MODELS,old,'free',DEFAULT_MODEL,Object.keys(PLANS),promo,1500).key, DEFAULT_MODEL);
   }
   assert.equal(selectModel(MODELS,'gpt-astra','free',DEFAULT_MODEL,Object.keys(PLANS),promo,1500).key,DEFAULT_MODEL);

@@ -8,6 +8,7 @@ const UNLIMITED_MODELS = new Set(Object.keys(MODELS).filter((k) => MODELS[k].unl
 // Все платные тарифы, кроме free — чтобы не перечислять их поштучно всякий раз
 const PAID_PLANS = new Set(Object.keys(PLANS).filter((k) => k !== 'free'));
 const LEGACY_MODEL_PROVIDERS = Object.freeze({
+  'gpt-5-4-mini': 'gpt',
   'clop-3-1-pulsar': 'clop',
   'clop-3-1-opus': 'clop',
   'clop-3-1-haiku': 'clop',

@@ -560,8 +560,8 @@
   .buy-btn:hover{transform:translateY(-2px);box-shadow:0 11px 26px rgba(217,119,87,.45), var(--glass-glow)}
   .buy-btn svg{width:15px;height:15px;flex:none;fill:currentColor;stroke:none}
   .buy-note{font-size:11.5px;color:var(--muted);margin-top:3px}
-  .trial-btn{margin:0 0 14px;background:linear-gradient(135deg,#e98552,#c85a34)}
-  .trial-state{margin:0 0 14px;padding:11px 13px;border:1px solid rgba(217,119,87,.25);border-radius:13px;background:rgba(217,119,87,.08);color:var(--muted);font-size:12px}
+  .trial-btn{margin:0 0 14px;min-height:48px;background:linear-gradient(135deg,#f0a16f,#d7653d);box-shadow:0 12px 28px rgba(217,119,87,.28);font-size:13px}
+  .trial-state{margin:0 0 14px;padding:13px 15px;border:1px solid rgba(217,119,87,.32);border-radius:15px;background:linear-gradient(135deg,rgba(240,161,111,.15),rgba(217,119,87,.07));color:var(--text);font-size:12.5px;line-height:1.5}
   .hosting-quota{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}.hosting-quota span{padding:5px 8px;border:1px solid var(--line);border-radius:999px;background:var(--surface-2);color:var(--muted);font-size:10.5px}
 
   /* --- Профиль --- */
@@ -1339,6 +1339,7 @@ async function boot() {
   if (data) {
     showApp(data);
     if (location.hash === '#bug') window.setTimeout(openBugs, 0);
+    if (location.hash === '#plans') window.setTimeout(openPlans, 0);
     if (location.hash === '#remote') window.setTimeout(openRemote, 0);
     if (location.hash === '#sites') window.setTimeout(openSites, 0);
     if (location.hash === '#storage') window.setTimeout(openStorage, 0);
@@ -2541,6 +2542,7 @@ async function openBugs() {
 
 document.getElementById('bugBtn').addEventListener('click', openBugs);
 window.addEventListener('hashchange', () => { if (location.hash === '#bug' && document.getElementById('app').style.display !== 'none') openBugs(); });
+window.addEventListener('hashchange', () => { if (location.hash === '#plans' && document.getElementById('app').style.display !== 'none') openPlans(); });
 document.getElementById('submitBugBtn').addEventListener('click', async (event) => {
   const description = document.getElementById('bugDescription').value.trim();
   const stateEl = document.getElementById('bugSubmitState');
@@ -2566,7 +2568,7 @@ function renderRemoteDevices(data) {
   const host = document.getElementById('remoteDevices');
   const devices = data?.devices || [];
   if (!devices.length) {
-    host.innerHTML = '<div class="muted-sm">Компьютеры не найдены. Откройте Clop Code 2.4.8, войдите через тот же Telegram и включите запросы Remote в настройках.</div>';
+    host.innerHTML = '<div class="muted-sm">Компьютеры не найдены. Откройте Clop Code 2.4.9, войдите через тот же Telegram и включите запросы Remote в настройках.</div>';
     return;
   }
   host.innerHTML = devices.map(device => {
@@ -2996,7 +2998,7 @@ async function openPlans() {
       ? `<div class="trial-state">⚡ Пробный GO активен до <b>${escapeHtml(trialEnd)}</b>. После окончания потребуется покупка.</div>`
       : trial.used
         ? '<div class="trial-state">✓ Пробный GO уже использован на этом аккаунте.</div>'
-        : '';
+        : '<div class="trial-state"><b>Пробный GO на 1 день</b><br>Доступен один раз бесплатным аккаунтам без активной подписки.</div>';
   body.innerHTML = `<section>${banner}${trialControl}${p.plans.map((pl, i) => {
     const isCur = pl.key === p.current;
     const isPromo = promo && pl.key === promo.plan;

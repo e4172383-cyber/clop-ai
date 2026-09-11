@@ -2,7 +2,7 @@
 // Product recommendation order; availability is always supplied by the server.
 const ClopCreation = {
   strongest(models, plan) {
-    const order = ['gpt-astra','gpt-sol','kimi-k3-swarm','kimi-k3','gpt-5-5','gpt-terra','kimi-k2-8','kimi-k2-7-code','gpt-luna','gpt-spark','gpt-5-4-mini','kimi-k2-6'];
+    const order = ['gpt-astra','gpt-sol','kimi-k3-swarm','kimi-k3','gpt-5-5','gpt-terra','kimi-k2-8','kimi-k2-7-code','gpt-luna','gpt-spark','kimi-k2-6'];
     return order.map(key => models.find(m => m.key === key && m.available === true && (!Array.isArray(m.plans) || m.plans.includes(plan)))).find(Boolean) || null;
   },
   sections: {

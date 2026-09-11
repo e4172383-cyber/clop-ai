@@ -26,7 +26,7 @@ test('update helper passes paths as environment values through a hidden independ
     installDir: 'C:\\Apps\\Clop Code',
     appPath: 'C:\\Apps\\Clop Code\\Clop Code.exe',
     tempDir,
-    expectedVersion: '2.4.8',
+    expectedVersion: '2.4.9',
     parentPid: 1234,
     powershellPath: 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe',
     wscriptPath: 'C:\\Windows\\System32\\wscript.exe',
@@ -43,7 +43,7 @@ test('update helper passes paths as environment values through a hidden independ
   assert.equal(call.options.env.CLOP_INSTALLER, path.resolve('C:\\Temp\\Clop Setup.exe'));
   assert.equal(call.options.env.CLOP_INSTALL_DIR, path.resolve('C:\\Apps\\Clop Code'));
   assert.equal(call.options.env.CLOP_UPDATE_LOG, path.join(tempDir, 'clop-update.log'));
-  assert.equal(call.options.env.CLOP_EXPECTED_VERSION, '2.4.8');
+  assert.equal(call.options.env.CLOP_EXPECTED_VERSION, '2.4.9');
   assert.equal(call.options.env.CLOP_UPDATE_READY, result.readyPath);
   assert.equal(call.options.env.CLOP_UPDATE_LAUNCHER, result.launcherPath);
   assert.equal(call.options.env.SystemRoot, process.env.SystemRoot);

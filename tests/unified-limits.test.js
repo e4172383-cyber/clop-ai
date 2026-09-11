@@ -33,7 +33,6 @@ test('every published model has the intended shared-pool consumption weight', ()
     'kimi-k3': 3,
     'kimi-k3-swarm': 5,
     'gpt-astra': 6,
-    'gpt-5-4-mini': 1,
     'gpt-5-5': 4,
     'gpt-luna': 1,
     'gpt-spark': 1.25,

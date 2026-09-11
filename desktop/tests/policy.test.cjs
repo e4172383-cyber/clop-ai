@@ -185,7 +185,7 @@ test('cleanSettings accepts safe values, clamps numbers, and preserves protected
     theme: 'system',
     maxSteps: 99.9,
     shellTimeout: 1,
-    model: 'gpt-5-4-mini',
+    model: 'gpt-luna',
     effort: 'high',
     agreementVersion: 'forged',
     agreementAt: 0,
@@ -198,7 +198,7 @@ test('cleanSettings accepts safe values, clamps numbers, and preserves protected
   assert.equal(cleaned.theme, 'system');
   assert.equal(Object.hasOwn(cleaned, 'maxSteps'), false);
   assert.equal(cleaned.shellTimeout, 5);
-  assert.equal(cleaned.model, 'gpt-5-4-mini');
+  assert.equal(cleaned.model, 'gpt-luna');
   assert.equal(cleaned.effort, 'high');
   assert.equal(cleaned.agreementVersion, previous.agreementVersion);
   assert.equal(cleaned.agreementAt, previous.agreementAt);

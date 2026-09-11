@@ -106,14 +106,6 @@ export const MODELS = {
     recommended: true, supportsEffort: true, limitMultiplier: 6,
   },
   // --- GPT (OpenAI, через Codex CLI на квоте ChatGPT-подписки) ---
-  'gpt-5-4-mini': {
-    key: 'gpt-5-4-mini', provider: 'gpt', cli: 'gpt-5.4-mini',
-    title: 'GPT 5.4 Mini', short: '5.4 Mini',
-    desc: 'Быстрая компактная GPT-модель — доступна всем',
-    plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'],
-    recommended: true, supportsEffort: true, limitMultiplier: 1,
-    effortOptions: ['low', 'medium', 'high'], contextWindow: 400_000,
-  },
   'gpt-5-5': {
     key: 'gpt-5-5', provider: 'gpt', cli: 'gpt-5.5',
     title: 'GPT 5.5', short: 'GPT 5.5',
@@ -214,7 +206,6 @@ export const MODEL_RATINGS = Object.freeze({
   'kimi-k3':         { price: 3, speed: 3, quality: 5 },
   'kimi-k3-swarm':   { price: 2, speed: 2, quality: 5 },
   'gpt-astra':       { price: 1, speed: 2, quality: 5 },
-  'gpt-5-4-mini':    { price: 5, speed: 5, quality: 3 },
   'gpt-5-5':         { price: 2, speed: 3, quality: 5 },
   'gpt-luna':        { price: 5, speed: 5, quality: 3 },
   'gpt-spark':       { price: 4, speed: 5, quality: 4 },
@@ -298,7 +289,7 @@ export const freeGoActive = () => Date.now() < FREE_GO_UNTIL;
 export const PUBLIC_URL = (process.env.PUBLIC_URL || 'https://clop.195-201-169-74.sslip.io').replace(/\/+$/, '');
 export const DOWNLOAD_BASE_URL = (
   process.env.DOWNLOAD_BASE_URL
-  || 'https://github.com/e4172383-cyber/clop-ai/releases/download/v2.4.8'
+  || 'https://github.com/e4172383-cyber/clop-ai/releases/download/v2.4.9'
 ).replace(/\/+$/, '');
 
 export const MODEL_PROMO = {

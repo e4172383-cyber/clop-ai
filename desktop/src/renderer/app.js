@@ -40,7 +40,6 @@
     { key: 'clop-4-pulsar', title: 'Clop 4 Pulsar', provider: 'clop', description: 'Флагманская модель Clop 4 — от GO', available: false, plans: ['go', 'pro', 'max', 'max20', 'coderplus'] },
     { key: 'clop-4-pro', title: 'Clop 4 Pro', provider: 'clop', description: 'Универсальная модель Clop 4', available: true, plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'] },
     { key: 'clop-4-flash', title: 'Clop 4 Flash', provider: 'clop', description: 'Быстрая модель Clop 4 · лимит ×1,5', available: true, plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'], limitMultiplier: 1.5 },
-    { key: 'gpt-5-4-mini', title: 'GPT 5.4 Mini', provider: 'gpt', description: 'Быстрая компактная GPT-модель', available: true, plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'] },
     { key: 'gpt-luna', title: 'GPT 5.6 Луна', provider: 'gpt', description: 'Быстрая GPT-модель', available: true, plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'] },
     { key: 'gpt-spark', title: 'Codex 5.3 Спарк', provider: 'gpt', description: 'GPT-модель для кода', available: true, plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'] },
     { key: 'kimi-k2-6', title: 'Kimi K2.6', provider: 'kimi', description: 'Kimi без силы мышления', available: true, plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'] },
