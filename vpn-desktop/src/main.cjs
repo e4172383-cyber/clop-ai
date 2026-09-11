@@ -15,7 +15,7 @@ const exec = promisify(execFile);
 const SMOKE_TEST = process.argv.includes('--smoke-test');
 const RENDERER = path.join(__dirname, 'renderer', 'index.html');
 const PRELOAD = path.join(__dirname, 'preload.cjs');
-const ELEVATED = path.join(__dirname, 'elevated.ps1');
+const ELEVATED_SOURCE = path.join(__dirname, 'elevated.ps1');
 const CSP = [
   "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline'", "img-src 'self' data:",
   "connect-src 'none'", "object-src 'none'", "base-uri 'none'", "form-action 'none'", "frame-src 'none'",
@@ -31,6 +31,7 @@ let refreshTimer = null;
 let dataDir = '';
 let sessionFile = '';
 let configPath = '';
+let elevatedHelperPath = '';
 let privateKey = '';
 let publicKey = '';
 let busy = false;
@@ -174,7 +175,7 @@ function registerIpc() {
   });
   handle('login-cancel', async () => { pendingLogin = null; return { ok: true }; });
   handle('logout', async () => withBusy(async () => {
-    if (await tunnel.connected()) await tunnel.disconnect(configPath, ELEVATED);
+    if (await tunnel.connected()) await tunnel.disconnect(configPath, elevatedHelperPath);
     if (token) await fetchJson('/desk/logout', { method: 'POST', auth: true }).catch(() => {});
     token = ''; account = null; profile = null; pendingLogin = null;
     saveSession();
@@ -186,27 +187,37 @@ function registerIpc() {
     profile = await fetchJson('/desk/vpn/profile', { method: 'POST', auth: true, body: { publicKey } });
     if (profile.exhausted || !profile.enabled) throw new Error('Недельный трафик закончился. Подключение откроется после сброса лимита.');
     fs.writeFileSync(configPath, tunnel.profileText(privateKey, profile, { includeDns: process.platform === 'win32' }), { mode: 0o600 });
-    if (!(await tunnel.connected())) await tunnel.connect(configPath, ELEVATED);
+    if (!(await tunnel.connected())) await tunnel.connect(configPath, elevatedHelperPath);
     await new Promise((resolve) => setTimeout(resolve, 900));
     await refreshRemote();
     return { ok: true };
   }));
   handle('disconnect', async () => withBusy(async () => {
-    if (await tunnel.connected()) await tunnel.disconnect(configPath, ELEVATED);
+    if (await tunnel.connected()) await tunnel.disconnect(configPath, elevatedHelperPath);
     await refreshRemote().catch(() => {});
     return { ok: true };
   }));
-  handle('install-dependency', async () => {
+  handle('install-dependency', async () => withBusy(async () => {
     if (process.platform === 'win32') {
-      await shell.openExternal('https://www.wireguard.com/install/', { activate: true });
-      return { ok: true, opened: true };
+      if ((await tunnel.dependencyState()).ready) return { ok: true, installed: true };
+      try {
+        await exec('winget.exe', [
+          'install', '--id', 'WireGuard.WireGuard', '--exact', '--silent',
+          '--accept-package-agreements', '--accept-source-agreements', '--disable-interactivity',
+        ], { timeout: 10 * 60_000, windowsHide: true });
+      } catch {
+        await shell.openExternal('https://www.wireguard.com/install/', { activate: true });
+        throw new Error('Автоустановка не удалась. Открыта официальная страница WireGuard. Установите его и вернитесь в Clop VPN.');
+      }
+      if (!(await tunnel.dependencyState()).ready) throw new Error('WireGuard установлен, но пока не найден. Перезапустите Clop VPN.');
+      return { ok: true, installed: true };
     }
     if (process.platform === 'linux') {
       await exec('pkexec', ['apt-get', 'install', '-y', 'wireguard-tools'], { timeout: 10 * 60_000 });
       return { ok: true };
     }
     throw new Error('Эта система пока не поддерживается.');
-  });
+  }));
   handle('window', async (action) => {
     if (action === 'minimize') mainWindow?.minimize();
     else if (action === 'close') mainWindow?.close();
@@ -241,6 +252,8 @@ else {
     fs.mkdirSync(dataDir, { recursive: true });
     sessionFile = path.join(dataDir, 'session.json');
     configPath = path.join(dataDir, `${tunnel.TUNNEL_NAME}.conf`);
+    elevatedHelperPath = path.join(dataDir, 'clop-vpn-elevated.ps1');
+    fs.writeFileSync(elevatedHelperPath, fs.readFileSync(ELEVATED_SOURCE, 'utf8'), { mode: 0o600 });
     loadSession();
     server = (await resolveServer()).url;
     registerIpc();

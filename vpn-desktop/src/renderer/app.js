@@ -27,18 +27,26 @@ function showToast(message, error = false) {
 
 function render(next) {
   const now = performance.now(); state = next;
+  const dependencyReady = Boolean(next.dependency?.ready);
   $('loginModal').classList.toggle('hidden', next.loggedIn);
   $('accountName').textContent = next.account?.name || 'Clop'; $('accountPlan').textContent = next.account?.plan || 'Не выполнен вход';
   $('logout').style.visibility = next.loggedIn ? 'visible' : 'hidden';
   $('dependencyLabel').textContent = next.dependency?.label || 'Проверка WireGuard…';
-  $('installDependency').classList.toggle('hidden', Boolean(next.dependency?.ready));
-  $('connectButton').disabled = next.busy || !next.loggedIn || !next.dependency?.ready;
+  $('installDependency').classList.toggle('hidden', dependencyReady);
+  $('connectButton').disabled = next.busy || (dependencyReady && !next.loggedIn);
   $('connectionCard').classList.toggle('connected', next.connected);
-  $('heroTitle').textContent = next.connected ? 'Ваш трафик защищён' : (next.busy ? 'Подключаем…' : 'Готов к подключению');
-  $('connectionLabel').textContent = next.busy ? 'Подождите…' : (next.connected ? 'Отключить' : 'Подключить');
+  $('connectionCard').classList.toggle('dependency-missing', !dependencyReady);
+  $('heroTitle').textContent = !dependencyReady
+    ? (next.busy ? 'Устанавливаем WireGuard…' : 'Нужно установить WireGuard')
+    : (next.connected ? 'Ваш трафик защищён' : (next.busy ? 'Подключаем…' : 'Готов к подключению'));
+  $('connectionLabel').textContent = !dependencyReady
+    ? (next.busy ? 'Установка…' : 'Установить WireGuard')
+    : (next.busy ? 'Подождите…' : (next.connected ? 'Отключить' : 'Подключить'));
   if (next.connected && !connectedSince) connectedSince = Date.now();
   if (!next.connected) connectedSince = 0;
-  $('connectionTime').textContent = next.connected ? elapsed(connectedSince) : 'Германия · Фалькенштайн';
+  $('connectionTime').textContent = !dependencyReady
+    ? 'Нужен один раз для защищённого соединения'
+    : (next.connected ? elapsed(connectedSince) : 'Германия · Фалькенштайн');
   const p = next.profile;
   if (p) {
     $('usedTraffic').textContent = humanBytes(p.usedBytes); $('trafficLimit').textContent = `${p.plan.weeklyGb} ГБ`;
@@ -87,8 +95,11 @@ async function cancelLogin() {
 $('minimize').addEventListener('click', () => api.window('minimize'));
 $('close').addEventListener('click', () => api.window('close'));
 $('loginButton').addEventListener('click', startLogin); $('cancelLogin').addEventListener('click', cancelLogin);
-$('connectButton').addEventListener('click', () => updateAfter(() => state.connected ? api.disconnect() : api.connect(), state.connected ? 'VPN отключён' : 'VPN подключён'));
-$('installDependency').addEventListener('click', () => updateAfter(() => api.installDependency(), 'Установка WireGuard запущена'));
+$('connectButton').addEventListener('click', () => {
+  if (!state.dependency?.ready) return updateAfter(() => api.installDependency(), 'WireGuard установлен. Теперь можно подключаться.');
+  return updateAfter(() => state.connected ? api.disconnect() : api.connect(), state.connected ? 'VPN отключён' : 'VPN подключён');
+});
+$('installDependency').addEventListener('click', () => updateAfter(() => api.installDependency(), 'WireGuard установлен. Теперь можно подключаться.'));
 $('logout').addEventListener('click', () => updateAfter(() => api.logout(), 'Вы вышли из аккаунта'));
 api.onState(render);
 api.state().then(render).catch((error) => showToast(error.message || String(error), true));

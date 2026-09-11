@@ -71,7 +71,9 @@ async function connected() {
   if (process.platform === 'win32') {
     try {
       const { stdout } = await exec('sc.exe', ['query', `WireGuardTunnel$${TUNNEL_NAME}`], { timeout: 5_000, windowsHide: true });
-      return /STATE\s*:\s*4\s+RUNNING/i.test(stdout);
+      // The STATE label is localized and Node decodes legacy Windows output poorly.
+      // RUNNING remains stable, so detect it without depending on the translated label.
+      return /\bRUNNING\b/i.test(stdout);
     } catch { return false; }
   }
   if (process.platform === 'linux') {
