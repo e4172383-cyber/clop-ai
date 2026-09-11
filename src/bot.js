@@ -74,6 +74,7 @@ import { buildZip } from './zip.js';
 import { claimApiKey, resetApiKey, syncPlan, cloudEnabled } from './cloud.js';
 import { claimCode } from './weblogin.js';
 import { STARS_PER_USD, MIN_TOPUP_STARS, MAX_TOPUP_STARS, starsToMicros, microsToUsd, purchaseBonus } from './billing.js';
+import { getServerMetrics, formatServerStatus } from './server-metrics.js';
 
 const busy = new Set();
 const siteQuotaPlan = (u) => planOf(u).key;
@@ -159,6 +160,7 @@ function mainKb(u) {
       ...(showOffer ? [[{ text: offer.claimed ? '🎁 Бонус Astra + Kimi активен' : '🎁 Получить 10 млн Astra + 1 млн Kimi', callback_data: 'offer_claim' }]] : []),
       [{ text: '🖼 Сгенерировать (бета)', callback_data: 'imagegen' }],
       [{ text: '🌐 Чат на сайте (бета)', url: `${PUBLIC_URL}/chat` }],
+      [{ text: '🖥 Состояние сервера', callback_data: 'server_status' }],
       [{ text: `💻 Скачать Clop Code · v${DESKTOP_RELEASE.version}`, callback_data: 'app_download' }],
       [{ text: '🔑 Мой API', callback_data: 'myapi' }, { text: '❓ Помощь', callback_data: 'help' }],
       [{ text: '🐞 Баг?', callback_data: 'bug_report' }, { text: '🛟 Поддержка', callback_data: 'support' }],
@@ -1266,6 +1268,12 @@ async function onCallback(u, q) {
       : 'Предложение уже завершилось.', mainKb(u));
   }
   if (data === 'usage') { await tg.answerCallback(q.id); return void await edit(usageText(u), backKb()); }
+  if (data === 'server_status') {
+    await tg.answerCallback(q.id, 'Обновляю показатели…');
+    return void await edit(formatServerStatus(await getServerMetrics()), backKb([
+      [{ text: '🔄 Обновить', callback_data: 'server_status' }],
+    ]));
+  }
   if (data === 'app_download') { await tg.answerCallback(q.id); return void await edit(appDownloadText(), appDownloadKb()); }
   if (data === 'help') { await tg.answerCallback(q.id); return void await edit(helpText(), helpKb()); }
   if (data === 'copyright') { await tg.answerCallback(q.id); return void await edit(copyrightText(), backKb([[{ text: '⬅️ Назад к справке', callback_data: 'help' }]])); }
