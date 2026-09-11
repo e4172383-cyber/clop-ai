@@ -84,7 +84,7 @@ export function giveawayState(u, now = Date.now()) {
     endsAt: campaign.endsAt,
     active: now < campaign.endsAt && !campaign.winner,
     ended: now >= campaign.endsAt || Boolean(campaign.winner),
-    joined: Boolean(u && participants[String(u.id)]),
+    joined: Boolean(u && participants[String(u.id)]?.explicit),
     participants: PRO_GIVEAWAY.initialParticipants + Object.values(participants).filter((entry) => entry.explicit).length,
     winner: publicWinner(campaign.winner),
   };
@@ -95,7 +95,7 @@ export function joinGiveaway(u, now = Date.now()) {
   if (now >= campaign.endsAt || campaign.winner) return { ok: false, reason: 'ended', state: giveawayState(u, now) };
   if (!campaign.participants || typeof campaign.participants !== 'object') campaign.participants = {};
   const id = String(u.id);
-  if (campaign.participants[id]) return { ok: true, alreadyJoined: true, state: giveawayState(u, now) };
+  if (campaign.participants[id]?.explicit) return { ok: true, alreadyJoined: true, state: giveawayState(u, now) };
   campaign.participants[id] = { ...participantOf(u, now), explicit: true };
   store.saveSoon();
   return { ok: true, alreadyJoined: false, state: giveawayState(u, now) };
