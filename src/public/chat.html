@@ -536,6 +536,11 @@
   .limited-offer-copy{min-width:0;flex:1}.limited-offer-copy b{display:block;font-size:13.5px}.limited-offer-copy span{display:block;margin-top:3px;color:var(--muted);font-size:11.5px}
   .limited-offer button{border:0;border-radius:12px;padding:10px 15px;background:#3478e5;color:#fff;font-weight:650;white-space:nowrap;box-shadow:0 7px 20px rgba(38,103,224,.28)}
   .limited-offer button:hover{filter:brightness(1.08);transform:translateY(-1px)}
+  .giveaway-card{display:flex;align-items:center;gap:13px;margin:0 18px 10px;padding:13px 15px;border:1px solid rgba(239,164,93,.34);border-radius:18px;background:linear-gradient(120deg,rgba(236,132,70,.2),rgba(255,205,123,.11),rgba(124,91,220,.12));box-shadow:0 14px 40px rgba(190,103,45,.15),inset 0 1px rgba(255,255,255,.1);overflow:hidden;position:relative}
+  .giveaway-card:before{content:"";position:absolute;inset:-80% -20%;background:linear-gradient(100deg,transparent 40%,rgba(255,255,255,.13),transparent 60%);animation:giveawayShine 3.2s linear infinite;pointer-events:none}.giveaway-card[hidden]{display:none}
+  @keyframes giveawayShine{from{transform:translateX(-45%)}to{transform:translateX(45%)}}
+  .giveaway-icon{width:42px;height:42px;display:grid;place-items:center;flex:none;border-radius:14px;background:linear-gradient(145deg,#ffbd69,#db6a3c);box-shadow:0 8px 22px rgba(219,106,60,.3);font-size:21px}.giveaway-copy{min-width:0;flex:1;position:relative}.giveaway-copy b{display:block;font-size:13.5px}.giveaway-copy span{display:block;margin-top:3px;color:var(--muted);font-size:11.5px}.giveaway-card button{position:relative;border:0;border-radius:12px;padding:10px 15px;background:linear-gradient(135deg,#ee8f50,#d65e39);color:#fff;font-weight:700;white-space:nowrap;box-shadow:0 7px 20px rgba(214,94,57,.25)}.giveaway-card button:disabled{opacity:.76;cursor:default}
+  @media(max-width:560px){.giveaway-card{margin-inline:10px;flex-wrap:wrap}.giveaway-copy{min-width:calc(100% - 58px)}.giveaway-card button{width:100%}}
   .plan-card{
     background:var(--glass);border:1px solid var(--glass-line);border-radius:16px;
     padding:15px 17px;margin-bottom:11px;box-shadow:var(--glass-glow);
@@ -1003,6 +1008,11 @@
       </div>
     </header>
     <div class="connection-strip" id="connectionStrip" aria-live="polite"><i></i><span>Синхронизация с Telegram включена</span></div>
+    <div class="giveaway-card" id="giveawayCard" hidden>
+      <span class="giveaway-icon">🏆</span>
+      <span class="giveaway-copy"><b id="giveawayTitle">Розыгрыш Pro на 1 месяц</b><span id="giveawayInfo"></span></span>
+      <button type="button" id="giveawayJoin">Присоединиться</button>
+    </div>
     <div class="limited-offer" id="limitedOffer" hidden>
       <span class="limited-offer-icon">🎁</span>
       <span class="limited-offer-copy"><b id="limitedOfferTitle"></b><span id="limitedOfferTime"></span></span>
@@ -1475,6 +1485,48 @@ function renderLimitedOffer(offer) {
   };
 }
 
+function renderGiveaway(giveaway) {
+  const card = document.getElementById('giveawayCard');
+  const button = document.getElementById('giveawayJoin');
+  clearTimeout(renderGiveaway.timer);
+  if (!giveaway) { card.hidden = true; return; }
+  card.hidden = false;
+  document.getElementById('giveawayTitle').textContent = giveaway.winner
+    ? 'Розыгрыш Pro завершён'
+    : 'Розыгрыш Pro на 1 месяц';
+  const update = () => {
+    if (giveaway.winner) {
+      const winner = giveaway.winner.username ? '@' + giveaway.winner.username : giveaway.winner.name;
+      document.getElementById('giveawayInfo').textContent = `Победитель: ${winner} · участвовало ${giveaway.participants}`;
+      button.hidden = true;
+      return;
+    }
+    const left = Math.max(0, Number(giveaway.endsAt || 0) - Date.now());
+    const hours = Math.floor(left / 3600000);
+    const minutes = Math.floor(left % 3600000 / 60000);
+    const seconds = Math.floor(left % 60000 / 1000);
+    document.getElementById('giveawayInfo').textContent = `${giveaway.participants} участников · ${hours}:${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')} до итогов`;
+    if (!left) { button.hidden = true; setTimeout(() => boot(), 1500); return; }
+    renderGiveaway.timer = setTimeout(update, 1000);
+  };
+  button.hidden = false;
+  button.disabled = giveaway.joined;
+  button.textContent = giveaway.joined ? 'Вы участвуете ✓' : 'Присоединиться';
+  button.onclick = async () => {
+    button.disabled = true;
+    button.textContent = 'Добавляю…';
+    const result = await fetch('/chat/api/giveaway/join', { method:'POST' }).then((response) => response.json()).catch(() => null);
+    if (!result?.ok) {
+      button.disabled = false;
+      button.textContent = 'Присоединиться';
+      alert(result?.error || 'Не удалось присоединиться.');
+      return;
+    }
+    renderGiveaway(result.giveaway);
+  };
+  update();
+}
+
 function showApp(data) {
   document.getElementById('login').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
@@ -1482,6 +1534,7 @@ function showApp(data) {
   document.getElementById('planTag').textContent = data.planTitle;
   showModelPromo(data.modelPromo);
   renderLimitedOffer(data.limitedOffer);
+  renderGiveaway(data.giveaway);
   state.models = data.models;
   state.limits = data.limits || {};
   state.effortOptionsByModel = data.effortOptionsByModel;

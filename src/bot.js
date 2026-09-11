@@ -75,6 +75,7 @@ import { claimApiKey, resetApiKey, syncPlan, cloudEnabled } from './cloud.js';
 import { claimCode } from './weblogin.js';
 import { STARS_PER_USD, MIN_TOPUP_STARS, MAX_TOPUP_STARS, starsToMicros, microsToUsd, purchaseBonus } from './billing.js';
 import { getServerMetrics, formatServerStatus } from './server-metrics.js';
+import { drawGiveaway, giveawayNeedsAnnouncement, giveawayState, joinGiveaway, markGiveawayAnnounced, participantIds } from './giveaway.js';
 
 const busy = new Set();
 const siteQuotaPlan = (u) => planOf(u).key;
@@ -149,8 +150,10 @@ function mainKb(u) {
   const trial = store.goTrialState(u);
   const showOffer = offer && (!offer.claimed || offer.active);
   const effortLabel = m.supportsEffort === false ? 'не нужно' : effortOf(u, m).short;
+  const giveaway = giveawayState(u);
   return {
     inline_keyboard: [
+      [{ text: giveaway.active ? `🎉 Розыгрыш Pro · ${giveaway.participants} участвуют` : giveaway.winner ? `🏆 Победитель: ${giveaway.winner.username ? '@' + giveaway.winner.username : giveaway.winner.name}` : '🏆 Итоги розыгрыша Pro', callback_data: 'giveaway' }],
       [{ text: '💬 Новый чат', callback_data: 'new_chat' }, { text: '📂 Мои чаты', callback_data: 'chats' }],
       [{ text: `🤖 Модель: ${m.short}`, callback_data: 'model' }, { text: `🧠 Мышление: ${effortLabel}`, callback_data: 'effort' }],
       ...(m.provider === 'gpt' ? [[{ text: `⚡ Быстро: ${u.fast ? 'ВКЛ' : 'ВЫКЛ'}`, callback_data: 'fast_toggle' }]] : []),
@@ -490,6 +493,7 @@ function copyrightText() {
 
 function startText(u) {
   const m = modelOf(u);
+  const giveaway = giveawayState(u);
   const lines = [
     `👋 Привет! Это *${BOT_NAME}*.`,
     '',
@@ -503,8 +507,49 @@ function startText(u) {
   if (Date.now() < UPCOMING_RELEASE.at) {
     lines.push('', `🔔 Уже скоро — *${UPCOMING_RELEASE.title}* (${UPCOMING_RELEASE.desc})! Выход: *${dt(UPCOMING_RELEASE.at)}*.`);
   }
+  if (giveaway.active) {
+    lines.push('', `🎉 *Розыгрыш Pro на 1 месяц* · уже участвуют *${giveaway.participants}* · итоги через *${humanLeft(giveaway.endsAt - Date.now())}*.`);
+  }
   lines.push('', 'Напишите сообщение или выберите пункт меню 👇');
   return lines.join('\n');
+}
+
+function giveawayText(u) {
+  const state = giveawayState(u);
+  if (state.winner) {
+    const winner = state.winner.username ? `@${state.winner.username}` : state.winner.name;
+    return [
+      '🏆 *Розыгрыш Pro завершён*',
+      '',
+      `Победитель: *${winner}*`,
+      'Приз: *подписка Pro на 1 месяц* — уже выдана.',
+      '',
+      `Всего участвовало: *${state.participants}*`,
+    ].join('\n');
+  }
+  if (!state.active) return '🏆 *Розыгрыш Pro завершён.*\n\nПобедитель будет опубликован после проверки результата.';
+  return [
+    '🎉 *Розыгрыш подписки Pro*',
+    '',
+    '╭  *ПРИЗ*',
+    '│  Pro на 1 месяц',
+    `│  👥 Уже участвуют: *${state.participants}*`,
+    `╰  ⏳ Итоги через: *${humanLeft(state.endsAt - Date.now())}*`,
+    '',
+    state.joined
+      ? '✅ *Вы участвуете.* Победителя выберет сервер автоматически после завершения таймера.'
+      : 'Нажмите «Присоединиться». От одного Telegram-аккаунта принимается одна заявка.',
+    '',
+    `Окончание: *${dt(state.endsAt)} по Киеву*.`
+  ].join('\n');
+}
+
+function giveawayKb(u) {
+  const state = giveawayState(u);
+  const rows = [];
+  if (state.active) rows.push([{ text: state.joined ? '✅ Вы участвуете' : '🎉 Присоединиться', callback_data: state.joined ? 'giveaway' : 'giveaway_join' }]);
+  rows.push([{ text: '🔄 Обновить', callback_data: 'giveaway' }]);
+  return backKb(rows);
 }
 
 /* ---------------- legacy ---------------- */
@@ -899,6 +944,9 @@ async function onCommand(u, chatId, cmd, rawText = '') {
     case '/menu':
       await clearLegacyKeyboard(u, chatId);
       return void await tg.sendMessage(chatId, startText(u), { reply_markup: mainKb(u) });
+    case '/giveaway':
+    case '/розыгрыш':
+      return void await tg.sendMessage(chatId, giveawayText(u), { reply_markup: giveawayKb(u) });
     case '/new': {
       const c = store.newChat(u);
       return void await tg.sendMessage(chatId, `💬 Создан новый чат «${c.title}». Контекст очищен.`, { reply_markup: mainKb(u) });
@@ -1256,6 +1304,17 @@ async function onCallback(u, q) {
     if (u.pending) { u.pending = null; store.saveSoon(); }
     await tg.answerCallback(q.id);
     return void await edit(startText(u), mainKb(u));
+  }
+  if (data === 'giveaway') {
+    await tg.answerCallback(q.id, giveawayState(u).joined ? 'Вы участвуете в розыгрыше' : 'Розыгрыш Pro');
+    return void await edit(giveawayText(u), giveawayKb(u));
+  }
+  if (data === 'giveaway_join') {
+    const result = joinGiveaway(u);
+    if (!result.ok) return void await tg.answerCallback(q.id, 'Розыгрыш уже завершён', true);
+    await store.save({ strict: true });
+    await tg.answerCallback(q.id, result.alreadyJoined ? 'Вы уже участвуете' : 'Заявка принята — удачи!', true);
+    return void await edit(giveawayText(u), giveawayKb(u));
   }
   if (data === 'offer_claim') {
     const offer = claimOffer(u);
@@ -1845,4 +1904,31 @@ export async function handleUpdate(update) {
     return void await handleImageGen(u, chatId, text);
   }
   await handleAsk(u, chatId, text);
+}
+
+let giveawayFinalizing = false;
+
+export async function finalizeGiveawayAndNotify() {
+  if (giveawayFinalizing) return null;
+  giveawayFinalizing = true;
+  try {
+    const result = drawGiveaway();
+    if (!result.ok || (!result.justDrawn && !giveawayNeedsAnnouncement())) return result;
+    await store.save({ strict: true });
+    const winner = result.winner || result.campaign.winner;
+    const winnerLabel = winner.username ? `@${winner.username}` : winner.name;
+    for (const userId of participantIds()) {
+      const won = String(userId) === String(winner.userId);
+      const text = won
+        ? `🎉 *Вы победили в розыгрыше Clop!*\n\nВам выдан тариф *Pro на 1 месяц* — он уже активен до ${dt(winner.proUntil)}.\n\n🏆 Победитель: *${winnerLabel}*`
+        : `🏆 *Розыгрыш Pro завершён*\n\nПобедитель: *${winnerLabel}*\nПриз Pro на 1 месяц уже выдан. Спасибо за участие.`;
+      await tg.sendMessage(Number(userId), text, { reply_markup: mainKb(store.findUser(userId)) }).catch(() => {});
+      await new Promise((resolve) => setTimeout(resolve, 80));
+    }
+    markGiveawayAnnounced();
+    await store.save({ strict: true });
+    return result;
+  } finally {
+    giveawayFinalizing = false;
+  }
 }

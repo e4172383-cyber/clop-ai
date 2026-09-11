@@ -35,6 +35,7 @@ import { planOf, checkAllLimits, checkLimits, effortOf, allowedEffortOptions, im
 import { getSiteKey } from './sitekey.js';
 import { askModel, modelAvailableTo, modelOf, modelPlans } from './bot.js';
 import { addOfferUsage, claimOffer, grantOffer, offerActiveFor, offerState } from './limited-offer.js';
+import { giveawayState, joinGiveaway } from './giveaway.js';
 import { getBotUsername } from './botinfo.js';
 import { createCode, peekClaimed, consumeCode } from './weblogin.js';
 import { setSessionCookie, sessionUserId } from './webchat.js';
@@ -975,6 +976,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
             fast: u.fast === true,
             voice: voiceLimitState(u, plan.key),
             limitedOffer: offerState(u),
+            giveaway: giveawayState(u),
             bonuses: store.bonusReport(u),
           });
         }).catch(() => sendJson(res, 500, { ok: false }));
@@ -1606,6 +1608,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
             ? { title: MODEL_PROMO.title, until: MODEL_PROMO.until, models: MODEL_PROMO.models }
             : null,
           limitedOffer: offerState(u),
+          giveaway: giveawayState(u),
           bonuses: store.bonusReport(u),
           models,
           chats: store.liveChats(u).map((item) => chatSummary(u, item)),
@@ -1916,6 +1919,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           images: { used: img.used, limit: img.limit, left: img.left },
           chatsCount: store.liveChats(u).length,
           limitedOffer: offerState(u),
+          giveaway: giveawayState(u),
           bonuses: store.bonusReport(u),
         });
       });
@@ -1963,6 +1967,19 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
         if (!offer) return sendJson(res, 410, { ok: false, error: 'Предложение завершилось.' });
         await store.save({ strict: true });
         return sendJson(res, 200, { ok: true, limitedOffer: offer });
+      }).catch((e) => sendJson(res, 500, { ok: false, error: String(e.message || e) }));
+      return;
+    }
+
+    if (url.pathname === '/chat/api/giveaway/join' && req.method === 'POST') {
+      (reloadEachRequest ? store.load() : Promise.resolve()).then(async () => {
+        const userId = sessionUserId(req);
+        const u = userId && store.findUser(userId);
+        if (!u) return sendJson(res, 401, { ok: false, error: 'not logged in' });
+        const result = joinGiveaway(u);
+        if (!result.ok) return sendJson(res, 410, { ok: false, error: 'Розыгрыш уже завершён.', giveaway: result.state });
+        await store.save({ strict: true });
+        return sendJson(res, 200, { ok: true, alreadyJoined: result.alreadyJoined, giveaway: result.state });
       }).catch((e) => sendJson(res, 500, { ok: false, error: String(e.message || e) }));
       return;
     }

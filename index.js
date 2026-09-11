@@ -4,13 +4,14 @@ import os from 'node:os';
 import { BOT_NAME, ensureDirs, WEB_HOST, WEB_PORT, initializeModelPromo } from './src/config.js';
 import * as store from './src/store.js';
 import * as tg from './src/telegram.js';
-import { handleUpdate, recoverInterruptedImageJobs } from './src/bot.js';
+import { finalizeGiveawayAndNotify, handleUpdate, recoverInterruptedImageJobs } from './src/bot.js';
 import { startWeb } from './src/web.js';
 import * as codexAuth from './src/codexauth.js';
 import * as kimiAuth from './src/kimiauth.js';
 import { healthCheck as healthCheckGpt } from './src/gpt.js';
 import { setBotUsername } from './src/botinfo.js';
 import { initializeLimitedOffer } from './src/limited-offer.js';
+import { initializeGiveaway } from './src/giveaway.js';
 
 const args = process.argv.slice(2);
 const envFlag = (name) => /^(1|true|yes|on)$/i.test(String(process.env[name] || '').trim());
@@ -20,6 +21,7 @@ const noWeb = args.includes('--no-web') || envFlag('NO_WEB');
 ensureDirs();
 await store.load();
 initializeLimitedOffer();
+initializeGiveaway();
 await initializeModelPromo(store.redisClient());
 
 // На сервере (Render и т.д.) у Codex CLI нет своего интерактивного логина —
@@ -63,6 +65,7 @@ async function startBot() {
         { command: 'effort', description: 'Сила мышления' },
         { command: 'usage', description: 'Лимиты' },
         { command: 'plans', description: 'Тарифы' },
+        { command: 'giveaway', description: 'Розыгрыш Pro на месяц' },
         { command: 'corporate', description: 'Корпоративные тарифы' },
         { command: 'team', description: 'Моя корпоративная команда' },
         { command: 'team_add', description: 'Пригласить участника' },
@@ -89,6 +92,10 @@ async function startBot() {
 
   tg.pollUpdates(handleUpdate, { onError: (e) => console.error('[poll]', e.message) });
   recoverInterruptedImageJobs().catch((e) => console.error('[imagegen] восстановление:', e.message));
+  finalizeGiveawayAndNotify().catch((e) => console.error('[giveaway] завершение:', e.message));
+  setInterval(() => {
+    finalizeGiveawayAndNotify().catch((e) => console.error('[giveaway] завершение:', e.message));
+  }, 15_000);
 }
 
 if (!noBot) await startBot();
