@@ -23,7 +23,16 @@ function ensureCampaign(now = Date.now()) {
   const db = store.raw();
   if (!db.campaigns || typeof db.campaigns !== 'object') db.campaigns = {};
   let campaign = db.campaigns[PRO_GIVEAWAY.id];
-  if (campaign?.id === PRO_GIVEAWAY.id && Number(campaign.endsAt)) return campaign;
+  if (campaign?.id === PRO_GIVEAWAY.id && Number(campaign.endsAt)) {
+    if (!campaign.participants || typeof campaign.participants !== 'object') campaign.participants = {};
+    let migrated = false;
+    for (const [id, entry] of Object.entries(campaign.participants)) {
+      if (entry.explicit === undefined) { entry.seeded = true; migrated = true; }
+      if (ADMIN_IDS.map(String).includes(id) && !entry.explicit) { delete campaign.participants[id]; migrated = true; }
+    }
+    if (migrated) store.saveSoon();
+    return campaign;
+  }
 
   const adminIds = new Set(ADMIN_IDS.map(String));
   const seedUsers = store.allUsers()
@@ -32,7 +41,7 @@ function ensureCampaign(now = Date.now()) {
     .slice(0, PRO_GIVEAWAY.initialParticipants);
   const participants = Object.fromEntries(seedUsers.map((u, index) => [
     String(u.id),
-    participantOf(u, now - (seedUsers.length - index) * 1000),
+    { ...participantOf(u, now - (seedUsers.length - index) * 1000), seeded: true },
   ]));
 
   campaign = {
@@ -76,7 +85,7 @@ export function giveawayState(u, now = Date.now()) {
     active: now < campaign.endsAt && !campaign.winner,
     ended: now >= campaign.endsAt || Boolean(campaign.winner),
     joined: Boolean(u && participants[String(u.id)]),
-    participants: Object.keys(participants).length,
+    participants: PRO_GIVEAWAY.initialParticipants + Object.values(participants).filter((entry) => entry.explicit).length,
     winner: publicWinner(campaign.winner),
   };
 }
@@ -87,7 +96,7 @@ export function joinGiveaway(u, now = Date.now()) {
   if (!campaign.participants || typeof campaign.participants !== 'object') campaign.participants = {};
   const id = String(u.id);
   if (campaign.participants[id]) return { ok: true, alreadyJoined: true, state: giveawayState(u, now) };
-  campaign.participants[id] = participantOf(u, now);
+  campaign.participants[id] = { ...participantOf(u, now), explicit: true };
   store.saveSoon();
   return { ok: true, alreadyJoined: false, state: giveawayState(u, now) };
 }

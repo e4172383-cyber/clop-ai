@@ -23,15 +23,13 @@ test('Pro giveaway starts with 71 real accounts, accepts one entry and ends exac
   assert.equal(initial.participants, 71);
   assert.equal(initial.endsAt - initial.startedAt, 14 * 60 * 60_000);
 
-  const extra = store.findUser('100000');
-  const before = giveawayState(extra, startedAt);
-  if (!before.joined) {
-    const joined = joinGiveaway(extra, startedAt + 1000);
-    assert.equal(joined.ok, true);
-    assert.equal(joined.alreadyJoined, false);
-    assert.equal(joined.state.participants, 72);
-    assert.equal(joinGiveaway(extra, startedAt + 2000).state.participants, 72);
-  }
+  const extra = store.allUsers().find((candidate) => !giveawayState(candidate, startedAt).joined);
+  assert.ok(extra);
+  const joined = joinGiveaway(extra, startedAt + 1000);
+  assert.equal(joined.ok, true);
+  assert.equal(joined.alreadyJoined, false);
+  assert.equal(joined.state.participants, 72);
+  assert.equal(joinGiveaway(extra, startedAt + 2000).state.participants, 72);
 
   assert.equal(drawGiveaway(initial.endsAt - 1).reason, 'active');
   const result = drawGiveaway(initial.endsAt, () => 0);
