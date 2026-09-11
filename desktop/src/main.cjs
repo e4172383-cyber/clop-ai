@@ -1961,6 +1961,7 @@ async function ask(payload = {}, options = {}) {
             response = await chatStream({
               text: nextText,
               clientMessageId: remoteRequestId,
+              runId: clientMessageId,
               model: selected.model,
               chatId: chat.remoteChatId || undefined,
               effort: selected.effort,
@@ -1970,7 +1971,7 @@ async function ask(payload = {}, options = {}) {
             }, controller.signal);
           } catch (error) {
             await apiJson('/desk/usage/refund', {
-              method: 'POST', auth: true, body: { requestId: remoteRequestId },
+              method: 'POST', auth: true, body: { runId: clientMessageId },
             }).catch(() => null);
             throw error;
           }

@@ -2568,7 +2568,7 @@ function renderRemoteDevices(data) {
   const host = document.getElementById('remoteDevices');
   const devices = data?.devices || [];
   if (!devices.length) {
-    host.innerHTML = '<div class="muted-sm">Компьютеры не найдены. Откройте Clop Code 2.5.5, войдите через тот же Telegram и включите запросы Remote в настройках.</div>';
+    host.innerHTML = '<div class="muted-sm">Компьютеры не найдены. Откройте Clop Code 2.5.6, войдите через тот же Telegram и включите запросы Remote в настройках.</div>';
     return;
   }
   host.innerHTML = devices.map(device => {

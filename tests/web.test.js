@@ -314,14 +314,14 @@ test('serves the public desktop release page and resumable installers without da
   assert.match(html, /iPhone/);
   assert.match(html, /Beta 1\.0 · PWA/);
   assert.match(html, /href="\/chat#iphone"/);
-  assert.match(html, /Clop-Code-Setup-2\.5\.4\.exe/);
-  assert.match(html, /Clop-Code-2\.5\.4-linux-x64\.tar\.xz/);
+  assert.match(html, /Clop-Code-Setup-2\.5\.6\.exe/);
+  assert.match(html, /Clop-Code-2\.5\.6-linux-x64\.tar\.xz/);
   assert.match(html, /Clop-VPN-Setup-1\.0\.0-beta\.4\.exe/);
   assert.match(html, /Clop-VPN-1\.0\.0-beta\.4-linux-x64\.tar\.xz/);
   assert.match(html, /1250 ГБ в неделю/);
   assert.match(html, /до 500 Мбит\/с/);
   assert.match(html, /Clop-AI-Mobile-1\.0\.7\.apk/);
-  assert.match(html, /href="\/downloads\/Clop-Code-Setup-2\.5\.4\.exe"/);
+  assert.match(html, /href="\/downloads\/Clop-Code-Setup-2\.5\.6\.exe"/);
   assert.doesNotMatch(html, /release-assets\.githubusercontent\.com/);
   assert.doesNotMatch(html, /\d[\d ]{3,}\s*токен/iu);
 
@@ -330,9 +330,9 @@ test('serves the public desktop release page and resumable installers without da
   const releaseData = await releases.json();
   assert.equal(releaseData.vpn.version, '1.0.0-beta.4');
   assert.match(releaseData.vpn.windowsUrl, /Clop-VPN-Setup-1\.0\.0-beta\.4\.exe$/);
-  assert.equal(releaseData.desktop.version, '2.5.5');
-  assert.match(releaseData.desktop.windowsUrl, /\/downloads\/Clop-Code-Setup-2\.5\.4\.exe$/);
-  assert.match(releaseData.desktop.linuxUrl, /\/downloads\/Clop-Code-2\.5\.4-linux-x64\.tar\.xz$/);
+  assert.equal(releaseData.desktop.version, '2.5.6');
+  assert.match(releaseData.desktop.windowsUrl, /\/downloads\/Clop-Code-Setup-2\.5\.6\.exe$/);
+  assert.match(releaseData.desktop.linuxUrl, /\/downloads\/Clop-Code-2\.5\.6-linux-x64\.tar\.xz$/);
 
   const partial = await fetch(baseUrl + '/downloads/Clop-Code-Setup-2.4.0.exe', {
     headers: { range: 'bytes=0-31' },
@@ -586,15 +586,16 @@ test('/desk/chat rolls back failed history and lets the same desktop device refu
   modelResults.push(okResult({ text: '<clop_action>{"tool":"shell","command":"echo ok"}</clop_action>' }));
   const delivered = await fetch(baseUrl + '/desk/chat', {
     method: 'POST', headers,
-    body: JSON.stringify({ text: 'Успешный запрос', model: 'gpt-luna', clientMessageId: 'delivery-refund:1' }),
+    body: JSON.stringify({ text: 'Успешный запрос', model: 'gpt-luna', clientMessageId: 'delivery-refund:1', runId: 'delivery-refund' }),
   });
   assert.equal(delivered.status, 200);
   assert.equal(user.usage.at(-1).requestId, 'delivery-refund:1');
+  assert.equal(user.usage.at(-1).runId, 'delivery-refund');
   const charged = user.usage.at(-1).billable;
 
   const refund = () => fetch(baseUrl + '/desk/usage/refund', {
     method: 'POST', headers,
-    body: JSON.stringify({ requestId: 'delivery-refund:1' }),
+    body: JSON.stringify({ runId: 'delivery-refund' }),
   });
   const refunded = await refund();
   assert.equal(refunded.status, 200);
