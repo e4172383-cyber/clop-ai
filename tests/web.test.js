@@ -316,6 +316,8 @@ test('serves the public desktop release page and resumable installers without da
   assert.match(html, /href="\/chat#iphone"/);
   assert.match(html, /Clop-Code-Setup-2\.5\.4\.exe/);
   assert.match(html, /Clop-Code-2\.5\.4-linux-x64\.tar\.xz/);
+  assert.match(html, /Clop-VPN-Setup-1\.0\.0-beta\.1\.exe/);
+  assert.match(html, /Clop-VPN-1\.0\.0-beta\.1-linux-x64\.tar\.xz/);
   assert.match(html, /Clop-AI-Mobile-1\.0\.7\.apk/);
   assert.match(html, /href="\/downloads\/Clop-Code-Setup-2\.5\.4\.exe"/);
   assert.doesNotMatch(html, /release-assets\.githubusercontent\.com/);
@@ -324,6 +326,8 @@ test('serves the public desktop release page and resumable installers without da
   const releases = await fetch(baseUrl + '/releases.json');
   assert.equal(releases.status, 200);
   const releaseData = await releases.json();
+  assert.equal(releaseData.vpn.version, '1.0.0-beta.1');
+  assert.match(releaseData.vpn.windowsUrl, /Clop-VPN-Setup-1\.0\.0-beta\.1\.exe$/);
   assert.equal(releaseData.desktop.version, '2.5.4');
   assert.match(releaseData.desktop.windowsUrl, /\/downloads\/Clop-Code-Setup-2\.5\.4\.exe$/);
   assert.match(releaseData.desktop.linuxUrl, /\/downloads\/Clop-Code-2\.5\.4-linux-x64\.tar\.xz$/);

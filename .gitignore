@@ -7,3 +7,4 @@ bot.log
 site/config.php
 relay/local.json
 .tmp/
+vpn-desktop/release/

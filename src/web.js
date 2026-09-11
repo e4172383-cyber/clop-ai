@@ -14,6 +14,7 @@ import * as relay from './relay.js';
 import * as support from './support.js';
 import * as remote from './remote.js';
 import * as cloudStorage from './cloud-storage.js';
+import { publicVpnPlan, vpnControl, vpnEnabled } from './vpn.js';
 
 // Ответ оператора должен дойти до человека в бота — иначе заявка теряет
 // смысл. Ошибку доставки глушим: панель не должна падать из-за Telegram.
@@ -181,6 +182,7 @@ const DESKTOP_DOWNLOADS = new Set([
   'Clop-Code-Setup-2.5.2.exe',
   'Clop-Code-Setup-2.5.3.exe',
   'Clop-Code-Setup-2.5.4.exe',
+  'Clop-VPN-Setup-1.0.0-beta.1.exe',
   'Clop-Code-2.0.6-linux-x64.tar.xz',
   'Clop-Code-2.0.9-linux-x64.tar.xz',
   'Clop-Code-2.0.10-linux-x64.tar.xz',
@@ -199,6 +201,7 @@ const DESKTOP_DOWNLOADS = new Set([
   'Clop-Code-2.5.2-linux-x64.tar.xz',
   'Clop-Code-2.5.3-linux-x64.tar.xz',
   'Clop-Code-2.5.4-linux-x64.tar.xz',
+  'Clop-VPN-1.0.0-beta.1-linux-x64.tar.xz',
   'Clop-AI-Mobile-1.0.0.apk',
   'Clop-AI-Mobile-1.0.1.apk',
   'Clop-AI-Mobile-1.0.2.apk',
@@ -590,6 +593,12 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           windowsUrl: publicDownloadUrl('Clop-Code-Setup-2.5.4.exe'),
           linuxUrl: publicDownloadUrl('Clop-Code-2.5.4-linux-x64.tar.xz'),
         },
+        vpn: {
+          version: '1.0.0-beta.1',
+          windowsUrl: publicDownloadUrl('Clop-VPN-Setup-1.0.0-beta.1.exe'),
+          linuxUrl: publicDownloadUrl('Clop-VPN-1.0.0-beta.1-linux-x64.tar.xz'),
+          location: 'Germany',
+        },
         android: { version: '1.0.7', url: publicDownloadUrl('Clop-AI-Mobile-1.0.7.apk') },
       });
     }
@@ -969,6 +978,42 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
             bonuses: store.bonusReport(u),
           });
         }).catch(() => sendJson(res, 500, { ok: false }));
+        return;
+      }
+
+      if (url.pathname === '/desk/vpn/info' && req.method === 'GET') {
+        authed().then((u) => {
+          if (!u) return sendJson(res, 401, { ok: false, error: 'нужен вход' });
+          return sendJson(res, 200, {
+            ok: true,
+            available: vpnEnabled(),
+            location: { key: 'de', country: 'Германия', city: 'Фалькенштайн', flag: 'DE' },
+            plan: publicVpnPlan(planOf(u).key),
+          });
+        }).catch(() => sendJson(res, 500, { ok: false, error: 'не удалось получить данные VPN' }));
+        return;
+      }
+
+      if (url.pathname === '/desk/vpn/profile' && req.method === 'POST') {
+        Promise.all([authed(), readJsonBody(req)]).then(async ([u, body]) => {
+          if (!u) return sendJson(res, 401, { ok: false, error: 'нужен вход' });
+          const publicKey = String(body.publicKey || '');
+          if (!/^[A-Za-z0-9+/]{43}=$/.test(publicKey)) return sendJson(res, 400, { ok: false, error: 'некорректный ключ WireGuard' });
+          const result = await vpnControl('/peers/upsert', {
+            method: 'POST',
+            body: { userId: u.id, displayName: store.displayName(u), publicKey, plan: planOf(u).key },
+          });
+          return sendJson(res, 200, result);
+        }).catch((error) => sendJson(res, error.status === 404 ? 404 : 503, { ok: false, error: String(error.message || error) }));
+        return;
+      }
+
+      if (url.pathname === '/desk/vpn/status' && req.method === 'GET') {
+        authed().then(async (u) => {
+          if (!u) return sendJson(res, 401, { ok: false, error: 'нужен вход' });
+          const result = await vpnControl(`/peers/${encodeURIComponent(u.id)}/status`);
+          return sendJson(res, 200, result);
+        }).catch((error) => sendJson(res, error.status === 404 ? 404 : 503, { ok: false, error: String(error.message || error) }));
         return;
       }
 
