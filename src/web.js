@@ -180,6 +180,7 @@ const DESKTOP_DOWNLOADS = new Set([
   'Clop-Code-Setup-2.5.1.exe',
   'Clop-Code-Setup-2.5.2.exe',
   'Clop-Code-Setup-2.5.3.exe',
+  'Clop-Code-Setup-2.5.4.exe',
   'Clop-Code-2.0.6-linux-x64.tar.xz',
   'Clop-Code-2.0.9-linux-x64.tar.xz',
   'Clop-Code-2.0.10-linux-x64.tar.xz',
@@ -197,6 +198,7 @@ const DESKTOP_DOWNLOADS = new Set([
   'Clop-Code-2.5.1-linux-x64.tar.xz',
   'Clop-Code-2.5.2-linux-x64.tar.xz',
   'Clop-Code-2.5.3-linux-x64.tar.xz',
+  'Clop-Code-2.5.4-linux-x64.tar.xz',
   'Clop-AI-Mobile-1.0.0.apk',
   'Clop-AI-Mobile-1.0.1.apk',
   'Clop-AI-Mobile-1.0.2.apk',
@@ -229,7 +231,7 @@ async function proxyReleaseAsset(req, res, name) {
   });
 
   try {
-    const requestHeaders = { 'user-agent': 'Clop-Download-Proxy/2.5.3' };
+    const requestHeaders = { 'user-agent': 'Clop-Download-Proxy/2.5.4' };
     if (req.headers.range) requestHeaders.range = req.headers.range;
     const upstream = await fetch(`${RELEASE_ASSET_BASE_URL}/${releaseTagForAsset(name)}/${encodeURIComponent(name)}`, {
       method: req.method,
@@ -583,10 +585,10 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
     if (url.pathname === '/releases.json' && req.method === 'GET') {
       return sendJson(res, 200, {
         desktop: {
-          version: '2.5.3',
-          url: publicDownloadUrl('Clop-Code-Setup-2.5.3.exe'),
-          windowsUrl: publicDownloadUrl('Clop-Code-Setup-2.5.3.exe'),
-          linuxUrl: publicDownloadUrl('Clop-Code-2.5.3-linux-x64.tar.xz'),
+          version: '2.5.4',
+          url: publicDownloadUrl('Clop-Code-Setup-2.5.4.exe'),
+          windowsUrl: publicDownloadUrl('Clop-Code-Setup-2.5.4.exe'),
+          linuxUrl: publicDownloadUrl('Clop-Code-2.5.4-linux-x64.tar.xz'),
         },
         android: { version: '1.0.7', url: publicDownloadUrl('Clop-AI-Mobile-1.0.7.apk') },
       });

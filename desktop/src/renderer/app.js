@@ -2240,6 +2240,7 @@
       head.append(copy, node('span', 'own-provider-status', provider.enabled ? 'Подключено' : (provider.installed ? 'Готово' : 'Не найдено')));
       const models = node('div', 'own-provider-models');
       for (const model of (provider.models || []).slice(0, 4)) models.append(node('span', '', model.title));
+      const quota = renderOwnProviderQuota(provider);
       const actions = node('div', 'own-provider-actions');
       const install = node('button', '', provider.installed ? 'Переустановить' : 'Установить');
       install.type = 'button';
@@ -2265,10 +2266,86 @@
           toast(provider.enabled ? `${provider.title} отключён.` : `${provider.title} подключён. Модели появились в отдельной вкладке «Свои».`, 'success');
         } catch (error) { toast(errorText(error), 'error'); toggle.disabled = false; }
       });
-      actions.append(install, login, toggle);
-      card.append(head, models, actions);
+      actions.append(install, login);
+      if (provider.quotaKind) {
+        const refreshQuota = node('button', '', 'Обновить квоту');
+        refreshQuota.type = 'button';
+        refreshQuota.disabled = !provider.enabled;
+        refreshQuota.addEventListener('click', loadOwnProviders);
+        actions.append(refreshQuota);
+      }
+      actions.append(toggle);
+      card.append(head, models);
+      if (quota) card.append(quota);
+      card.append(actions);
       elements.ownProvidersList.append(card);
     }
+  }
+
+  function quotaPercent(value) {
+    const number = Math.max(0, Math.min(100, Number(value || 0)));
+    return `${number.toLocaleString('ru-RU', { maximumFractionDigits: 1 })}%`;
+  }
+
+  function quotaReset(window) {
+    const timestamp = Number(window?.resetsAt || 0);
+    if (timestamp > 0) {
+      const delta = timestamp - Date.now();
+      if (delta > 0) {
+        const totalMinutes = Math.ceil(delta / 60_000);
+        const days = Math.floor(totalMinutes / 1440);
+        const hours = Math.floor((totalMinutes % 1440) / 60);
+        const minutes = totalMinutes % 60;
+        const parts = [];
+        if (days) parts.push(`${days} д`);
+        if (hours) parts.push(`${hours} ч`);
+        if (!days && minutes) parts.push(`${minutes} мин`);
+        return `сброс через ${parts.join(' ') || 'меньше минуты'}`;
+      }
+      return `сброс ${new Date(timestamp).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`;
+    }
+    return window?.resetText ? `сброс: ${window.resetText}` : 'время сброса не передано';
+  }
+
+  function renderOwnProviderQuota(provider) {
+    if (!provider.quotaKind) return null;
+    const section = node('section', 'own-provider-quota');
+    const title = node('div', 'own-provider-quota-title');
+    title.append(node('strong', '', 'Квота провайдера'));
+    if (provider.quota?.updatedAt) title.append(node('small', '', `обновлено ${new Date(provider.quota.updatedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`));
+    section.append(title);
+    if (!provider.enabled) {
+      section.append(node('div', 'own-provider-quota-empty', 'Подключите провайдера, чтобы получить реальные лимиты аккаунта.'));
+      return section;
+    }
+    if (!provider.quota) {
+      section.append(node('div', 'own-provider-quota-empty', 'Квота ещё не загружена.'));
+      return section;
+    }
+    if (provider.quota.status !== 'ok') {
+      section.append(node('div', 'own-provider-quota-error', provider.quota.message || 'Не удалось получить квоту.'));
+      return section;
+    }
+    for (const group of (provider.quota.groups || [])) {
+      const block = node('div', 'own-provider-quota-group');
+      const groupHead = node('div', 'own-provider-quota-group-title');
+      groupHead.append(node('b', '', group.title || 'Модели'));
+      if (group.plan) groupHead.append(node('span', '', group.plan));
+      block.append(groupHead);
+      for (const quotaWindow of (group.windows || [])) {
+        const row = node('div', 'own-provider-quota-row');
+        const label = node('div', 'own-provider-quota-label');
+        label.append(node('strong', '', quotaWindow.title || 'Окно'), node('span', '', `${quotaPercent(quotaWindow.remainingPercent)} осталось`));
+        const track = node('div', 'own-provider-quota-track');
+        const fill = node('i', '');
+        fill.style.width = quotaPercent(quotaWindow.remainingPercent);
+        track.append(fill);
+        row.append(label, track, node('small', '', quotaReset(quotaWindow)));
+        block.append(row);
+      }
+      section.append(block);
+    }
+    return section;
   }
 
   async function loadOwnProviders() {

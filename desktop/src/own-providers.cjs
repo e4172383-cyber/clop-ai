@@ -5,6 +5,7 @@ const path = require('node:path');
 const PROVIDERS = Object.freeze({
   antigravity: {
     key: 'antigravity', title: 'Antigravity', command: 'agy', mark: 'A',
+    quotaKind: 'antigravity',
     description: 'Ваш аккаунт Antigravity и доступные в нём модели',
     installUrl: 'https://antigravity.google/docs/cli/install/', loginArgs: [],
     models: [
@@ -17,6 +18,7 @@ const PROVIDERS = Object.freeze({
   },
   gpt: {
     key: 'gpt', title: 'GPT / Codex', command: 'codex', mark: 'G',
+    quotaKind: 'codex',
     description: 'Ваш ChatGPT или API-аккаунт в Codex CLI',
     installUrl: 'https://developers.openai.com/codex/cli/', loginArgs: ['login'],
     models: [

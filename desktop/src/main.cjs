@@ -35,6 +35,11 @@ const {
   windowsCommand,
 } = require('./own-providers.cjs');
 const {
+  parseAntigravityQuotaReport,
+  parseCodexQuotaResponse,
+  publicQuotaError,
+} = require('./provider-quotas.cjs');
+const {
   defaults,
   cleanSettings,
   parseAction,
@@ -692,6 +697,8 @@ function publicOwnProviders() {
       checked: status.checked === true,
       version: status.version || '',
       installUrl: provider.installUrl,
+      quotaKind: provider.quotaKind || '',
+      quota: status.quota || null,
       models: ownModels(provider, enabled),
     };
   });
@@ -772,19 +779,96 @@ async function locateOwnProvider(provider) {
 async function inspectOwnProvider(provider) {
   const executable = await locateOwnProvider(provider);
   if (!executable) {
-    const status = { checked: true, installed: false, executable: '', version: '' };
+    const status = { checked: true, installed: false, executable: '', version: '', quota: null };
     ownProviderStatus.set(provider.key, status);
     return status;
   }
   const result = await captureProcess(executable, ownVersionArgs(provider.key), { timeoutMs: 7_000 });
   const version = String(result.output || result.stderr || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 120);
-  const status = { checked: true, installed: result.ok, executable, version: result.ok ? version : '' };
+  const previous = ownProviderStatus.get(provider.key) || {};
+  const status = { checked: true, installed: result.ok, executable, version: result.ok ? version : '', quota: previous.quota || null };
+  ownProviderStatus.set(provider.key, status);
+  return status;
+}
+
+function readCodexQuota(executable) {
+  return new Promise((resolve, reject) => {
+    const spec = process.platform === 'win32'
+      ? windowsCommand(executable, ['app-server', '--stdio'])
+      : { executable, args: ['app-server', '--stdio'] };
+    let child;
+    let buffer = '';
+    let stderr = '';
+    let settled = false;
+    const finish = (error, quota) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { child.stdin?.end(); } catch { /* already closed */ }
+      try { child.kill(); } catch { /* already stopped */ }
+      if (error) reject(error);
+      else resolve(quota);
+    };
+    try {
+      child = spawn(spec.executable, spec.args, { cwd: os.homedir(), env: process.env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
+    } catch (error) {
+      reject(error);
+      return;
+    }
+    const timer = setTimeout(() => finish(new Error('Codex не ответил на запрос квоты.')), 15_000);
+    child.stderr.on('data', (chunk) => { stderr = `${stderr}${chunk}`.slice(-2_000); });
+    child.once('error', (error) => finish(error));
+    child.once('close', (code) => {
+      if (!settled) finish(new Error(stderr.trim() || `Codex App Server завершился с кодом ${code}.`));
+    });
+    child.stdout.on('data', (chunk) => {
+      buffer += String(chunk);
+      while (buffer.includes('\n')) {
+        const index = buffer.indexOf('\n');
+        const line = buffer.slice(0, index).trim();
+        buffer = buffer.slice(index + 1);
+        if (!line) continue;
+        let message;
+        try { message = JSON.parse(line); } catch { continue; }
+        if (message.id === 1) {
+          child.stdin.write(`${JSON.stringify({ method: 'initialized', params: {} })}\n`);
+          child.stdin.write(`${JSON.stringify({ method: 'account/rateLimits/read', id: 2, params: {} })}\n`);
+        } else if (message.id === 2) {
+          if (message.error) finish(new Error(message.error.message || 'Codex не вернул квоту.'));
+          else {
+            try { finish(null, parseCodexQuotaResponse(message)); }
+            catch (error) { finish(error); }
+          }
+        }
+      }
+    });
+    child.stdin.write(`${JSON.stringify({
+      method: 'initialize', id: 1,
+      params: { clientInfo: { name: 'clop_code', title: 'Clop Code', version: app.getVersion() } },
+    })}\n`);
+  });
+}
+
+async function inspectOwnProviderQuota(provider) {
+  const status = ownProviderStatus.get(provider.key);
+  if (!status?.installed || !status.executable || !provider.quotaKind || !ownProviderEnabled(provider.key)) return status;
+  try {
+    if (provider.quotaKind === 'codex') status.quota = await readCodexQuota(status.executable);
+    else if (provider.quotaKind === 'antigravity') {
+      const result = await captureProcess(status.executable, ['-p', '/usage', '--output-format', 'text', '--print-timeout', '20s'], { timeoutMs: 25_000 });
+      if (!result.ok) throw new Error(String(result.stderr || result.output || 'Antigravity не ответил.').replace(/[\r\n]+/g, ' ').trim());
+      status.quota = parseAntigravityQuotaReport(result.output);
+    }
+  } catch (error) {
+    status.quota = publicQuotaError(error.message);
+  }
   ownProviderStatus.set(provider.key, status);
   return status;
 }
 
 async function refreshOwnProviders() {
   await Promise.all(ownProviderList().map(inspectOwnProvider));
+  await Promise.all(ownProviderList().map(inspectOwnProviderQuota));
   const providers = publicOwnProviders();
   emit('own-providers', { providers });
   return providers;
@@ -2437,6 +2521,7 @@ function registerIpc() {
       settings = cleanSettings({ modelSource: 'clop' }, settings);
     }
     saveSettings();
+    if (enabled) await inspectOwnProviderQuota(provider);
     const providers = publicOwnProviders();
     emit('own-providers', { providers });
     emit('settings', { settings: publicSettings() });
