@@ -9,6 +9,10 @@ const PROVIDERS = Object.freeze({
     installUrl: 'https://antigravity.google/docs/cli/install/', loginArgs: [],
     models: [
       { id: 'auto', title: 'Antigravity Auto', cliModel: '', description: 'Автоматический выбор модели Antigravity' },
+      { id: 'gemini-3.8', title: 'Gemini 3.8 Flash', cliModel: 'gemini-3.8-flash-medium', description: 'Новая быстрая Gemini 3.8 · Medium' },
+      { id: 'gemini-3.7', title: 'Gemini 3.7 Flash', cliModel: 'gemini-3.7-flash-medium', description: 'Быстрая Gemini 3.7 · Medium' },
+      { id: 'gemini-3.6', title: 'Gemini 3.6 Flash', cliModel: 'gemini-3.6-flash-medium', description: 'Быстрая Gemini 3.6 · Medium' },
+      { id: 'gemini-3.1-pro', title: 'Gemini 3.1 Pro', cliModel: 'gemini-3.1-pro-high', description: 'Самая сильная Gemini Pro · High' },
     ],
   },
   gpt: {
@@ -101,7 +105,7 @@ function commandForModel(selection, effort = 'low') {
   const normalizedEffort = ['low', 'medium', 'high', 'xhigh'].includes(effort) ? effort : 'low';
   switch (selection.provider.key) {
     case 'antigravity':
-      return ['-p', '-', '--output-format', 'json', ...(model ? ['--model', model] : []), '--effort', normalizedEffort];
+      return ['--input-format', 'stream-json', '--output-format', 'stream-json', '--sandbox', ...(model ? ['--model', model] : []), '--effort', normalizedEffort === 'xhigh' ? 'high' : normalizedEffort];
     case 'gpt':
       return ['exec', '--json', '--skip-git-repo-check', '-s', 'read-only', ...(model ? ['-m', model] : []), '-c', `model_reasoning_effort="${normalizedEffort}"`, '-'];
     case 'claude':
@@ -113,6 +117,13 @@ function commandForModel(selection, effort = 'low') {
     default:
       throw new Error('Этот локальный провайдер пока не поддерживается.');
   }
+}
+
+function inputForModel(selection, prompt) {
+  if (selection?.provider?.key === 'antigravity') {
+    return `${JSON.stringify({ event: 'user', message: { content: String(prompt || '') } })}\n`;
+  }
+  return String(prompt || '');
 }
 
 function compactVersion(value) {
@@ -171,6 +182,7 @@ function windowsCommand(executable, args) {
 module.exports = {
   compactVersion,
   commandForModel,
+  inputForModel,
   modelByKey,
   ownModels,
   parseCliOutput,

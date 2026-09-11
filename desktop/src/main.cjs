@@ -25,6 +25,7 @@ const { launchWindowsUpdate, waitForUpdateHelperReady, cancelWindowsUpdate } = r
 const { DEFAULT_SERVER, resolveServer, trustedUpdateUrl } = require('./server-config.cjs');
 const {
   commandForModel,
+  inputForModel,
   modelByKey: ownModelByKey,
   ownModels,
   parseCliOutput,
@@ -797,7 +798,7 @@ async function runOwnModel(selection, prompt, effort, signal) {
   if (!ownProviderEnabled(provider.key)) throw new Error(`${provider.title} не подключён в Clop Code.`);
   const startedAt = Date.now();
   const result = await captureProcess(status.executable, commandForModel(selection, effort), {
-    cwd: ownCliSandboxDir || os.tmpdir(), input: prompt, signal, timeoutMs: CHAT_TIMEOUT_MS, track: true,
+    cwd: ownCliSandboxDir || os.tmpdir(), input: inputForModel(selection, prompt), signal, timeoutMs: CHAT_TIMEOUT_MS, track: true,
   });
   if (signal?.aborted) throw signal.reason || makeAbortError();
   if (!result.ok) {

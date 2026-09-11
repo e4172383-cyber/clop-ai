@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   commandForModel,
+  inputForModel,
   modelByKey,
   ownModels,
   parseCliOutput,
@@ -17,6 +18,21 @@ test('exposes five supported local CLI providers with distinct model keys', () =
   assert.equal(new Set(keys).size, keys.length);
   assert.ok(keys.includes('own-claude-sonnet'));
   assert.ok(keys.includes('own-kimi-k2.8'));
+  assert.ok(keys.includes('own-antigravity-gemini-3.8'));
+  assert.ok(keys.includes('own-antigravity-gemini-3.7'));
+  assert.ok(keys.includes('own-antigravity-gemini-3.6'));
+  assert.ok(keys.includes('own-antigravity-gemini-3.1-pro'));
+});
+
+test('Antigravity uses its documented stream-json stdin protocol and exact model slug', () => {
+  const selection = modelByKey('own-antigravity-gemini-3.8');
+  const args = commandForModel(selection, 'medium');
+  assert.ok(args.includes('gemini-3.8-flash-medium'));
+  assert.ok(args.includes('--sandbox'));
+  assert.equal(args.includes('-p'), false);
+  assert.deepEqual(JSON.parse(inputForModel(selection, 'Привет').trim()), {
+    event: 'user', message: { content: 'Привет' },
+  });
 });
 
 test('builds read-only or plan-mode local commands without putting prompt in arguments', () => {
