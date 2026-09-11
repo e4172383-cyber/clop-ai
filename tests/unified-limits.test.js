@@ -8,7 +8,7 @@ process.env.TOKEN_LIMITS_JSON = JSON.stringify(Object.fromEntries(plans.map((pla
   Object.fromEntries(providers.map((provider) => [provider, { short: 1_000, long: 10_000 }])),
 ])));
 
-const { PLANS, PLAN_LIMIT_MULTIPLIERS, MODELS } = await import('../src/config.js');
+const { PLANS, PLAN_LIMIT_MULTIPLIERS, TOKEN_LIMITS_BOOST, MODELS } = await import('../src/config.js');
 const store = await import('../src/store.js');
 const { checkAllLimits, usedIn } = await import('../src/limits.js');
 
@@ -16,12 +16,19 @@ test('personal plan limits are derived from the free plan by one multiplier tabl
   assert.deepEqual(PLAN_LIMIT_MULTIPLIERS, {
     free: 1, go: 2, pro: 3.5, max: 14, max20: 59.5, coderplus: 196,
   });
+  assert.equal(TOKEN_LIMITS_BOOST, 2);
   for (const [plan, multiplier] of Object.entries(PLAN_LIMIT_MULTIPLIERS)) {
-    assert.equal(PLANS[plan].limits.shared.short, 1_000 * multiplier);
-    assert.equal(PLANS[plan].limits.shared.long, 10_000 * multiplier);
+    assert.equal(PLANS[plan].limits.shared.short, 2_000 * multiplier);
+    assert.equal(PLANS[plan].limits.shared.long, 20_000 * multiplier);
     for (const provider of providers) {
       assert.deepEqual(PLANS[plan].limits[provider], PLANS[plan].limits.shared);
     }
+  }
+});
+
+test('plan cards describe limits without publishing token quantities', () => {
+  for (const plan of Object.values(PLANS)) {
+    assert.doesNotMatch(plan.perks.join(' '), /\d[\d,. ]*\s*(?:тыс|млн)\b/i);
   }
 });
 
@@ -55,7 +62,7 @@ test('every model spends the same shared rolling windows', () => {
   assert.equal(usedIn(user, 5 * 60 * 60_000, 'gpt'), 500);
   assert.equal(usedIn(user, 5 * 60 * 60_000, 'kimi'), 500);
   const all = checkAllLimits(user);
-  assert.equal(all.shared.states.find((state) => state.key === 'short').percent, 50);
+  assert.equal(all.shared.states.find((state) => state.key === 'short').percent, 25);
   assert.equal(all.gpt, all.shared);
   assert.equal(all.kimi, all.shared);
   assert.equal(all.clop, all.shared);

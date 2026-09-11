@@ -157,7 +157,7 @@ function mainKb(u) {
       [{ text: '📊 Лимиты', callback_data: 'usage' }, { text: '💎 Тарифы', callback_data: 'plans' }],
       [{ text: trial.eligible ? '🎁 Получить пробный GO на 1 день' : trial.active ? '⚡ Пробный GO уже активен' : trial.used ? '✓ Пробный GO уже использован' : '🎁 Пробный GO на 1 день', callback_data: 'trial_go' }],
       [{ text: '🏢 Моя команда', callback_data: 'team' }],
-      ...(showOffer ? [[{ text: offer.claimed ? '🎁 Бонус Astra + Kimi активен' : '🎁 Получить 10 млн Astra + 1 млн Kimi', callback_data: 'offer_claim' }]] : []),
+      ...(showOffer ? [[{ text: offer.claimed ? '🎁 Бонус Astra + Kimi активен' : '🎁 Получить бонус Astra + Kimi', callback_data: 'offer_claim' }]] : []),
       [{ text: '🖼 Сгенерировать (бета)', callback_data: 'imagegen' }],
       [{ text: '🌐 Чат на сайте (бета)', url: `${PUBLIC_URL}/chat` }],
       [{ text: '🖥 Состояние сервера', callback_data: 'server_status' }],
@@ -230,7 +230,6 @@ function usageText(u) {
       const used = Math.max(0, Math.round(Number(offer.usedByModel?.[key]) || 0));
       const percent = Math.min(100, Math.round((used / total) * 100));
       lines.push(`${MODELS[key]?.title || key}: ${bar(percent)} *${percent}%*`);
-      lines.push(`Осталось ${(total - used).toLocaleString('ru-RU')} из ${total.toLocaleString('ru-RU')}`);
     }
     lines.push(`Доступны до *${dt(offer.until)} по Киеву*`);
     lines.push('');
@@ -1264,7 +1263,7 @@ async function onCallback(u, q) {
     await store.save();
     await tg.answerCallback(q.id, offer.active ? '🎁 Бонус Astra и Kimi K3 подключён на 5 часов' : 'Предложение уже использовано', true);
     return void await edit(offer.active
-      ? `🎁 *Предложение подключено*\n\n10 млн токенов GPT-6 Astra и 1 млн токенов Kimi K3 доступны до ${dt(offer.until)} по Киеву.`
+      ? `🎁 *Предложение подключено*\n\nБонусный доступ к GPT-6 Astra и Kimi K3 активен до ${dt(offer.until)} по Киеву. Остаток показывается только в процентах.`
       : 'Предложение уже завершилось.', mainKb(u));
   }
   if (data === 'usage') { await tg.answerCallback(q.id); return void await edit(usageText(u), backKb()); }

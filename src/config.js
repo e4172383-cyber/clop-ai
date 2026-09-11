@@ -253,14 +253,23 @@ export const PLAN_LIMIT_MULTIPLIERS = Object.freeze({
   coderplus: 196, // Pro ×56
 });
 export const SHARED_LIMIT_KEY = 'shared';
-export const FREE_TOKEN_LIMITS = Object.freeze({ ...CONFIGURED_TOKEN_LIMITS.free.clop });
+// Выпуск 11.09.2026: все реальные токен-пулы увеличены вдвое. Секретная
+// матрица остаётся базой, а этот коэффициент одинаково действует в боте,
+// веб-чате, приложениях и подписочном API.
+export const TOKEN_LIMITS_BOOST = 2;
+const CONFIGURED_FREE_TOKEN_LIMITS = Object.freeze({ ...CONFIGURED_TOKEN_LIMITS.free.clop });
 
 for (const provider of Object.keys(PROVIDERS)) {
   const candidate = CONFIGURED_TOKEN_LIMITS.free[provider];
-  if (candidate.short !== FREE_TOKEN_LIMITS.short || candidate.long !== FREE_TOKEN_LIMITS.long) {
+  if (candidate.short !== CONFIGURED_FREE_TOKEN_LIMITS.short || candidate.long !== CONFIGURED_FREE_TOKEN_LIMITS.long) {
     throw new Error(`Invalid TOKEN_LIMITS_JSON: free.${provider} must match the shared free limit`);
   }
 }
+
+export const FREE_TOKEN_LIMITS = Object.freeze({
+  short: CONFIGURED_FREE_TOKEN_LIMITS.short === null ? null : Math.round(CONFIGURED_FREE_TOKEN_LIMITS.short * TOKEN_LIMITS_BOOST),
+  long: CONFIGURED_FREE_TOKEN_LIMITS.long === null ? null : Math.round(CONFIGURED_FREE_TOKEN_LIMITS.long * TOKEN_LIMITS_BOOST),
+});
 
 function scaledLimit(value, multiplier) {
   if (value === null) return null;
@@ -307,7 +316,7 @@ export const modelInPromo = () => false;
 // ближе к концу общей выдачи.
 export const LIMITED_OFFER = Object.freeze({
   id: 'astra-10m-kimi-k3-1m-five-hours-20260909',
-  title: '10 млн Astra + 1 млн Kimi K3 на 5 часов',
+  title: 'Бонус Astra + Kimi K3 на 5 часов',
   models: ['gpt-astra', 'kimi-k3'],
   budgets: Object.freeze({ 'gpt-astra': 10_000_000, 'kimi-k3': 1_000_000 }),
   claimDurationMs: HOUR,
@@ -324,7 +333,7 @@ export const PLANS = {
     limits: limitsFor('free'),
     // на бесплатном тарифе доступен выбор между Low, Medium и High
     effort: { locked: false, fixed: null, options: ['low', 'medium', 'high'] },
-    perks: ['100 тыс. на 5 часов и 1 млн на неделю', 'Clop 4 Pro и Flash', 'GPT Луна и Спарк', 'Kimi K2.8', 'Сколько угодно чатов', 'История переписки'],
+    perks: ['Базовый общий лимит', 'Clop 4 Pro и Flash', 'GPT Луна и Спарк', 'Kimi K2.8', 'Сколько угодно чатов', 'История переписки'],
   },
   go: {
     key: 'go',
@@ -338,7 +347,7 @@ export const PLANS = {
       'GPT-модели по тарифу, включая GPT-6 Astra',
       'Вся линейка Clop 4, включая Pulsar',
       'Kimi K2.7 Code и K3',
-      '200 тыс. на 5 часов и 2 млн на неделю',
+      'Расширенный общий лимит',
       'Выбор силы мышления',
       'Приоритетная обработка запросов',
     ],
@@ -356,7 +365,7 @@ export const PLANS = {
       'GPT-модели по тарифу, включая GPT-6 Astra',
       'Вся линейка Clop 4, включая Pulsar',
       'Все Kimi, включая K3 Swarm',
-      '350 тыс. на 5 часов и 3,5 млн на неделю',
+      'Повышенный общий лимит',
       'Выбор силы мышления',
       'Приоритетная обработка запросов',
     ],
@@ -373,7 +382,7 @@ export const PLANS = {
       'GPT-модели по тарифу, включая GPT-6 Astra',
       'Вся линейка Clop 4, включая Pulsar',
       'Все Kimi, включая K3 Swarm',
-      '1,4 млн на 5 часов и 14 млн на неделю',
+      'Большой общий лимит',
       'Выбор силы мышления',
       'Максимальный приоритет обработки запросов',
     ],
@@ -390,7 +399,7 @@ export const PLANS = {
       'GPT-модели по тарифу, включая GPT-6 Astra',
       'Вся линейка Clop 4, включая Pulsar',
       'Все Kimi, включая K3 Swarm',
-      '5,95 млн на 5 часов и 59,5 млн на неделю',
+      'Максимальный общий лимит',
       'Выбор силы мышления',
       'Высший приоритет обработки запросов',
     ],
@@ -407,7 +416,7 @@ export const PLANS = {
       'GPT-модели по тарифу, включая GPT-6 Astra',
       'Вся линейка Clop 4, включая Pulsar',
       'Все Kimi, включая K3 Swarm',
-      '19,6 млн на 5 часов и 196 млн на неделю',
+      'Наибольший общий лимит',
       'Выбор силы мышления',
       'Наивысший приоритет обработки запросов',
     ],
@@ -447,7 +456,10 @@ export const CORPORATE_PLANS = Object.freeze({
 export function corporatePlan(key) {
   const plan = CORPORATE_PLANS[key];
   if (!plan || !CORPORATE_LIMITS) return null;
-  return { ...plan, limits: { short: CORPORATE_LIMITS[key].short, long: CORPORATE_LIMITS[key].long } };
+  return { ...plan, limits: {
+    short: CORPORATE_LIMITS[key].short * TOKEN_LIMITS_BOOST,
+    long: CORPORATE_LIMITS[key].long * TOKEN_LIMITS_BOOST,
+  } };
 }
 
 export const corporatePlansReady = () => Boolean(CORPORATE_LIMITS);
