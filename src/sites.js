@@ -1,5 +1,6 @@
 import { redisClient } from './store.js';
 import { PUBLIC_URL } from './config.js';
+import { hostingQuota, hostingUsage } from './hosting.js';
 
 /* Публикация сайтов, которые собрал ИИ.
 
@@ -21,13 +22,22 @@ const IDX = (uid) => `clop:usites:${uid}`;
 const mem = new Map();
 const memIdx = new Map();
 
-export const MAX_SITE_BYTES = 1_000_000;
+export const MAX_SITE_BYTES = 64 * 1024 * 1024;
 export const FREE_SITES_PER_USER = 3;
 export const PAID_SITES_PER_USER = 10;
 export const MAX_SITES_PER_USER = PAID_SITES_PER_USER;
 
 export function siteLimit(planKey) {
   return String(planKey || 'free') === 'free' ? FREE_SITES_PER_USER : PAID_SITES_PER_USER;
+}
+
+export async function storageUsed(userId) {
+  const list = await listSites(userId);
+  return list.reduce((total, site) => total + Math.max(0, Number(site.bytes || 0)), 0);
+}
+
+export async function hostingState(userId, planKey = 'free') {
+  return hostingUsage(await storageUsed(userId), planKey);
 }
 
 const TYPES = {
@@ -122,6 +132,11 @@ export async function publish(userId, site, planKey = 'free') {
   if (total > MAX_SITE_BYTES) return { ok: false, error: 'сайт слишком большой' };
 
   const list = await readIndex(userId);
+  const used = (await listSites(userId)).reduce((sum, item) => sum + Math.max(0, Number(item.bytes || 0)), 0);
+  const storageLimit = hostingQuota(planKey).storageBytes;
+  if (used + total > storageLimit) {
+    return { ok: false, error: 'Хранилище хостинга заполнено. Удалите старый сайт и повторите публикацию.' };
+  }
   const limit = siteLimit(planKey);
   if (list.length >= limit) {
     return { ok: false, error: `Достигнут лимит: ${limit} сайтов на вашем тарифе. Удалите старый сайт через /sites и повторите публикацию.` };
@@ -139,7 +154,7 @@ export async function publish(userId, site, planKey = 'free') {
 
   list.unshift({ slug, title, ts: Date.now(), bytes: total });
   await writeIndex(userId, list);
-  return { ok: true, slug, url: `${PUBLIC_URL}/s/${slug}`, title, bytes: total, limit, count: list.length };
+  return { ok: true, slug, url: `${PUBLIC_URL}/s/${slug}`, title, bytes: total, limit, count: list.length, hosting: hostingUsage(used + total, planKey) };
 }
 
 export async function getFile(slug, path) {

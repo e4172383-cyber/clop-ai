@@ -560,6 +560,9 @@
   .buy-btn:hover{transform:translateY(-2px);box-shadow:0 11px 26px rgba(217,119,87,.45), var(--glass-glow)}
   .buy-btn svg{width:15px;height:15px;flex:none;fill:currentColor;stroke:none}
   .buy-note{font-size:11.5px;color:var(--muted);margin-top:3px}
+  .trial-btn{margin:0 0 14px;background:linear-gradient(135deg,#e98552,#c85a34)}
+  .trial-state{margin:0 0 14px;padding:11px 13px;border:1px solid rgba(217,119,87,.25);border-radius:13px;background:rgba(217,119,87,.08);color:var(--muted);font-size:12px}
+  .hosting-quota{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}.hosting-quota span{padding:5px 8px;border:1px solid var(--line);border-radius:999px;background:var(--surface-2);color:var(--muted);font-size:10.5px}
 
   /* --- Профиль --- */
   .prof-top{display:flex;align-items:center;gap:14px;margin-bottom:16px}
@@ -1030,7 +1033,7 @@
   <div class="api-modal glass sites-modal">
     <div class="api-head"><b id="sitesTitle">Мои сайты</b><button class="modal-close" data-close="sitesOverlay" aria-label="Закрыть">✕</button></div>
     <div class="api-body sites-body">
-      <section class="sites-summary"><div><h3>Опубликованные сайты</h3><p class="muted-sm">Создайте сайт прямо в чате. Здесь можно открыть его, скопировать ссылку, переименовать или удалить.</p></div><b id="sitesUsage">—</b></section>
+      <section class="sites-summary"><div><h3>Хостинг сайтов</h3><p class="muted-sm">Попросите ИИ создать сайт — он опубликует файлы и выдаст постоянную ссылку. Здесь можно управлять публикациями.</p><div class="hosting-quota" id="sitesHosting"></div></div><b id="sitesUsage">—</b></section>
       <div class="sites-toolbar"><button type="button" id="sitesRefresh">Обновить</button><span class="muted-sm" id="sitesActionState"></span></div>
       <div class="sites-list" id="sitesList"><div class="muted-sm">Загрузка…</div></div>
     </div>
@@ -1134,7 +1137,8 @@
         <div id="apiPrices" class="muted-sm" style="margin-top:10px"></div>
       </section>
       <section id="botBuilderSection">
-        <div class="api-section-head"><h3>Создать Telegram-бота</h3><span class="muted-sm">Работает 24/7 через webhook</span></div>
+        <div class="api-section-head"><h3>Создать Telegram-бота с ИИ</h3><span class="muted-sm">Хостинг 24/7 через webhook</span></div>
+        <div class="hosting-quota" id="botsHosting"></div>
         <div class="bot-help">Создайте бота у @BotFather и вставьте его токен. После сохранения токен шифруется и больше не показывается. Для ответов из вашего личного аккаунта включите у бота Business Mode в @BotFather, затем подключите бота в Telegram: Настройки → Telegram Business → Чат-боты. Доступные чаты выбираете вы в самом Telegram.</div>
         <div id="botTemplates" class="bot-template-grid"></div>
         <div class="bot-form">
@@ -2562,7 +2566,7 @@ function renderRemoteDevices(data) {
   const host = document.getElementById('remoteDevices');
   const devices = data?.devices || [];
   if (!devices.length) {
-    host.innerHTML = '<div class="muted-sm">Компьютеры не найдены. Откройте Clop Code 2.4.6, войдите через тот же Telegram и включите запросы Remote в настройках.</div>';
+    host.innerHTML = '<div class="muted-sm">Компьютеры не найдены. Откройте Clop Code 2.4.7, войдите через тот же Telegram и включите запросы Remote в настройках.</div>';
     return;
   }
   host.innerHTML = devices.map(device => {
@@ -2730,10 +2734,19 @@ function siteBytes(value) {
     : `${Math.max(1, Math.ceil(bytes / 1024)).toLocaleString('ru-RU')} КБ`;
 }
 
+function renderHostingQuota(host, quota) {
+  if (!host || !quota) return;
+  const ram = quota.ramBytes >= 1024 ** 3
+    ? `${(quota.ramBytes / 1024 ** 3).toLocaleString('ru-RU', {maximumFractionDigits:1})} ГБ`
+    : `${Math.round(quota.ramBytes / 1024 ** 2)} МБ`;
+  host.innerHTML = `<span>RAM ${ram}</span><span>CPU ${Number(quota.cpuShare).toLocaleString('ru-RU')}</span><span>Диск ${siteBytes(quota.usedBytes)} / ${siteBytes(quota.storageBytes)}</span>`;
+}
+
 function renderSites(data) {
   const status = document.getElementById('sitesActionState');
   if (!data?.ok) { status.textContent = data?.error || 'Не удалось загрузить сайты.'; return; }
   document.getElementById('sitesUsage').textContent = `${data.count} из ${data.limit}`;
+  renderHostingQuota(document.getElementById('sitesHosting'), data.hosting);
   const list = document.getElementById('sitesList');
   list.innerHTML = data.sites?.length ? data.sites.map(site => `<div class="site-row"><span class="site-icon">↗</span><span class="site-copy"><b>${escapeHtml(site.title || 'Сайт')}</b><small>${siteBytes(site.bytes)} · ${new Date(site.ts).toLocaleString('ru-RU')}</small></span><a href="${escapeHtml(site.url)}" target="_blank" rel="noopener">Открыть</a><button type="button" data-site-copy="${escapeHtml(site.url)}">Копировать</button><button type="button" data-site-rename="${escapeHtml(site.slug)}" data-site-title="${escapeHtml(site.title || 'Сайт')}">Название</button><button class="site-delete" type="button" data-site-delete="${escapeHtml(site.slug)}">Удалить</button></div>`).join('') : '<div class="muted-sm">Сайтов пока нет. Напишите в чате, какой сайт создать — после публикации он появится здесь.</div>';
   list.querySelectorAll('[data-site-copy]').forEach(button => button.addEventListener('click', async () => {
@@ -2975,7 +2988,16 @@ async function openPlans() {
   const promoTill = promo ? new Date(promo.until).toLocaleString('ru-RU',
     { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) : '';
   const banner = promo ? `<div class="promo-banner">🎁 <b>Акция: тариф ${escapeHtml((p.plans.find(x => x.key === promo.plan) || {}).title || promo.plan)} бесплатно для всех</b> до ${escapeHtml(promoTill)}. Он уже подключён — покупать ничего не нужно.</div>` : '';
-  body.innerHTML = `<section>${banner}${p.plans.map((pl, i) => {
+  const trial = p.trial || {};
+  const trialEnd = trial.endsAt ? new Date(trial.endsAt).toLocaleString('ru-RU', { day:'numeric', month:'long', hour:'2-digit', minute:'2-digit' }) : '';
+  const trialControl = trial.eligible
+    ? '<button class="buy-btn trial-btn" id="goTrialBtn">🎁 Попробовать GO бесплатно на 1 день</button>'
+    : trial.active
+      ? `<div class="trial-state">⚡ Пробный GO активен до <b>${escapeHtml(trialEnd)}</b>. После окончания потребуется покупка.</div>`
+      : trial.used
+        ? '<div class="trial-state">✓ Пробный GO уже использован на этом аккаунте.</div>'
+        : '';
+  body.innerHTML = `<section>${banner}${trialControl}${p.plans.map((pl, i) => {
     const isCur = pl.key === p.current;
     const isPromo = promo && pl.key === promo.plan;
     return `
@@ -2996,6 +3018,18 @@ async function openPlans() {
       ` : ''}
     </div>`;
   }).join('')}</section>`;
+  document.getElementById('goTrialBtn')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    button.textContent = 'Активация…';
+    const result = await fetch('/chat/api/trial/go', { method:'POST' }).then(x => x.json()).catch(() => ({ ok:false, error:'Нет соединения с сервером.' }));
+    if (!result.ok) {
+      button.disabled = false;
+      button.textContent = result.error || 'Не удалось активировать';
+      return;
+    }
+    await openPlans();
+  });
 }
 
 document.getElementById('plansBtn').addEventListener('click', openPlans);
@@ -3040,10 +3074,12 @@ async function loadBots() {
     return;
   }
   apiState.bots = response.bots || [];
+  apiState.hosting = response.hosting || null;
   apiState.templates = response.templates || [];
   apiState.botModels = response.models || [];
   if (!apiState.templates.some(t => t.id === apiState.botTemplate)) apiState.botTemplate = apiState.templates[0]?.id || 'assistant';
   renderBotBuilder();
+  renderHostingQuota(document.getElementById('botsHosting'), apiState.hosting);
   if (!document.getElementById('customBotSystem').value) chooseBotTemplate(apiState.botTemplate);
 }
 

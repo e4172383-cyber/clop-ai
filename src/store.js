@@ -568,6 +568,38 @@ export function grantPlan(u, planKey, days, payment) {
   saveSoon();
 }
 
+export function goTrialState(u, now = Date.now()) {
+  const startedAt = Number(u?.goTrialStartedAt || 0);
+  const endsAt = Number(u?.goTrialEndsAt || 0);
+  const active = Boolean(startedAt && endsAt > now && u?.plan === 'go' && Number(u?.proUntil || 0) >= endsAt);
+  const paidPersonal = Boolean(PAID_PLAN_KEYS.has(u?.plan) && Number(u?.proUntil || 0) > now && !active);
+  const team = u ? activeTeamFor(u, now) : null;
+  return {
+    eligible: Boolean(u && !startedAt && !paidPersonal && !team),
+    active,
+    used: Boolean(startedAt),
+    startedAt,
+    endsAt,
+    reason: startedAt ? 'already_used' : team ? 'team_subscription' : paidPersonal ? 'active_subscription' : null,
+  };
+}
+
+// Пробный GO выдаётся сервером один раз на Telegram-аккаунт. Отметка остаётся
+// после окончания, поэтому повторный запрос из другого клиента не продлевает срок.
+export function activateGoTrial(u, now = Date.now()) {
+  const state = goTrialState(u, now);
+  if (!state.eligible) return { ok: false, ...state };
+  const endsAt = now + DAY;
+  u.goTrialStartedAt = now;
+  u.goTrialEndsAt = endsAt;
+  u.plan = 'go';
+  u.proUntil = endsAt;
+  if (!Array.isArray(u.planEvents)) u.planEvents = [];
+  u.planEvents.push({ type: 'go_trial', startedAt: now, endsAt });
+  saveSoon();
+  return { ok: true, ...goTrialState(u, now) };
+}
+
 /* Перенос всего нажитого с одного аккаунта на другой.
 
    Понадобилось для смены аккаунта Telegram: у бота ключ — числовой id, и при

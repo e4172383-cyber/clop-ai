@@ -175,7 +175,7 @@ const DESKTOP_DOWNLOADS = new Set([
   'Clop-Code-Setup-2.4.1.exe',
   'Clop-Code-Setup-2.4.2.exe',
   'Clop-Code-Setup-2.4.3.exe',
-  'Clop-Code-Setup-2.4.6.exe',
+  'Clop-Code-Setup-2.4.7.exe',
   'Clop-Code-2.0.6-linux-x64.tar.xz',
   'Clop-Code-2.0.9-linux-x64.tar.xz',
   'Clop-Code-2.0.10-linux-x64.tar.xz',
@@ -188,7 +188,7 @@ const DESKTOP_DOWNLOADS = new Set([
   'Clop-Code-2.4.1-linux-x64.tar.xz',
   'Clop-Code-2.4.2-linux-x64.tar.xz',
   'Clop-Code-2.4.3-linux-x64.tar.xz',
-  'Clop-Code-2.4.6-linux-x64.tar.xz',
+  'Clop-Code-2.4.7-linux-x64.tar.xz',
   'Clop-AI-Mobile-1.0.0.apk',
   'Clop-AI-Mobile-1.0.1.apk',
   'Clop-AI-Mobile-1.0.2.apk',
@@ -221,7 +221,7 @@ async function proxyReleaseAsset(req, res, name) {
   });
 
   try {
-    const requestHeaders = { 'user-agent': 'Clop-Download-Proxy/2.4.6' };
+    const requestHeaders = { 'user-agent': 'Clop-Download-Proxy/2.4.7' };
     if (req.headers.range) requestHeaders.range = req.headers.range;
     const upstream = await fetch(`${RELEASE_ASSET_BASE_URL}/${releaseTagForAsset(name)}/${encodeURIComponent(name)}`, {
       method: req.method,
@@ -575,10 +575,10 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
     if (url.pathname === '/releases.json' && req.method === 'GET') {
       return sendJson(res, 200, {
         desktop: {
-          version: '2.4.6',
-          url: publicDownloadUrl('Clop-Code-Setup-2.4.6.exe'),
-          windowsUrl: publicDownloadUrl('Clop-Code-Setup-2.4.6.exe'),
-          linuxUrl: publicDownloadUrl('Clop-Code-2.4.6-linux-x64.tar.xz'),
+          version: '2.4.7',
+          url: publicDownloadUrl('Clop-Code-Setup-2.4.7.exe'),
+          windowsUrl: publicDownloadUrl('Clop-Code-Setup-2.4.7.exe'),
+          linuxUrl: publicDownloadUrl('Clop-Code-2.4.7-linux-x64.tar.xz'),
         },
         android: { version: '1.0.7', url: publicDownloadUrl('Clop-AI-Mobile-1.0.7.apk') },
       });
@@ -1595,14 +1595,15 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
         const userId = sessionUserId(req);
         const u = userId && store.findUser(userId);
         if (!u) return sendJson(res, 401, { ok: false, error: 'not logged in' });
-        const effective = planOf(u);
-        const personalPaid = u.plan && u.plan !== 'free' && (!u.proUntil || u.proUntil > Date.now());
-        const limit = sites.siteLimit(effective.teamId || personalPaid ? 'paid' : 'free');
+        const planKey = planOf(u).key;
+        const limit = sites.siteLimit(planKey);
         const list = await sites.listSites(u.id);
+        const hosting = await sites.hostingState(u.id, planKey);
         return sendJson(res, 200, {
           ok: true,
           limit,
           count: list.length,
+          hosting,
           sites: list.map((site) => ({ ...site, url: `${PUBLIC_URL}/s/${site.slug}` })),
         });
       })().catch((e) => sendJson(res, 500, { ok: false, error: String(e.message || e) }));
@@ -1877,6 +1878,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           ok: true,
           current: cur.corporateKey || cur.key,
           proUntil: store.activeTeamFor(u)?.until || u.proUntil || 0,
+          trial: store.goTrialState(u),
           // Акция отдаётся сайту отдельным полем: он покажет баннер и не
           // будет предлагать купить то, что сейчас и так открыто всем
           promo: freeGoActive() ? { plan: FREE_GO_PLAN, until: FREE_GO_UNTIL } : null,
@@ -1888,6 +1890,22 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           })),
         });
       });
+      return;
+    }
+
+    if (url.pathname === '/chat/api/trial/go' && req.method === 'POST') {
+      (reloadEachRequest ? store.load() : Promise.resolve()).then(async () => {
+        const userId = sessionUserId(req);
+        const u = userId && store.findUser(userId);
+        if (!u) return sendJson(res, 401, { ok: false, error: 'not logged in' });
+        const trial = store.activateGoTrial(u);
+        if (!trial.ok) {
+          const error = trial.used ? 'Пробный GO уже использован.' : 'Пробный GO недоступен при активной подписке.';
+          return sendJson(res, 409, { ok: false, error, trial });
+        }
+        await store.save({ strict: true });
+        return sendJson(res, 200, { ok: true, trial, plan: 'go', proUntil: trial.endsAt });
+      }).catch((e) => sendJson(res, 500, { ok: false, error: String(e.message || e) }));
       return;
     }
 
@@ -1998,6 +2016,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
         return sendJson(res, 200, {
           ok: true,
           bots: listCustomBots(u.id),
+          hosting: await sites.hostingState(u.id, planOf(u).key),
           templates: BOT_TEMPLATES,
           models: Object.entries(API_PRICES).map(([id, price]) => ({ id, ...price })),
           balanceUsd: microsToUsd(u.balanceMicros),
@@ -2160,8 +2179,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           let siteError = '';
           const found = sites.findSite(r.text, files);
           if (found) {
-            const personalPaid = u.plan && u.plan !== 'free' && (!u.proUntil || u.proUntil > Date.now());
-            const pub = await sites.publish(u.id, found, plan.teamId || personalPaid ? 'paid' : 'free');
+            const pub = await sites.publish(u.id, found, plan.key);
             if (pub.ok) siteUrl = pub.url;
             else {
               console.warn('[sites]', pub.error);

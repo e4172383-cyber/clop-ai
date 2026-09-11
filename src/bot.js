@@ -14,10 +14,10 @@ import { addOfferUsage, claimOffer, offerActiveFor, offerState } from './limited
 import { recordProviderResult } from './provider-status.js';
 
 const DESKTOP_RELEASE = Object.freeze({
-  version: '2.4.6',
+  version: '2.4.7',
   released: '10.09.2026',
-  windows: 'Clop-Code-Setup-2.4.6.exe',
-  linux: 'Clop-Code-2.4.6-linux-x64.tar.xz',
+  windows: 'Clop-Code-Setup-2.4.7.exe',
+  linux: 'Clop-Code-2.4.7-linux-x64.tar.xz',
   androidVersion: '1.0.7',
   android: 'Clop-AI-Mobile-1.0.7.apk',
 });
@@ -76,11 +76,7 @@ import { claimCode } from './weblogin.js';
 import { STARS_PER_USD, MIN_TOPUP_STARS, MAX_TOPUP_STARS, starsToMicros, microsToUsd, purchaseBonus } from './billing.js';
 
 const busy = new Set();
-const siteQuotaPlan = (u) => {
-  const effective = planOf(u);
-  const personalPaid = u.plan && u.plan !== 'free' && (!u.proUntil || u.proUntil > Date.now());
-  return effective.teamId || personalPaid ? 'paid' : 'free';
-};
+const siteQuotaPlan = (u) => planOf(u).key;
 
 // Render работает в UTC, поэтому часовой пояс указываем явно. Иначе даты в
 // сообщениях бота отстают от времени пользователя в Киеве.
@@ -277,6 +273,7 @@ function usageText(u) {
 
 function plansText(u) {
   const currentPlan = planOf(u);
+  const trial = store.goTrialState(u);
   const cur = currentPlan.corporateKey || currentPlan.key;
   const block = (p) => [
     `${p.emoji} *${p.title}*${p.key === cur ? ' — ваш тариф' : ''}${p.stars ? ` — ${p.stars} ⭐️ / ${p.days} дней` : ' — 0 ⭐️'}`,
@@ -289,6 +286,13 @@ function plansText(u) {
     ...(freeGoActive()
       ? ['', `🎁 *Акция: тариф GO бесплатно всем до ${dt(FREE_GO_UNTIL)}* — он уже включён, покупать ничего не нужно.`]
       : []),
+    ...(trial.active
+      ? ['', `⚡ *Пробный GO активен до ${dt(trial.endsAt)}.* После этого для продолжения потребуется покупка тарифа.`]
+      : trial.eligible
+        ? ['', '🎁 *Пробный GO на 24 часа* — можно активировать один раз без оплаты. После окончания доступна обычная покупка.']
+        : trial.used
+          ? ['', '✓ Пробный период GO уже использован.']
+          : []),
     '',
     Object.values(PLANS).map(block).join('\n\n'),
     '',
@@ -1008,8 +1012,11 @@ async function onCommand(u, chatId, cmd, rawText = '') {
 
 async function sitesText(u) {
   const list = await sites.listSites(u.id);
-  const limit = sites.siteLimit(siteQuotaPlan(u));
+  const planKey = siteQuotaPlan(u);
+  const limit = sites.siteLimit(planKey);
+  const hosting = await sites.hostingState(u.id, planKey);
   const lines = ['🌐 *Мои сайты*', ''];
+  lines.push(`Хостинг: *${Math.round(hosting.ramBytes / 1024 / 1024)} МБ RAM* · *${hosting.cpuShare} CPU* · *${Math.round(hosting.storageBytes / 1024 ** 3)} ГБ* хранилища (${hosting.percent}% занято).`, '');
   if (!list.length) {
     lines.push('Пока пусто. Попросите сделать сайт — например «сделай сайт-визитку про кофейню» — и в ответ придёт постоянная ссылка.');
   } else {
@@ -1043,12 +1050,14 @@ function devicesKb(u) {
 function plansKb(u) {
   const currentPlan = planOf(u);
   const cur = currentPlan.corporateKey || currentPlan.key;
-  const rows = Object.values(PLANS)
+  const trial = store.goTrialState(u);
+  const rows = trial.eligible ? [[{ text: '🎁 Попробовать GO на 1 день', callback_data: 'trial_go' }]] : [];
+  rows.push(...Object.values(PLANS)
     .filter((p) => p.key !== 'free')
     .map((p) => [{
       text: `${cur === p.key ? '🔁 Продлить' : `${p.emoji} Купить`} ${p.title} — ${p.stars} ⭐️`,
       callback_data: 'buy_' + p.key,
-    }]);
+    }]));
   if (corporatePlansReady()) rows.push([{ text: '🏢 Корпоративные тарифы', callback_data: 'corporate_plans' }]);
   return backKb(rows);
 }
@@ -1285,6 +1294,16 @@ async function onCallback(u, q) {
     return void await edit(await sitesText(u), await sitesKb(u));
   }
   if (data === 'plans') { await tg.answerCallback(q.id); return void await edit(plansText(u), plansKb(u)); }
+  if (data === 'trial_go') {
+    const trial = store.activateGoTrial(u);
+    if (!trial.ok) {
+      const message = trial.used ? 'Пробный GO уже использован.' : 'Пробный GO недоступен при активной подписке.';
+      return void await tg.answerCallback(q.id, message, true);
+    }
+    await store.save({ strict: true });
+    await tg.answerCallback(q.id, 'GO активирован на 24 часа');
+    return void await edit(`🎁 *Пробный GO активирован до ${dt(trial.endsAt)}.*\n\nДоступ к моделям и лимитам GO уже работает во всех приложениях Clop. После окончания можно купить GO в разделе тарифов.`, plansKb(u));
+  }
   if (data === 'corporate_plans') { await tg.answerCallback(q.id); return void await edit(corporatePlansText(u), corporatePlansKb(u)); }
   if (data === 'team') { await tg.answerCallback(q.id); return void await edit(teamText(u), teamKb(u)); }
   if (data === 'team_add_help') {

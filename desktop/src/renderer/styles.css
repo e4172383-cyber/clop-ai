@@ -478,6 +478,16 @@ kbd { border: 1px solid var(--line); border-radius: 4px; padding: 2px 4px; color
 .menu-popover strong { font-size: 10px; font-weight: 620; }.menu-popover small { color: var(--dim); font-size: 8.5px; }
 .menu-popover .check { width: 13px; height: 13px; color: var(--accent); opacity: 0; stroke-width: 2.3; }
 .menu-popover button.selected .check { opacity: 1; }
+.model-provider-tabs { display:flex; gap:4px; padding:0 8px 7px; }
+.menu-popover .model-provider-tab { display:block; width:auto; min-height:27px; padding:4px 10px; border:1px solid var(--line); border-radius:999px; color:var(--muted); font-size:8px; font-weight:700; text-align:center; }
+.menu-popover .model-provider-tab:hover { border-color:var(--line-strong); color:var(--text); }
+.menu-popover .model-provider-tab.active { border-color:color-mix(in srgb,var(--accent) 52%,var(--line)); background:var(--accent-soft); color:var(--accent-bright); }
+.model-menu-scroll { min-height:0; overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; scrollbar-gutter:stable; scrollbar-width:thin; scrollbar-color:color-mix(in srgb,var(--accent) 55%,var(--line)) transparent; padding-right:2px; }
+.model-menu-scroll::-webkit-scrollbar { width:7px; }
+.model-menu-scroll::-webkit-scrollbar-track { background:transparent; }
+.model-menu-scroll::-webkit-scrollbar-thumb { border:2px solid transparent; border-radius:999px; background:color-mix(in srgb,var(--accent) 58%,var(--line)); background-clip:padding-box; }
+.model-menu-scroll .provider-filtered { display:none; }
+.model-menu-scroll .model-limit-tooltip { display:none; }
 
 .modal-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; background: rgba(6,6,5,.64); backdrop-filter: blur(14px) saturate(80%); padding: 24px; animation: fade-in .2s ease both; }
 [data-theme="light"] .modal-backdrop { background: rgba(55,46,38,.38); }

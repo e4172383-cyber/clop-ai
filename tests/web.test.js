@@ -144,6 +144,26 @@ test('/chat/api/plans publishes corporate prices and seats without exposing toke
   assert.equal(body.plans.some((p) => Object.hasOwn(p, 'limits')), false);
 });
 
+test('GO trial lasts one day and cannot be activated twice', async () => {
+  const first = await authed('/chat/api/trial/go', { method: 'POST' });
+  assert.equal(first.status, 200);
+  const started = await first.json();
+  assert.equal(started.ok, true);
+  assert.equal(user.plan, 'go');
+  assert.equal(started.trial.endsAt - started.trial.startedAt, 24 * 60 * 60_000);
+
+  const state = await authed('/chat/api/plans').then((response) => response.json());
+  assert.equal(state.trial.active, true);
+  assert.equal(state.trial.eligible, false);
+
+  user.proUntil = Date.now() - 1;
+  const second = await authed('/chat/api/trial/go', { method: 'POST' });
+  assert.equal(second.status, 409);
+  const refused = await second.json();
+  assert.equal(refused.trial.used, true);
+  assert.equal(refused.trial.eligible, false);
+});
+
 test('site management lists, renames and deletes only the signed-in user sites', async () => {
   const made = await sites.publish(user.id, {
     files: { 'index.html': '<!doctype html><title>Первый сайт</title><p>ok</p>' },
@@ -154,6 +174,8 @@ test('site management lists, renames and deletes only the signed-in user sites',
   const listed = await authed('/chat/api/sites').then((response) => response.json());
   assert.equal(listed.ok, true);
   assert.equal(listed.limit, 3);
+  assert.equal(listed.hosting.storageBytes, 1024 ** 3);
+  assert.equal(listed.hosting.cpuShare, 0.025);
   assert.equal(listed.sites.some((site) => site.slug === made.slug && site.url.endsWith(`/s/${made.slug}`)), true);
 
   const renamed = await authed('/chat/api/sites/rename', {
@@ -292,19 +314,19 @@ test('serves the public desktop release page and resumable installers without da
   assert.match(html, /iPhone/);
   assert.match(html, /Beta 1\.0 · PWA/);
   assert.match(html, /href="\/chat#iphone"/);
-  assert.match(html, /Clop-Code-Setup-2\.4\.6\.exe/);
-  assert.match(html, /Clop-Code-2\.4\.6-linux-x64\.tar\.xz/);
+  assert.match(html, /Clop-Code-Setup-2\.4\.7\.exe/);
+  assert.match(html, /Clop-Code-2\.4\.7-linux-x64\.tar\.xz/);
   assert.match(html, /Clop-AI-Mobile-1\.0\.7\.apk/);
-  assert.match(html, /href="\/downloads\/Clop-Code-Setup-2\.4\.6\.exe"/);
+  assert.match(html, /href="\/downloads\/Clop-Code-Setup-2\.4\.7\.exe"/);
   assert.doesNotMatch(html, /release-assets\.githubusercontent\.com/);
   assert.doesNotMatch(html, /\d[\d ]{3,}\s*токен/iu);
 
   const releases = await fetch(baseUrl + '/releases.json');
   assert.equal(releases.status, 200);
   const releaseData = await releases.json();
-  assert.equal(releaseData.desktop.version, '2.4.6');
-  assert.match(releaseData.desktop.windowsUrl, /\/downloads\/Clop-Code-Setup-2\.4\.6\.exe$/);
-  assert.match(releaseData.desktop.linuxUrl, /\/downloads\/Clop-Code-2\.4\.6-linux-x64\.tar\.xz$/);
+  assert.equal(releaseData.desktop.version, '2.4.7');
+  assert.match(releaseData.desktop.windowsUrl, /\/downloads\/Clop-Code-Setup-2\.4\.7\.exe$/);
+  assert.match(releaseData.desktop.linuxUrl, /\/downloads\/Clop-Code-2\.4\.7-linux-x64\.tar\.xz$/);
 
   const partial = await fetch(baseUrl + '/downloads/Clop-Code-Setup-2.4.0.exe', {
     headers: { range: 'bytes=0-31' },

@@ -162,6 +162,7 @@
   };
 
   let settingsQueue = Promise.resolve();
+  let modelProviderFilter = 'all';
   let restoreFocus = null;
   const systemTheme = window.matchMedia('(prefers-color-scheme: light)');
   const compactSidebar = window.matchMedia('(max-width: 820px)');
@@ -707,10 +708,6 @@
     });
     populateSelect(elements.effortSelect, efforts, effort?.key, effortTitle);
 
-    elements.modelMenu.replaceChildren(
-      node('div', 'menu-label', 'Выберите модель'),
-      node('div', 'menu-subtitle', 'Доступность и остаток лимита обновляются из вашего аккаунта'),
-    );
     const markClasses = ['coral', 'orange', 'violet', 'blue'];
     const providerOrder = ['clop', 'gpt', 'kimi'];
     const orderedModels = [...models].sort((left, right) => {
@@ -718,13 +715,47 @@
       if (providerDiff) return providerDiff;
       return Number(right.available !== false) - Number(left.available !== false);
     });
+    const providerTabs = node('div', 'model-provider-tabs');
+    const providerOptions = [
+      ['all', 'Все'],
+      ...providerOrder
+        .filter((provider) => orderedModels.some((item) => modelLimitDetails(item).provider === provider))
+        .map((provider) => [provider, provider === 'clop' ? 'Clop' : provider.toUpperCase()]),
+    ];
+    const modelList = node('div', 'model-menu-scroll');
+    const applyProviderFilter = () => {
+      all('.model-provider-tab', providerTabs).forEach((tab) => tab.classList.toggle('active', tab.dataset.provider === modelProviderFilter));
+      all('[data-provider]', modelList).forEach((entry) => entry.classList.toggle('provider-filtered', modelProviderFilter !== 'all' && entry.dataset.provider !== modelProviderFilter));
+      modelList.scrollTop = 0;
+    };
+    providerOptions.forEach(([provider, title]) => {
+      const tab = node('button', 'model-provider-tab', title);
+      tab.type = 'button';
+      tab.dataset.provider = provider;
+      tab.setAttribute('aria-pressed', String(modelProviderFilter === provider));
+      tab.addEventListener('click', (event) => {
+        event.stopPropagation();
+        modelProviderFilter = provider;
+        all('.model-provider-tab', providerTabs).forEach((item) => item.setAttribute('aria-pressed', String(item.dataset.provider === provider)));
+        applyProviderFilter();
+      });
+      providerTabs.append(tab);
+    });
+    elements.modelMenu.replaceChildren(
+      node('div', 'menu-label', 'Выберите модель'),
+      node('div', 'menu-subtitle', 'Все модели видны в прокручиваемом списке'),
+      providerTabs,
+      modelList,
+    );
     let visibleProvider = '';
     orderedModels.forEach((item, index) => {
       const available = item.available !== false;
       const details = modelLimitDetails(item);
       if (details.provider !== visibleProvider) {
         visibleProvider = details.provider;
-        elements.modelMenu.append(node('div', 'menu-provider-label', visibleProvider === 'clop' ? 'Clop' : visibleProvider.toUpperCase()));
+        const providerLabel = node('div', 'menu-provider-label', visibleProvider === 'clop' ? 'Clop' : visibleProvider.toUpperCase());
+        providerLabel.dataset.provider = visibleProvider;
+        modelList.append(providerLabel);
       }
       const button = node('button', `model-option${available ? '' : ' model-option-locked'}`);
       button.type = 'button';
@@ -758,8 +789,9 @@
         closeMenus();
         saveSetting({ model: item.key });
       });
-      elements.modelMenu.append(button);
+      modelList.append(button);
     });
+    applyProviderFilter();
 
     elements.effortMenu.replaceChildren(node('div', 'menu-label', 'Усиление ответа'));
     efforts.forEach((item) => {
@@ -2148,12 +2180,18 @@
     if (!opening) return;
     menu.classList.remove('hidden');
     anchor.classList.add('open');
+    const viewportGap = 8;
+    menu.style.maxHeight = `${Math.max(220, window.innerHeight - viewportGap * 2)}px`;
     const rect = anchor.getBoundingClientRect();
-    const left = Math.max(8, Math.min(window.innerWidth - menu.offsetWidth - 8, rect.left));
-    let top = rect.top - menu.offsetHeight - 8;
-    if (top < 8) top = rect.bottom + 8;
+    const menuRect = menu.getBoundingClientRect();
+    const left = Math.max(viewportGap, Math.min(window.innerWidth - menuRect.width - viewportGap, rect.left));
+    const above = rect.top - menuRect.height - viewportGap;
+    const below = rect.bottom + viewportGap;
+    const top = above >= viewportGap
+      ? above
+      : Math.max(viewportGap, Math.min(window.innerHeight - menuRect.height - viewportGap, below));
     menu.style.left = `${left}px`;
-    menu.style.top = `${Math.min(window.innerHeight - menu.offsetHeight - 8, top)}px`;
+    menu.style.top = `${top}px`;
   }
 
   function switchSettingsTab(tab) {
