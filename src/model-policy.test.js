@@ -30,6 +30,12 @@ test('all selectable bot models use GPT, Kimi or the separate Clop pool, never C
     assert.equal(m.fallbackModel,undefined);
   }
 });
+test('Kimi K2.8 uses the live Kimi Code alias and is available on free', () => {
+  assert.equal(MODELS['kimi-k2-8'].cli, 'kimi-code/kimi-for-coding');
+  assert.equal(MODELS['kimi-k2-8'].kimiEffort, 'on');
+  assert.ok(MODELS['kimi-k2-8'].plans.includes('free'));
+  assert.equal(MODELS['kimi-k2-7-code'].cli, 'kimi-code/kimi-for-coding-highspeed');
+});
 test('Clop 4 models have fixed Medium behavior and Pulsar starts at GO', () => {
   assert.deepEqual(Object.keys(MODELS).filter((key) => key.startsWith('clop-')), [
     'clop-4-pulsar', 'clop-4-pro', 'clop-4-flash',

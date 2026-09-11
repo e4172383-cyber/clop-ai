@@ -64,9 +64,17 @@ export const MODELS = {
     plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'],
     recommended: false, supportsEffort: false, limitMultiplier: 1.5, contextWindow: 262_144,
   },
+  'kimi-k2-8': {
+    key: 'kimi-k2-8', provider: 'kimi', runtime: 'kimi',
+    cli: 'kimi-code/kimi-for-coding', kimiEffort: 'on',
+    title: 'Kimi K2.8', short: 'Kimi K2.8',
+    desc: 'Новая кодовая Kimi — доступна всем',
+    plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'],
+    recommended: true, supportsEffort: false, limitMultiplier: 2, contextWindow: 262_144,
+  },
   'kimi-k2-7-code': {
     key: 'kimi-k2-7-code', provider: 'kimi', runtime: 'kimi',
-    cli: 'kimi-code/kimi-for-coding', kimiEffort: 'on',
+    cli: 'kimi-code/kimi-for-coding-highspeed', kimiEffort: 'on',
     title: 'Kimi K2.7 Code', short: 'Kimi 2.7 Code',
     desc: 'Кодовая Kimi с мышлением — от тарифа GO',
     plans: ['go', 'pro', 'max', 'max20', 'coderplus'],
@@ -201,6 +209,7 @@ export const DEFAULT_MODEL = 'gpt-luna';
 // списания. У «Цены» больше баллов означает более выгодную модель.
 export const MODEL_RATINGS = Object.freeze({
   'kimi-k2-6':       { price: 5, speed: 5, quality: 3 },
+  'kimi-k2-8':       { price: 4, speed: 4, quality: 5 },
   'kimi-k2-7-code':  { price: 4, speed: 4, quality: 4 },
   'kimi-k3':         { price: 3, speed: 3, quality: 5 },
   'kimi-k3-swarm':   { price: 2, speed: 2, quality: 5 },
@@ -289,7 +298,7 @@ export const freeGoActive = () => Date.now() < FREE_GO_UNTIL;
 export const PUBLIC_URL = (process.env.PUBLIC_URL || 'https://clop.195-201-169-74.sslip.io').replace(/\/+$/, '');
 export const DOWNLOAD_BASE_URL = (
   process.env.DOWNLOAD_BASE_URL
-  || 'https://github.com/e4172383-cyber/clop-ai/releases/download/v2.4.7'
+  || 'https://github.com/e4172383-cyber/clop-ai/releases/download/v2.4.8'
 ).replace(/\/+$/, '');
 
 export const MODEL_PROMO = {
@@ -324,7 +333,7 @@ export const PLANS = {
     limits: limitsFor('free'),
     // на бесплатном тарифе доступен выбор между Low, Medium и High
     effort: { locked: false, fixed: null, options: ['low', 'medium', 'high'] },
-    perks: ['100 тыс. на 5 часов и 1 млн на неделю', 'Clop 4 Pro и Flash', 'GPT Луна и Спарк', 'Kimi K2.6 без мышления', 'Сколько угодно чатов', 'История переписки'],
+    perks: ['100 тыс. на 5 часов и 1 млн на неделю', 'Clop 4 Pro и Flash', 'GPT Луна и Спарк', 'Kimi K2.8', 'Сколько угодно чатов', 'История переписки'],
   },
   go: {
     key: 'go',

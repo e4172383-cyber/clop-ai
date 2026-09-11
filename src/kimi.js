@@ -174,7 +174,7 @@ export async function healthCheck() {
     session = await refreshKimiSession();
     if (!session) return { ok: false, version: 'Требуется вход в Kimi Code' };
     const requestUsage = () => fetch(`${session.baseUrl}/usages`, {
-      headers: { authorization: `Bearer ${session.accessToken}`, accept: 'application/json', 'user-agent': 'kimi-code-cli/0.41.0' },
+      headers: { authorization: `Bearer ${session.accessToken}`, accept: 'application/json', 'user-agent': 'kimi-code-cli/0.42.0' },
       signal: AbortSignal.timeout(10_000),
     });
     let response = await requestUsage();

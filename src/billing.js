@@ -14,6 +14,7 @@ export const API_PRICES = Object.freeze({
   'gpt-image-2-5': { title: 'GPT Image 2.5', input: 8, output: 8 },
   'kimi-k3': { title: 'Kimi K3', input: 2.55, output: 12.75 },
   'kimi-k2-6': { title: 'Kimi K2.6', input: .56, output: 3.39 },
+  'kimi-k2-8': { title: 'Kimi K2.8', input: .66, output: 3.4 },
   'kimi-k2-7-code': { title: 'Kimi K2.7 Code', input: .66, output: 3.4 },
 });
 

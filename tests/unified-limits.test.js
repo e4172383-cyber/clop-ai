@@ -28,6 +28,7 @@ test('personal plan limits are derived from the free plan by one multiplier tabl
 test('every published model has the intended shared-pool consumption weight', () => {
   assert.deepEqual(Object.fromEntries(Object.entries(MODELS).map(([key, model]) => [key, model.limitMultiplier || 1])), {
     'kimi-k2-6': 1.5,
+    'kimi-k2-8': 2,
     'kimi-k2-7-code': 2,
     'kimi-k3': 3,
     'kimi-k3-swarm': 5,
