@@ -707,11 +707,25 @@
     });
     populateSelect(elements.effortSelect, efforts, effort?.key, effortTitle);
 
-    elements.modelMenu.replaceChildren(node('div', 'menu-label', 'Модель'));
+    elements.modelMenu.replaceChildren(
+      node('div', 'menu-label', 'Выберите модель'),
+      node('div', 'menu-subtitle', 'Доступность и остаток лимита обновляются из вашего аккаунта'),
+    );
     const markClasses = ['coral', 'orange', 'violet', 'blue'];
-    models.forEach((item, index) => {
+    const providerOrder = ['clop', 'gpt', 'kimi'];
+    const orderedModels = [...models].sort((left, right) => {
+      const providerDiff = providerOrder.indexOf(left.provider) - providerOrder.indexOf(right.provider);
+      if (providerDiff) return providerDiff;
+      return Number(right.available !== false) - Number(left.available !== false);
+    });
+    let visibleProvider = '';
+    orderedModels.forEach((item, index) => {
       const available = item.available !== false;
       const details = modelLimitDetails(item);
+      if (details.provider !== visibleProvider) {
+        visibleProvider = details.provider;
+        elements.modelMenu.append(node('div', 'menu-provider-label', visibleProvider === 'clop' ? 'Clop' : visibleProvider.toUpperCase()));
+      }
       const button = node('button', `model-option${available ? '' : ' model-option-locked'}`);
       button.type = 'button';
       button.dataset.model = item.key;
@@ -2649,7 +2663,7 @@
     restoreDraft();
     setBusy(state.busy, state.busyChatId, snapshot.busyStartedAt);
     setSidebar(!compactSidebar.matches);
-    setInspector(window.innerWidth > 1120, state.inspectorTab);
+    setInspector(false, state.inspectorTab);
     if (snapshot.pendingApproval) queueApproval(snapshot.pendingApproval);
     if (state.remote?.request) showRemoteRequest(state.remote.request);
     if (state.agreementRequired) {

@@ -21,7 +21,7 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { Readable, Transform } = require('node:stream');
 const { pipeline } = require('node:stream/promises');
-const { launchWindowsUpdate } = require('./update-helper.cjs');
+const { launchWindowsUpdate, waitForUpdateHelperReady, cancelWindowsUpdate } = require('./update-helper.cjs');
 const { DEFAULT_SERVER, resolveServer, trustedUpdateUrl } = require('./server-config.cjs');
 const {
   defaults,
@@ -2161,14 +2161,25 @@ function registerIpc() {
       shell.showItemInFolder(file);
       return { ok: true, downloaded: true, file };
     }
-    launchWindowsUpdate({
-      installerPath: file,
-      installDir: path.dirname(process.execPath),
-      appPath: process.execPath,
-      tempDir: app.getPath('temp'),
-      logPath: path.join(dataDir, 'update.log'),
-      parentPid: process.pid,
-    });
+    let update;
+    try {
+      update = launchWindowsUpdate({
+        installerPath: file,
+        installDir: path.dirname(process.execPath),
+        appPath: process.execPath,
+        tempDir: app.getPath('temp'),
+        logPath: path.join(dataDir, 'update.log'),
+        expectedVersion: release.version,
+        parentPid: process.pid,
+      });
+      // Не закрываем рабочее приложение, пока отдельный установщик не доказал,
+      // что действительно запустился и переживёт завершение Electron.
+      await waitForUpdateHelperReady(update.readyPath);
+    } catch (error) {
+      cancelWindowsUpdate(update);
+      emit('update-progress', { phase: 'error' });
+      throw error;
+    }
     isQuitting = true;
     await stopEverything();
     clearInterval(agentCursorTimer);
