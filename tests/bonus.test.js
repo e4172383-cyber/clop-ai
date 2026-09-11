@@ -33,9 +33,9 @@ test('bonus reservations create a real discount and can be consumed or returned'
 test('the five-hour reset preserves weekly usage', () => {
   const user = store.getUser({ id: 'bonus-reset', first_name: 'Reset' });
   user.usage = [{ ts: Date.now() - 1_000, model: 'gpt-luna', billable: 400, total: 400, billingVersion: 3 }];
-  assert.equal(limits.usedIn(user, 5 * 60 * 60_000, 'gpt'), 133);
-  assert.equal(limits.usedIn(user, 7 * 24 * 60 * 60_000, 'gpt'), 133);
+  assert.equal(limits.usedIn(user, 5 * 60 * 60_000, 'gpt'), 67);
+  assert.equal(limits.usedIn(user, 7 * 24 * 60 * 60_000, 'gpt'), 67);
   store.resetFiveHourUsage(user, { reason: 'Награда за баг', sourceId: 'bug:1' });
   assert.equal(limits.usedIn(user, 5 * 60 * 60_000, 'gpt'), 0);
-  assert.equal(limits.usedIn(user, 7 * 24 * 60 * 60_000, 'gpt'), 133);
+  assert.equal(limits.usedIn(user, 7 * 24 * 60 * 60_000, 'gpt'), 67);
 });

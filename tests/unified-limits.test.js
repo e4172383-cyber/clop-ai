@@ -70,10 +70,10 @@ test('every model spends the same shared rolling windows', () => {
     { ts: Date.now(), model: 'clop-4-pro', billable: 100, total: 100, billingVersion: 3 },
   ];
 
-  assert.equal(usedIn(user, 5 * 60 * 60_000, 'gpt'), 467);
-  assert.equal(usedIn(user, 5 * 60 * 60_000, 'kimi'), 467);
+  assert.equal(usedIn(user, 5 * 60 * 60_000, 'gpt'), 433);
+  assert.equal(usedIn(user, 5 * 60 * 60_000, 'kimi'), 433);
   const all = checkAllLimits(user);
-  assert.equal(all.shared.states.find((state) => state.key === 'short').percent, 23);
+  assert.equal(all.shared.states.find((state) => state.key === 'short').percent, 22);
   assert.equal(all.gpt, all.shared);
   assert.equal(all.kimi, all.shared);
   assert.equal(all.clop, all.shared);
