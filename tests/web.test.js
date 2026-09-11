@@ -316,8 +316,8 @@ test('serves the public desktop release page and resumable installers without da
   assert.match(html, /href="\/chat#iphone"/);
   assert.match(html, /Clop-Code-Setup-2\.5\.4\.exe/);
   assert.match(html, /Clop-Code-2\.5\.4-linux-x64\.tar\.xz/);
-  assert.match(html, /Clop-VPN-Setup-1\.0\.0-beta\.1\.exe/);
-  assert.match(html, /Clop-VPN-1\.0\.0-beta\.1-linux-x64\.tar\.xz/);
+  assert.match(html, /Clop-VPN-Setup-1\.0\.0-beta\.4\.exe/);
+  assert.match(html, /Clop-VPN-1\.0\.0-beta\.4-linux-x64\.tar\.xz/);
   assert.match(html, /1250 ГБ в неделю/);
   assert.match(html, /до 500 Мбит\/с/);
   assert.match(html, /Clop-AI-Mobile-1\.0\.7\.apk/);
@@ -328,9 +328,9 @@ test('serves the public desktop release page and resumable installers without da
   const releases = await fetch(baseUrl + '/releases.json');
   assert.equal(releases.status, 200);
   const releaseData = await releases.json();
-  assert.equal(releaseData.vpn.version, '1.0.0-beta.1');
-  assert.match(releaseData.vpn.windowsUrl, /Clop-VPN-Setup-1\.0\.0-beta\.1\.exe$/);
-  assert.equal(releaseData.desktop.version, '2.5.4');
+  assert.equal(releaseData.vpn.version, '1.0.0-beta.4');
+  assert.match(releaseData.vpn.windowsUrl, /Clop-VPN-Setup-1\.0\.0-beta\.4\.exe$/);
+  assert.equal(releaseData.desktop.version, '2.5.5');
   assert.match(releaseData.desktop.windowsUrl, /\/downloads\/Clop-Code-Setup-2\.5\.4\.exe$/);
   assert.match(releaseData.desktop.linuxUrl, /\/downloads\/Clop-Code-2\.5\.4-linux-x64\.tar\.xz$/);
 
@@ -566,6 +566,41 @@ test('/desk/chat marks the request as a desktop action client', async () => {
   assert.equal((await response.json()).ok, true);
   assert.equal(modelCalls[0].client, 'desktop');
   assert.equal(modelCalls[0].userId, user.id);
+});
+
+test('/desk/chat rolls back failed history and lets the same desktop device refund an interrupted delivery', async () => {
+  const deviceId = 'desktop-delivery-refund';
+  desktop.addDevice(user, deviceId, 'Clop Code delivery test');
+  const token = desktop.signToken(user.id, deviceId);
+  const headers = { authorization: 'Bearer ' + token, 'content-type': 'application/json' };
+
+  modelResults.push({ ok: false, error: 'temporary upstream failure' });
+  const failed = await fetch(baseUrl + '/desk/chat', {
+    method: 'POST', headers,
+    body: JSON.stringify({ text: 'Неудачный запрос', model: 'gpt-luna', clientMessageId: 'delivery-failed:1' }),
+  });
+  assert.equal(failed.status, 502);
+  assert.equal(user.usage.length, 0);
+  assert.equal(user.chats[0].messages.length, 0);
+
+  modelResults.push(okResult({ text: '<clop_action>{"tool":"shell","command":"echo ok"}</clop_action>' }));
+  const delivered = await fetch(baseUrl + '/desk/chat', {
+    method: 'POST', headers,
+    body: JSON.stringify({ text: 'Успешный запрос', model: 'gpt-luna', clientMessageId: 'delivery-refund:1' }),
+  });
+  assert.equal(delivered.status, 200);
+  assert.equal(user.usage.at(-1).requestId, 'delivery-refund:1');
+  const charged = user.usage.at(-1).billable;
+
+  const refund = () => fetch(baseUrl + '/desk/usage/refund', {
+    method: 'POST', headers,
+    body: JSON.stringify({ requestId: 'delivery-refund:1' }),
+  });
+  const refunded = await refund();
+  assert.equal(refunded.status, 200);
+  assert.deepEqual(await refunded.json(), { ok: true, removed: 1, refunded: charged });
+  assert.equal(user.usage.length, 0);
+  assert.deepEqual(await (await refund()).json(), { ok: true, removed: 0, refunded: 0 });
 });
 
 test('a user can submit a bug and the admin can accept it with one idempotent reward', async () => {

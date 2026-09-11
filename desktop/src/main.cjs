@@ -1790,12 +1790,18 @@ async function readSelectedAttachments(ids) {
 
 async function chatStream(body, signal) {
   ensureAuthenticated();
-  const response = await fetchWithTimeout(`${SERVER}/desk/chat`, {
-    method: 'POST',
-    headers: { Accept: 'text/event-stream, application/json', 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ ...body, stream: true }),
-    signal,
-  }, CHAT_TIMEOUT_MS);
+  let response;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    response = await fetchWithTimeout(`${SERVER}/desk/chat`, {
+      method: 'POST',
+      headers: { Accept: 'text/event-stream, application/json', 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ ...body, stream: true }),
+      signal,
+    }, CHAT_TIMEOUT_MS);
+    if (response.ok || ![502, 503, 504].includes(response.status) || attempt === 1) break;
+    await response.arrayBuffer().catch(() => {});
+    await new Promise((resolve) => setTimeout(resolve, 900));
+  }
   if (!response.ok) await parseResponseError(response);
   const contentType = response.headers.get('content-type') || '';
   if (!contentType.includes('text/event-stream')) {
@@ -1950,16 +1956,24 @@ async function ask(payload = {}, options = {}) {
           response = await runOwnModel(selected.ownSelection, localPrompt, selected.effort, controller.signal);
           ownTranscript = `${ownTranscript}\n\nINPUT:\n${localPrompt}\n\nASSISTANT:\n${response.text}`.slice(-160_000);
         } else {
-          response = await chatStream({
-            text: nextText,
-            clientMessageId: `${clientMessageId}:${step + 1}`,
-            model: selected.model,
-            chatId: chat.remoteChatId || undefined,
-            effort: selected.effort,
-            fast: selected.fast,
-            ...(nextImages?.length ? { images: nextImages } : {}),
-            ...(nextOffice ? { office: nextOffice } : {}),
-          }, controller.signal);
+          const remoteRequestId = `${clientMessageId}:${step + 1}`;
+          try {
+            response = await chatStream({
+              text: nextText,
+              clientMessageId: remoteRequestId,
+              model: selected.model,
+              chatId: chat.remoteChatId || undefined,
+              effort: selected.effort,
+              fast: selected.fast,
+              ...(nextImages?.length ? { images: nextImages } : {}),
+              ...(nextOffice ? { office: nextOffice } : {}),
+            }, controller.signal);
+          } catch (error) {
+            await apiJson('/desk/usage/refund', {
+              method: 'POST', auth: true, body: { requestId: remoteRequestId },
+            }).catch(() => null);
+            throw error;
+          }
         }
         updateAction(thinking, 'done', 'Ответ модели получен');
         emit('action', { status: 'done', tool: 'thinking', detail: 'Ответ модели получен', chatId: chat.id });
