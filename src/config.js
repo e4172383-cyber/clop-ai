@@ -101,8 +101,9 @@ export const MODELS = {
     key: 'gpt-astra', provider: 'gpt', cli: 'gpt-6-astra',
     title: 'GPT-6 Astra', short: 'Astra 6',
     effortOptions: ['low', 'medium', 'high'],
-    desc: 'Новое поколение GPT — доступна на тарифе GO и выше',
-    plans: ['go', 'pro', 'max', 'max20', 'coderplus'],
+    effortOptionsByPlan: Object.freeze({ free: ['low'] }),
+    desc: 'Новое поколение GPT — бесплатно с Low, расширенное усиление от GO',
+    plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'],
     recommended: true, supportsEffort: true, limitMultiplier: 6,
   },
   // --- GPT (OpenAI, через Codex CLI на квоте ChatGPT-подписки) ---
@@ -298,14 +299,14 @@ export const freeGoActive = () => Date.now() < FREE_GO_UNTIL;
 export const PUBLIC_URL = (process.env.PUBLIC_URL || 'https://clop.195-201-169-74.sslip.io').replace(/\/+$/, '');
 export const DOWNLOAD_BASE_URL = (
   process.env.DOWNLOAD_BASE_URL
-  || 'https://github.com/e4172383-cyber/clop-ai/releases/download/v2.5.2'
+  || 'https://github.com/e4172383-cyber/clop-ai/releases/download/v2.5.3'
 ).replace(/\/+$/, '');
 
 export const MODEL_PROMO = {
   models: ['gpt-astra'],
   from: 0,
   until: 0,
-  title: 'GPT-6 Astra доступна от тарифа GO',
+  title: 'GPT-6 Astra доступна бесплатно с низким усилением',
 };
 export const initializeModelPromo = async () => MODEL_PROMO;
 export const modelPromoActive = () => false;
@@ -333,7 +334,7 @@ export const PLANS = {
     limits: limitsFor('free'),
     // на бесплатном тарифе доступен выбор между Low, Medium и High
     effort: { locked: false, fixed: null, options: ['low', 'medium', 'high'] },
-    perks: ['Базовый общий лимит', 'Clop 4 Pro и Flash', 'GPT Луна и Спарк', 'Kimi K2.8', 'Сколько угодно чатов', 'История переписки'],
+    perks: ['Базовый общий лимит', 'Clop 4 Pro и Flash', 'GPT-6 Astra с низким усилением', 'GPT Луна и Спарк', 'Kimi K2.8', 'Сколько угодно чатов', 'История переписки'],
   },
   go: {
     key: 'go',

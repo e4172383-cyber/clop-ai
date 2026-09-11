@@ -314,19 +314,19 @@ test('serves the public desktop release page and resumable installers without da
   assert.match(html, /iPhone/);
   assert.match(html, /Beta 1\.0 · PWA/);
   assert.match(html, /href="\/chat#iphone"/);
-  assert.match(html, /Clop-Code-Setup-2\.5\.2\.exe/);
-  assert.match(html, /Clop-Code-2\.5\.2-linux-x64\.tar\.xz/);
+  assert.match(html, /Clop-Code-Setup-2\.5\.3\.exe/);
+  assert.match(html, /Clop-Code-2\.5\.3-linux-x64\.tar\.xz/);
   assert.match(html, /Clop-AI-Mobile-1\.0\.7\.apk/);
-  assert.match(html, /href="\/downloads\/Clop-Code-Setup-2\.5\.2\.exe"/);
+  assert.match(html, /href="\/downloads\/Clop-Code-Setup-2\.5\.3\.exe"/);
   assert.doesNotMatch(html, /release-assets\.githubusercontent\.com/);
   assert.doesNotMatch(html, /\d[\d ]{3,}\s*токен/iu);
 
   const releases = await fetch(baseUrl + '/releases.json');
   assert.equal(releases.status, 200);
   const releaseData = await releases.json();
-  assert.equal(releaseData.desktop.version, '2.5.2');
-  assert.match(releaseData.desktop.windowsUrl, /\/downloads\/Clop-Code-Setup-2\.5\.2\.exe$/);
-  assert.match(releaseData.desktop.linuxUrl, /\/downloads\/Clop-Code-2\.5\.2-linux-x64\.tar\.xz$/);
+  assert.equal(releaseData.desktop.version, '2.5.3');
+  assert.match(releaseData.desktop.windowsUrl, /\/downloads\/Clop-Code-Setup-2\.5\.3\.exe$/);
+  assert.match(releaseData.desktop.linuxUrl, /\/downloads\/Clop-Code-2\.5\.3-linux-x64\.tar\.xz$/);
 
   const partial = await fetch(baseUrl + '/downloads/Clop-Code-Setup-2.4.0.exe', {
     headers: { range: 'bytes=0-31' },
@@ -826,6 +826,40 @@ test('/chat/api/me and /chat keep GPT 5.6 Sol available on the free plan', async
   assert.equal(chatResponse.status, 200);
   const body = await chatResponse.json();
   assert.equal(body.model, 'gpt-sol');
+});
+
+test('free users can select Astra but the server fixes it to low effort everywhere', async () => {
+  const meResponse = await authed('/chat/api/me');
+  assert.equal(meResponse.status, 200);
+  const me = await meResponse.json();
+  assert.equal(me.models.find((model) => model.key === 'gpt-astra').available, true);
+  assert.deepEqual(me.effortOptionsByModel['gpt-astra'], ['low']);
+
+  const selectResponse = await authed('/chat/api/profile', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ model: 'gpt-astra' }),
+  });
+  assert.equal(selectResponse.status, 200);
+  assert.deepEqual(await selectResponse.json(), { ok: true, model: 'gpt-astra', effort: 'low', fast: true });
+
+  const strongerResponse = await authed('/chat/api/profile', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ effort: 'medium' }),
+  });
+  assert.equal(strongerResponse.status, 403);
+
+  const gateResponse = await fetch(baseUrl + '/internal/limit-check', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-internal-secret': process.env.CLOUD_INTERNAL_SECRET },
+    body: JSON.stringify({ telegramUserId: user.id, provider: 'gpt', model: 'gpt-astra', billingMode: 'subscription' }),
+  });
+  assert.equal(gateResponse.status, 200);
+  const gate = await gateResponse.json();
+  assert.equal(gate.allowed, true);
+  assert.equal(gate.fixedEffort, 'low');
+  assert.deepEqual(gate.effortOptions, ['low']);
 });
 
 test('/chat/api/message names the shared pool when its limit is exhausted', async () => {

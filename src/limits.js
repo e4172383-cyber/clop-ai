@@ -44,6 +44,8 @@ export function allowedEffortOptions(u, model) {
   const cfg = plan.effort;
   let opts = cfg.locked ? [cfg.fixed].filter(Boolean) : cfg.options;
   if (model?.effortOptions) opts = opts.filter((k) => model.effortOptions.includes(k));
+  const planSpecific = model?.effortOptionsByPlan?.[plan.key];
+  if (Array.isArray(planSpecific)) opts = opts.filter((k) => planSpecific.includes(k));
   return opts.length ? opts : [DEFAULT_EFFORT];
 }
 

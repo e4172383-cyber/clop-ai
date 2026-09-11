@@ -15,12 +15,13 @@ process.env.TOKEN_LIMITS_JSON = JSON.stringify(Object.fromEntries(TEST_PLAN_KEYS
 
 const { MODELS, DEFAULT_MODEL, PLANS } = await import('./config.js');
 
-test('Astra is always restricted to GO and higher', () => {
+test('Astra is selectable on free and every paid plan', () => {
   const plans = availablePlans(MODELS['gpt-astra'], Object.keys(PLANS), { models: ['gpt-astra'], from: 0, until: Infinity });
-  assert.equal(plans.includes('free'), false);
+  assert.equal(plans.includes('free'), true);
   for (const paid of ['go','pro','max','max20','coderplus']) assert.ok(plans.includes(paid));
-  assert.deepEqual(MODELS['gpt-astra'].plans, ['go','pro','max','max20','coderplus']);
+  assert.deepEqual(MODELS['gpt-astra'].plans, ['free','go','pro','max','max20','coderplus']);
   assert.deepEqual(MODELS['gpt-astra'].effortOptions, ['low','medium','high']);
+  assert.deepEqual(MODELS['gpt-astra'].effortOptionsByPlan.free, ['low']);
 });
 test('all selectable bot models use GPT, Kimi or the separate Clop pool, never Claude', () => {
   assert.ok(MODELS[DEFAULT_MODEL].plans.includes('free'));
@@ -57,12 +58,12 @@ test('Clop 4 models have fixed Medium behavior and Pulsar starts at GO', () => {
   assert.equal(MODELS['gpt-5-5'].plans.includes('free'), false);
   assert.ok(MODELS['gpt-5-5'].plans.includes('go'));
 });
-test('old Claude and free Astra selections safely use the default', () => {
+test('old Claude selections use the default while free Astra remains selectable', () => {
   const promo = { models: ['gpt-astra'], from: 1000, until: 2000 };
   for (const old of ['gpt-5-4-mini','sonnet-5','clop-2-5-haiku','clop-3-1-opus','fable-5']) {
     assert.equal(selectModel(MODELS,old,'free',DEFAULT_MODEL,Object.keys(PLANS),promo,1500).key, DEFAULT_MODEL);
   }
-  assert.equal(selectModel(MODELS,'gpt-astra','free',DEFAULT_MODEL,Object.keys(PLANS),promo,1500).key,DEFAULT_MODEL);
+  assert.equal(selectModel(MODELS,'gpt-astra','free',DEFAULT_MODEL,Object.keys(PLANS),promo,1500).key,'gpt-astra');
   assert.equal(selectModel(MODELS,'gpt-astra','go',DEFAULT_MODEL,Object.keys(PLANS),promo,1500).key,'gpt-astra');
 });
 test('help and bot handlers do not dereference removed model keys', async () => {

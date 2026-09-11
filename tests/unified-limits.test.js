@@ -10,7 +10,7 @@ process.env.TOKEN_LIMITS_JSON = JSON.stringify(Object.fromEntries(plans.map((pla
 
 const { PLANS, PLAN_LIMIT_MULTIPLIERS, TOKEN_LIMITS_BOOST, MODELS } = await import('../src/config.js');
 const store = await import('../src/store.js');
-const { checkAllLimits, usedIn } = await import('../src/limits.js');
+const { allowedEffortOptions, checkAllLimits, usedIn } = await import('../src/limits.js');
 
 test('personal plan limits are derived from the free plan by one multiplier table', () => {
   assert.deepEqual(PLAN_LIMIT_MULTIPLIERS, {
@@ -30,6 +30,17 @@ test('plan cards describe limits without publishing token quantities', () => {
   for (const plan of Object.values(PLANS)) {
     assert.doesNotMatch(plan.perks.join(' '), /\d[\d,. ]*\s*(?:тыс|млн)\b/i);
   }
+});
+
+test('free Astra is fixed to low while paid plans retain stronger effort levels', () => {
+  const freeUser = store.getUser({ id: 'free-astra-effort', first_name: 'Free Astra' });
+  freeUser.plan = 'free';
+  freeUser.proUntil = 0;
+  assert.deepEqual(allowedEffortOptions(freeUser, MODELS['gpt-astra']), ['low']);
+
+  freeUser.plan = 'go';
+  freeUser.proUntil = Date.now() + 60_000;
+  assert.deepEqual(allowedEffortOptions(freeUser, MODELS['gpt-astra']), ['low', 'medium', 'high']);
 });
 
 test('every published model has the intended shared-pool consumption weight', () => {

@@ -45,7 +45,7 @@
     { key: 'gpt-spark', title: 'Codex 5.3 Спарк', provider: 'gpt', description: 'GPT-модель для кода', available: true, plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'] },
     { key: 'kimi-k2-6', title: 'Kimi K2.6', provider: 'kimi', description: 'Kimi без силы мышления', available: true, plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'] },
     { key: 'kimi-k2-8', title: 'Kimi K2.8', provider: 'kimi', description: 'Новая кодовая Kimi — доступна всем', available: true, plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'] },
-    { key: 'gpt-astra', title: 'GPT-6 Astra', provider: 'gpt', description: 'Новое поколение GPT — от GO', available: false, plans: ['go', 'pro', 'max', 'max20', 'coderplus'] },
+    { key: 'gpt-astra', title: 'GPT-6 Astra', provider: 'gpt', description: 'Бесплатно с низким усилением', available: true, plans: ['free', 'go', 'pro', 'max', 'max20', 'coderplus'] },
     { key: 'gpt-5-5', title: 'GPT 5.5', provider: 'gpt', description: 'Мощная универсальная GPT — от GO', available: false, plans: ['go', 'pro', 'max', 'max20', 'coderplus'] },
     { key: 'kimi-k2-7-code', title: 'Kimi K2.7 Code HighSpeed', provider: 'kimi', description: 'Скоростная кодовая Kimi — от GO', available: false, plans: ['go', 'pro', 'max', 'max20', 'coderplus'] },
     { key: 'kimi-k3', title: 'Kimi K3', provider: 'kimi', description: 'Флагманская Kimi — от GO', available: false, plans: ['go', 'pro', 'max', 'max20', 'coderplus'] },
