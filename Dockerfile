@@ -24,6 +24,6 @@ COPY --chown=clop:clop . .
 RUN mkdir -p /app/data && chown -R clop:clop /app
 
 USER clop
-EXPOSE 8787
+EXPOSE 8787 2525
 
 CMD ["node", "index.js"]
