@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Clop VPN</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="ambient one"></div><div class="ambient two"></div><div class="grain"></div>
+  <header class="titlebar">
+    <div class="brand"><span class="brand-mark">C</span><span>Clop VPN</span><span class="beta">BETA</span></div>
+    <div class="drag"></div>
+    <div class="window-actions"><button id="minimize" aria-label="Свернуть">—</button><button id="close" aria-label="Закрыть">×</button></div>
+  </header>
+  <main>
+    <aside class="sidebar glass">
+      <section class="account">
+        <div class="avatar">C</div><div><strong id="accountName">Clop</strong><span id="accountPlan">Не выполнен вход</span></div>
+        <button class="icon-button" id="logout" title="Выйти">↗</button>
+      </section>
+      <div class="side-label">ЛОКАЦИИ</div>
+      <button class="location selected"><span class="flag">🇩🇪</span><span><strong>Германия</strong><small>Фалькенштайн</small></span><span class="latency" id="latency">— мс</span></button>
+      <div class="side-label lower">БЕЗОПАСНОСТЬ</div>
+      <div class="security-note"><span class="shield">✓</span><div><strong>WireGuard</strong><small>Современное шифрование трафика</small></div></div>
+      <div class="side-footer"><span class="status-dot"></span><span id="dependencyLabel">Проверка WireGuard…</span><button id="installDependency">Установить</button></div>
+    </aside>
+    <section class="workspace">
+      <div class="topline"><div><span class="eyebrow">ЗАЩИЩЁННОЕ СОЕДИНЕНИЕ</span><h1 id="heroTitle">Готов к подключению</h1></div><span class="protocol">WIREGUARD</span></div>
+      <div class="connection-card glass" id="connectionCard">
+        <div class="map" aria-hidden="true"><svg viewBox="0 0 720 260" preserveAspectRatio="none"><path d="M28 189c41-53 91-29 132-61 44-34 44-90 104-94 58-4 65 69 119 80 45 9 77-32 121-21 44 10 56 72 99 79 31 5 52-17 89-38"/><path class="route" d="M142 169c114-83 226-92 410-28"/><circle cx="142" cy="169" r="6"/><circle class="target" cx="552" cy="141" r="9"/></svg></div>
+        <div class="orb-wrap"><button class="connect-orb" id="connectButton" aria-label="Подключить VPN"><span class="orb-ring"></span><span class="power"><i></i></span></button><span class="connection-label" id="connectionLabel">Подключить</span><span class="connection-time" id="connectionTime">Германия · Фалькенштайн</span></div>
+        <div class="server-pill"><span>🇩🇪</span><div><small>ВАШ СЕРВЕР</small><strong>Германия</strong></div><i></i></div>
+      </div>
+      <div class="metric-grid">
+        <article class="metric glass"><span class="metric-icon down">↓</span><div><small>ЗАГРУЗКА</small><strong><span id="downloadSpeed">0.0</span> <em>Мбит/с</em></strong></div><span class="spark"><i></i><i></i><i></i><i></i><i></i></span></article>
+        <article class="metric glass"><span class="metric-icon up">↑</span><div><small>ОТДАЧА</small><strong><span id="uploadSpeed">0.0</span> <em>Мбит/с</em></strong></div><span class="spark orange"><i></i><i></i><i></i><i></i><i></i></span></article>
+        <article class="metric glass"><span class="metric-icon ping">⌁</span><div><small>СОЕДИНЕНИЕ</small><strong><span id="pingValue">WireGuard</span></strong></div><span class="quality">ЗАЩИЩЕНО</span></article>
+      </div>
+      <article class="usage glass">
+        <div class="usage-head"><div><span class="eyebrow">НЕДЕЛЬНЫЙ ТРАФИК</span><strong><span id="usedTraffic">0 Б</span> <small>из <span id="trafficLimit">—</span></small></strong></div><div class="reset"><small>СБРОС ЛИМИТА</small><strong id="resetTime">—</strong></div></div>
+        <div class="progress"><i id="usageBar"></i></div>
+        <div class="usage-foot"><span><i></i><span id="usagePercent">0% использовано</span></span><span>до <b id="speedLimit">—</b> Мбит/с</span></div>
+      </article>
+    </section>
+  </main>
+  <div class="modal" id="loginModal"><div class="login-card glass">
+    <div class="telegram-logo"><svg viewBox="0 0 24 24"><path d="m20.7 4.1-3 15.1c-.2 1.1-.9 1.4-1.8.9l-4.6-3.4-2.2 2.1c-.2.2-.5.5-.9.5l.3-4.7 8.6-7.8c.4-.3-.1-.5-.6-.2L5.9 13.3l-4.6-1.4c-1-.3-1-1 .2-1.5l17.9-6.9c.8-.3 1.6.2 1.3.6Z"/></svg></div>
+    <span class="eyebrow">ЕДИНЫЙ АККАУНТ CLOP</span><h2>Войдите через Telegram</h2><p>VPN автоматически получит ваш тариф и недельный лимит. Пароль Telegram приложению не передаётся.</p>
+    <button class="primary" id="loginButton">Открыть Telegram и войти</button>
+    <div class="login-wait hidden" id="loginWait"><small>СВЕРЬТЕ КОД В БОТЕ</small><strong id="loginCode">••••••</strong><span>Ожидаем подтверждение…</span></div><button class="text-button hidden" id="cancelLogin">Отменить вход</button>
+  </div></div>
+  <div class="toast" id="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>

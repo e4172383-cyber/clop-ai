@@ -1,0 +1,7 @@
+Clop VPN Beta
+
+Clop VPN encrypts traffic between this device and the selected Clop VPN server using WireGuard. Internet services can still identify your account, browser, device and activity. Do not use the service for unlawful activity.
+
+Traffic allowances reset weekly. The displayed speed is a maximum rate and depends on the device, route, server load and destination service. Beta software may be interrupted while infrastructure is updated.
+
+The WireGuard private key is generated on this device and is never sent to Clop. The public key, account identifier and aggregate traffic counters are stored by the service to operate the VPN and enforce the selected plan.
