@@ -145,6 +145,7 @@ function compactChat(chat) {
 function mainKb(u) {
   const m = modelOf(u);
   const offer = offerState(u);
+  const trial = store.goTrialState(u);
   const showOffer = offer && (!offer.claimed || offer.active);
   const effortLabel = m.supportsEffort === false ? 'не нужно' : effortOf(u, m).short;
   return {
@@ -153,6 +154,7 @@ function mainKb(u) {
       [{ text: `🤖 Модель: ${m.short}`, callback_data: 'model' }, { text: `🧠 Мышление: ${effortLabel}`, callback_data: 'effort' }],
       ...(m.provider === 'gpt' ? [[{ text: `⚡ Быстро: ${u.fast ? 'ВКЛ' : 'ВЫКЛ'}`, callback_data: 'fast_toggle' }]] : []),
       [{ text: '📊 Лимиты', callback_data: 'usage' }, { text: '💎 Тарифы', callback_data: 'plans' }],
+      [{ text: trial.eligible ? '🎁 Получить пробный GO на 1 день' : trial.active ? '⚡ Пробный GO уже активен' : trial.used ? '✓ Пробный GO уже использован' : '🎁 Пробный GO на 1 день', callback_data: 'trial_go' }],
       [{ text: '🏢 Моя команда', callback_data: 'team' }],
       ...(showOffer ? [[{ text: offer.claimed ? '🎁 Бонус Astra + Kimi активен' : '🎁 Получить 10 млн Astra + 1 млн Kimi', callback_data: 'offer_claim' }]] : []),
       [{ text: '🖼 Сгенерировать (бета)', callback_data: 'imagegen' }],
@@ -1051,7 +1053,14 @@ function plansKb(u) {
   const currentPlan = planOf(u);
   const cur = currentPlan.corporateKey || currentPlan.key;
   const trial = store.goTrialState(u);
-  const rows = trial.eligible ? [[{ text: '🎁 Попробовать GO на 1 день', callback_data: 'trial_go' }]] : [];
+  const trialLabel = trial.eligible
+    ? '🎁 Получить пробный GO на 1 день'
+    : trial.active
+      ? '⚡ Пробный GO уже активен'
+      : trial.used
+        ? '✓ Пробный GO уже использован'
+        : '🎁 Условия пробного GO на 1 день';
+  const rows = [[{ text: trialLabel, callback_data: 'trial_go' }]];
   rows.push(...Object.values(PLANS)
     .filter((p) => p.key !== 'free')
     .map((p) => [{
@@ -1297,7 +1306,13 @@ async function onCallback(u, q) {
   if (data === 'trial_go') {
     const trial = store.activateGoTrial(u);
     if (!trial.ok) {
-      const message = trial.used ? 'Пробный GO уже использован.' : 'Пробный GO недоступен при активной подписке.';
+      const message = trial.active
+        ? `Пробный GO уже активен до ${dt(trial.endsAt)}.`
+        : trial.used
+          ? 'Пробный GO уже использован на этом аккаунте.'
+          : trial.reason === 'team_subscription'
+            ? 'Пробный GO доступен бесплатным аккаунтам без командной подписки.'
+            : 'Пробный GO доступен бесплатным аккаунтам без активной подписки.';
       return void await tg.answerCallback(q.id, message, true);
     }
     await store.save({ strict: true });
