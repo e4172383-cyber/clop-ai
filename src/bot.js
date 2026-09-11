@@ -20,6 +20,7 @@ const DESKTOP_RELEASE = Object.freeze({
   linux: 'Clop-Code-2.5.6-linux-x64.tar.xz',
   androidVersion: '1.0.7',
   android: 'Clop-AI-Mobile-1.0.7.apk',
+  vpnAndroid: 'Clop-VPN-Mobile-1.0.0-beta.1.apk',
 });
 
 // Единая точка входа: Claude-модели идут через Claude CLI, GPT-модели — через
@@ -456,7 +457,8 @@ function appDownloadText() {
     'Один Telegram-аккаунт, общие модели, подписка и лимиты с ботом и сайтом.', '',
     '🪟 *Windows 10/11 x64* — установщик EXE.',
     '🐧 *Linux x64* — архив tar.xz. Распакуйте его и запустите файл `clop-code`.', '',
-    `📱 *Android 8+* — APK версии ${DESKTOP_RELEASE.androidVersion}: быстрый чат, файлы, камера, демонстрация экрана и плавающая кнопка.`, '',
+    `📱 *Clop AI для Android 8+* — APK версии ${DESKTOP_RELEASE.androidVersion}: быстрый чат, файлы, камера, демонстрация экрана и плавающая кнопка.`,
+    '🛡 *Clop VPN для Android 8+* — отдельное приложение: WireGuard, Telegram-вход, выбор локации, скорость и недельный трафик.', '',
     'В Linux доступны чат, файлы и терминал. Управление экраном и мышью пока поддерживается только в Windows.',
   ].join('\n');
 }
@@ -467,6 +469,7 @@ function appDownloadKb() {
     [{ text: '🪟 Скачать для Windows', url: `${root}/${DESKTOP_RELEASE.windows}` }],
     [{ text: '🐧 Скачать для Linux x64', url: `${root}/${DESKTOP_RELEASE.linux}` }],
     [{ text: '📱 Скачать APK для Android', url: `${root}/${DESKTOP_RELEASE.android}` }],
+    [{ text: '🛡 Скачать Clop VPN для Android', url: `${root}/${DESKTOP_RELEASE.vpnAndroid}` }],
     [{ text: '🌐 Версия и инструкция', url: `${PUBLIC_URL}/download` }],
   ]);
 }

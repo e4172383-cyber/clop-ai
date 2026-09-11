@@ -318,6 +318,7 @@ test('serves the public desktop release page and resumable installers without da
   assert.match(html, /Clop-Code-2\.5\.6-linux-x64\.tar\.xz/);
   assert.match(html, /Clop-VPN-Setup-1\.0\.0-beta\.4\.exe/);
   assert.match(html, /Clop-VPN-1\.0\.0-beta\.4-linux-x64\.tar\.xz/);
+  assert.match(html, /Clop-VPN-Mobile-1\.0\.0-beta\.1\.apk/);
   assert.match(html, /1250 ГБ в неделю/);
   assert.match(html, /до 500 Мбит\/с/);
   assert.match(html, /Clop-AI-Mobile-1\.0\.7\.apk/);
@@ -330,6 +331,8 @@ test('serves the public desktop release page and resumable installers without da
   const releaseData = await releases.json();
   assert.equal(releaseData.vpn.version, '1.0.0-beta.4');
   assert.match(releaseData.vpn.windowsUrl, /Clop-VPN-Setup-1\.0\.0-beta\.4\.exe$/);
+  assert.equal(releaseData.vpn.androidVersion, '1.0.0-beta.1');
+  assert.match(releaseData.vpn.androidUrl, /Clop-VPN-Mobile-1\.0\.0-beta\.1\.apk$/);
   assert.equal(releaseData.desktop.version, '2.5.6');
   assert.match(releaseData.desktop.windowsUrl, /\/downloads\/Clop-Code-Setup-2\.5\.6\.exe$/);
   assert.match(releaseData.desktop.linuxUrl, /\/downloads\/Clop-Code-2\.5\.6-linux-x64\.tar\.xz$/);

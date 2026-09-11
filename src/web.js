@@ -203,6 +203,7 @@ const DESKTOP_DOWNLOADS = new Set([
   'Clop-Code-2.5.3-linux-x64.tar.xz',
   'Clop-Code-2.5.6-linux-x64.tar.xz',
   'Clop-VPN-1.0.0-beta.4-linux-x64.tar.xz',
+  'Clop-VPN-Mobile-1.0.0-beta.1.apk',
   'Clop-AI-Mobile-1.0.0.apk',
   'Clop-AI-Mobile-1.0.1.apk',
   'Clop-AI-Mobile-1.0.2.apk',
@@ -219,6 +220,7 @@ function releaseTagForAsset(name) {
   if (desktopVersion) return `v${desktopVersion}`;
   // Android 1.0.7 is published in the v2.4.1 release.
   if (name === 'Clop-AI-Mobile-1.0.7.apk') return 'v2.4.1';
+  if (name === 'Clop-VPN-Mobile-1.0.0-beta.1.apk') return 'vpn-mobile-v1.0.0-beta.1';
   return 'v2.4.1';
 }
 
@@ -598,6 +600,8 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           version: '1.0.0-beta.4',
           windowsUrl: publicDownloadUrl('Clop-VPN-Setup-1.0.0-beta.4.exe'),
           linuxUrl: publicDownloadUrl('Clop-VPN-1.0.0-beta.4-linux-x64.tar.xz'),
+          androidVersion: '1.0.0-beta.1',
+          androidUrl: publicDownloadUrl('Clop-VPN-Mobile-1.0.0-beta.1.apk'),
           location: 'Germany',
         },
         android: { version: '1.0.7', url: publicDownloadUrl('Clop-AI-Mobile-1.0.7.apk') },
