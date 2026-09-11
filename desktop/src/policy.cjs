@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const ACTIONS = new Set(['list', 'read', 'write', 'shell', 'screenshot', 'click', 'type', 'key']);
-const defaults = Object.freeze({ workDir: '', theme: 'dark', animations: true, enterSends: true, agentVisible: true, agentPosition: null, remoteRequests: true, approvalMode: 'smart', shellTimeout: 90, model: '', effort: 'low', fast: false, agreementVersion: '', agreementAt: 0 });
+const defaults = Object.freeze({ workDir: '', theme: 'dark', animations: true, enterSends: true, agentVisible: true, agentPosition: null, remoteRequests: true, approvalMode: 'smart', shellTimeout: 90, model: '', modelSource: 'clop', ownModel: '', ownProviders: {}, effort: 'low', fast: false, agreementVersion: '', agreementAt: 0 });
 function cleanSettings(input = {}, previous = defaults) {
   const out = { ...previous };
   for (const k of ['animations', 'enterSends', 'agentVisible', 'remoteRequests', 'fast']) if (typeof input[k] === 'boolean') out[k] = input[k];
@@ -14,6 +14,14 @@ function cleanSettings(input = {}, previous = defaults) {
   if (['smart', 'allow', 'ask'].includes(input.approvalMode)) out.approvalMode = input.approvalMode;
   for (const [k, min, max] of [['shellTimeout', 5, 300]]) if (Number.isFinite(input[k])) out[k] = Math.min(max, Math.max(min, Math.floor(input[k])));
   if (typeof input.model === 'string' && /^[a-z0-9-]{0,60}$/.test(input.model)) out.model = input.model;
+  if (['clop', 'own'].includes(input.modelSource)) out.modelSource = input.modelSource;
+  if (typeof input.ownModel === 'string' && /^own-[a-z0-9.-]{1,80}$/.test(input.ownModel)) out.ownModel = input.ownModel;
+  if (input.ownProviders && typeof input.ownProviders === 'object' && !Array.isArray(input.ownProviders)) {
+    out.ownProviders = {};
+    for (const key of ['antigravity', 'gpt', 'claude', 'kimi', 'qwen']) {
+      if (typeof input.ownProviders[key] === 'boolean') out.ownProviders[key] = input.ownProviders[key];
+    }
+  }
   if (['low', 'medium', 'high', 'xhigh'].includes(input.effort)) out.effort = input.effort;
   return out;
 }

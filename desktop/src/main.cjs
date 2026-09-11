@@ -24,6 +24,16 @@ const { pipeline } = require('node:stream/promises');
 const { launchWindowsUpdate, waitForUpdateHelperReady, cancelWindowsUpdate } = require('./update-helper.cjs');
 const { DEFAULT_SERVER, resolveServer, trustedUpdateUrl } = require('./server-config.cjs');
 const {
+  commandForModel,
+  modelByKey: ownModelByKey,
+  ownModels,
+  parseCliOutput,
+  providerByKey: ownProviderByKey,
+  providerList: ownProviderList,
+  versionArgs: ownVersionArgs,
+  windowsCommand,
+} = require('./own-providers.cjs');
+const {
   defaults,
   cleanSettings,
   parseAction,
@@ -109,6 +119,7 @@ let backupsDir = '';
 let backupIndexFile = '';
 let responseFilesDir = '';
 let qualityLogFile = '';
+let ownCliSandboxDir = '';
 let settings = { ...defaults };
 let chats = [];
 let actionLog = [];
@@ -120,6 +131,7 @@ let account = null;
 let pendingLogin = null;
 let currentRun = null;
 let currentChild = null;
+const ownProviderStatus = new Map();
 let attachments = new Map();
 const pendingApprovals = new Map();
 
@@ -298,8 +310,10 @@ function initialiseStorage() {
   backupIndexFile = path.join(backupsDir, 'index.json');
   responseFilesDir = path.join(dataDir, 'response-files');
   qualityLogFile = path.join(dataDir, 'ai-quality.jsonl');
+  ownCliSandboxDir = path.join(dataDir, 'own-cli-sandbox');
   fs.mkdirSync(backupsDir, { recursive: true });
   fs.mkdirSync(responseFilesDir, { recursive: true });
+  fs.mkdirSync(ownCliSandboxDir, { recursive: true });
   try {
     if (fs.existsSync(qualityLogFile) && fs.statSync(qualityLogFile).size > 5 * 1024 * 1024) {
       fs.renameSync(qualityLogFile, `${qualityLogFile}.previous`);
@@ -653,7 +667,149 @@ function summaryState() {
       session: remoteSession,
       enabled: settings.remoteRequests !== false,
     },
+    ownProviders: publicOwnProviders(),
     version: app.getVersion(),
+  };
+}
+
+function ownProviderEnabled(key) {
+  return settings.ownProviders?.[key] === true;
+}
+
+function publicOwnProviders() {
+  return ownProviderList().map((provider) => {
+    const status = ownProviderStatus.get(provider.key) || {};
+    const installed = status.installed === true;
+    const enabled = installed && ownProviderEnabled(provider.key);
+    return {
+      key: provider.key,
+      title: provider.title,
+      mark: provider.mark,
+      description: provider.description,
+      installed,
+      enabled,
+      checked: status.checked === true,
+      version: status.version || '',
+      installUrl: provider.installUrl,
+      models: ownModels(provider, enabled),
+    };
+  });
+}
+
+function captureProcess(executable, args, options = {}) {
+  return new Promise((resolve) => {
+    const spec = process.platform === 'win32' ? windowsCommand(executable, args) : { executable, args };
+    let child;
+    try {
+      child = spawn(spec.executable, spec.args, {
+        cwd: options.cwd || os.homedir(), env: process.env, windowsHide: options.visible !== true,
+        detached: options.detached === true, stdio: options.detached ? 'ignore' : ['pipe', 'pipe', 'pipe'],
+      });
+    } catch (error) {
+      resolve({ ok: false, code: null, output: '', stderr: error.message, error });
+      return;
+    }
+    if (options.detached) {
+      child.unref();
+      resolve({ ok: true, code: null, output: '', stderr: '' });
+      return;
+    }
+    const stdout = [];
+    const stderr = [];
+    let size = 0;
+    let timedOut = false;
+    const append = (target, chunk) => {
+      if (size >= MAX_SHELL_OUTPUT) return;
+      const text = String(chunk);
+      const kept = text.slice(0, MAX_SHELL_OUTPUT - size);
+      size += Buffer.byteLength(kept);
+      target.push(kept);
+    };
+    child.stdout?.on('data', (chunk) => append(stdout, chunk));
+    child.stderr?.on('data', (chunk) => append(stderr, chunk));
+    if (typeof options.input === 'string') child.stdin?.end(options.input);
+    else child.stdin?.end();
+    const stop = () => {
+      if (child.killed) return;
+      if (process.platform === 'win32' && child.pid) {
+        try { spawn('taskkill.exe', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' }).unref(); } catch { child.kill(); }
+      } else try { child.kill('SIGTERM'); } catch { /* already stopped */ }
+    };
+    const abort = () => stop();
+    options.signal?.addEventListener('abort', abort, { once: true });
+    const timer = setTimeout(() => { timedOut = true; stop(); }, options.timeoutMs || 8_000);
+    child.once('error', (error) => {
+      clearTimeout(timer);
+      options.signal?.removeEventListener('abort', abort);
+      resolve({ ok: false, code: null, output: stdout.join(''), stderr: stderr.join('') || error.message, error, timedOut });
+    });
+    child.once('close', (code) => {
+      clearTimeout(timer);
+      options.signal?.removeEventListener('abort', abort);
+      resolve({ ok: code === 0 && !timedOut, code, output: stdout.join(''), stderr: stderr.join(''), timedOut });
+    });
+    if (options.track) currentChild = child;
+    child.once('close', () => { if (currentChild === child) currentChild = null; });
+    child.once('error', () => { if (currentChild === child) currentChild = null; });
+  });
+}
+
+async function locateOwnProvider(provider) {
+  const lookup = process.platform === 'win32'
+    ? await captureProcess('where.exe', [provider.command], { timeoutMs: 5_000 })
+    : await captureProcess('sh', ['-lc', `command -v ${provider.command}`], { timeoutMs: 5_000 });
+  if (!lookup.ok) return '';
+  const candidates = lookup.output.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+  const candidate = process.platform === 'win32'
+    ? (candidates.find((item) => ['.exe', '.com'].includes(path.extname(item).toLowerCase()))
+      || candidates.find((item) => ['.cmd', '.bat'].includes(path.extname(item).toLowerCase())) || '')
+    : (candidates[0] || '');
+  if (!candidate || /[\r\n\0]/.test(candidate)) return '';
+  return candidate;
+}
+
+async function inspectOwnProvider(provider) {
+  const executable = await locateOwnProvider(provider);
+  if (!executable) {
+    const status = { checked: true, installed: false, executable: '', version: '' };
+    ownProviderStatus.set(provider.key, status);
+    return status;
+  }
+  const result = await captureProcess(executable, ownVersionArgs(provider.key), { timeoutMs: 7_000 });
+  const version = String(result.output || result.stderr || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 120);
+  const status = { checked: true, installed: result.ok, executable, version: result.ok ? version : '' };
+  ownProviderStatus.set(provider.key, status);
+  return status;
+}
+
+async function refreshOwnProviders() {
+  await Promise.all(ownProviderList().map(inspectOwnProvider));
+  const providers = publicOwnProviders();
+  emit('own-providers', { providers });
+  return providers;
+}
+
+async function runOwnModel(selection, prompt, effort, signal) {
+  const provider = selection.provider;
+  let status = ownProviderStatus.get(provider.key);
+  if (!status?.installed) status = await inspectOwnProvider(provider);
+  if (!status.installed || !status.executable) throw new Error(`${provider.title} CLI не найден. Откройте «Настройки → Свои подключения».`);
+  if (!ownProviderEnabled(provider.key)) throw new Error(`${provider.title} не подключён в Clop Code.`);
+  const startedAt = Date.now();
+  const result = await captureProcess(status.executable, commandForModel(selection, effort), {
+    cwd: ownCliSandboxDir || os.tmpdir(), input: prompt, signal, timeoutMs: CHAT_TIMEOUT_MS, track: true,
+  });
+  if (signal?.aborted) throw signal.reason || makeAbortError();
+  if (!result.ok) {
+    const reason = String(result.stderr || result.output || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 500);
+    throw new Error(reason || `${provider.title} CLI завершился с ошибкой. Проверьте вход в аккаунт.`);
+  }
+  return {
+    ok: true,
+    text: parseCliOutput(result.output, result.stderr),
+    model: selection.key,
+    durationMs: Date.now() - startedAt,
+    files: [],
   };
 }
 
@@ -1034,6 +1190,22 @@ async function refreshAccount(force = false) {
 }
 
 function validateChoice(payload = {}) {
+  const requestedSource = payload.modelSource === 'own' || (!payload.modelSource && settings.modelSource === 'own') ? 'own' : 'clop';
+  const requestedOwnModel = typeof payload.model === 'string' && payload.model.startsWith('own-')
+    ? payload.model
+    : settings.ownModel;
+  if (requestedSource === 'own') {
+    const ownSelection = ownModelByKey(requestedOwnModel);
+    if (!ownSelection) throw new Error('Выбранная локальная модель больше недоступна.');
+    if (!ownProviderEnabled(ownSelection.provider.key)) throw new Error(`${ownSelection.provider.title} не подключён в Clop Code.`);
+    return {
+      source: 'own',
+      model: ownSelection.key,
+      ownSelection,
+      effort: ['low', 'medium', 'high', 'xhigh'].includes(payload.effort) ? payload.effort : settings.effort,
+      fast: false,
+    };
+  }
   const modelKeys = new Set(account?.models?.filter((model) => model.available !== false).map((model) => model.key) || []);
   const effortKeys = new Set(account?.efforts?.map((effort) => effort.key) || ['low', 'medium', 'high']);
   const requestedModel = typeof payload.model === 'string' ? payload.model : settings.model;
@@ -1041,6 +1213,7 @@ function validateChoice(payload = {}) {
   const fallbackModel = account?.model || account?.models?.[0]?.key || settings.model;
   const fallbackEffort = account?.effort || account?.efforts?.[0]?.key || settings.effort;
   return {
+    source: 'clop',
     model: modelKeys.size && modelKeys.has(requestedModel) ? requestedModel : fallbackModel,
     effort: effortKeys.has(requestedEffort) ? requestedEffort : fallbackEffort,
     fast: typeof payload.fast === 'boolean' ? payload.fast : settings.fast,
@@ -1597,6 +1770,12 @@ async function chatStream(body, signal) {
   };
 }
 
+function ownContinuationPrompt(originalRequest, transcript, nextPrompt) {
+  if (!transcript) return nextPrompt;
+  const retained = transcript.slice(-120_000);
+  return `Continue the same Clop desktop task. Preserve the original goal and use the tool results below. Reply with exactly one <clop_action> block when another computer action is required, or give the concise final answer when the task is complete.\n\nORIGINAL USER REQUEST:\n${originalRequest}\n\nRECENT LOCAL MODEL TRANSCRIPT:\n${retained}\n\nLATEST TOOL RESULT OR HINT:\n${nextPrompt}`;
+}
+
 async function ask(payload = {}, options = {}) {
   ensureAgreement();
   ensureAuthenticated();
@@ -1613,7 +1792,11 @@ async function ask(payload = {}, options = {}) {
   if (text.length > 50_000) throw new Error('Сообщение слишком длинное.');
   await refreshAccount();
   const selected = validateChoice(payload);
-  settings = cleanSettings(selected, settings);
+  if (selected.source === 'own') {
+    settings = cleanSettings({ modelSource: 'own', ownModel: selected.model, effort: selected.effort, fast: false }, settings);
+  } else {
+    settings = cleanSettings({ modelSource: 'clop', model: selected.model, effort: selected.effort, fast: selected.fast }, settings);
+  }
   saveSettings();
   let chat = currentChat();
   if (!chat) chat = createChat();
@@ -1665,6 +1848,7 @@ async function ask(payload = {}, options = {}) {
     let completedSteps = 0;
     let actionRecoveryAttempts = 0;
     let successfulComputerActions = 0;
+    let ownTranscript = '';
     const writtenPaths = [];
     for (let step = 0; step < MAX_AUTONOMOUS_ACTIONS; step += 1) {
       if (controller.signal.aborted) throw makeAbortError();
@@ -1676,16 +1860,22 @@ async function ask(payload = {}, options = {}) {
       emit('action', { status: 'running', tool: 'thinking', detail: thinkingDetail, chatId: chat.id });
       let response;
       try {
-        response = await chatStream({
-          text: nextText,
-          clientMessageId: `${clientMessageId}:${step + 1}`,
-          model: selected.model,
-          chatId: chat.remoteChatId || undefined,
-          effort: selected.effort,
-          fast: selected.fast,
-          ...(nextImages?.length ? { images: nextImages } : {}),
-          ...(nextOffice ? { office: nextOffice } : {}),
-        }, controller.signal);
+        if (selected.source === 'own') {
+          const localPrompt = ownContinuationPrompt(text, ownTranscript, nextText);
+          response = await runOwnModel(selected.ownSelection, localPrompt, selected.effort, controller.signal);
+          ownTranscript = `${ownTranscript}\n\nINPUT:\n${localPrompt}\n\nASSISTANT:\n${response.text}`.slice(-160_000);
+        } else {
+          response = await chatStream({
+            text: nextText,
+            clientMessageId: `${clientMessageId}:${step + 1}`,
+            model: selected.model,
+            chatId: chat.remoteChatId || undefined,
+            effort: selected.effort,
+            fast: selected.fast,
+            ...(nextImages?.length ? { images: nextImages } : {}),
+            ...(nextOffice ? { office: nextOffice } : {}),
+          }, controller.signal);
+        }
         updateAction(thinking, 'done', 'Ответ модели получен');
         emit('action', { status: 'done', tool: 'thinking', detail: 'Ответ модели получен', chatId: chat.id });
       } catch (error) {
@@ -1895,7 +2085,7 @@ async function executeRemoteScreenAction(action, chatId = '') {
 async function runRemotePrompt(text, commandId) {
   if (currentRun) throw new Error('Clop уже выполняет другую задачу.');
   await refreshAccount();
-  const selected = validateChoice({});
+  const selected = validateChoice({ modelSource: 'clop' });
   let chat = createChat();
   chat.title = `Remote: ${String(text).replace(/\s+/g, ' ').slice(0, 44)}`;
   const userMessage = { role: 'user', content: String(text), ts: Date.now(), clientMessageId: commandId, remote: true };
@@ -2232,6 +2422,51 @@ function registerIpc() {
     }
     emit('settings', { settings: publicSettings() });
     return { ok: true, settings: publicSettings(), user: account };
+  });
+  handle('own-providers', async () => ({ ok: true, providers: await refreshOwnProviders() }));
+  handle('own-provider-toggle', async (input = {}) => {
+    const provider = ownProviderByKey(input.key);
+    if (!provider) throw new Error('Неизвестное подключение.');
+    let status = ownProviderStatus.get(provider.key);
+    if (!status?.checked) status = await inspectOwnProvider(provider);
+    const enabled = input.enabled === true;
+    if (enabled && !status.installed) throw new Error(`${provider.title} CLI не найден на компьютере.`);
+    settings = cleanSettings({ ownProviders: { ...(settings.ownProviders || {}), [provider.key]: enabled } }, settings);
+    if (!enabled && settings.modelSource === 'own' && ownModelByKey(settings.ownModel)?.provider?.key === provider.key) {
+      settings = cleanSettings({ modelSource: 'clop' }, settings);
+    }
+    saveSettings();
+    const providers = publicOwnProviders();
+    emit('own-providers', { providers });
+    emit('settings', { settings: publicSettings() });
+    return { ok: true, settings: publicSettings(), providers };
+  });
+  handle('own-provider-login', async (input = {}) => {
+    const provider = ownProviderByKey(input.key);
+    if (!provider) throw new Error('Неизвестное подключение.');
+    let status = ownProviderStatus.get(provider.key);
+    if (!status?.installed) status = await inspectOwnProvider(provider);
+    if (!status.installed || !status.executable) throw new Error(`${provider.title} CLI не найден на компьютере.`);
+    if (process.platform === 'win32') {
+      const quote = (value) => `"${String(value).replaceAll('"', '""')}"`;
+      const command = [quote(status.executable), ...provider.loginArgs.map(quote)].join(' ');
+      const child = spawn(process.env.ComSpec || 'cmd.exe', ['/d', '/k', command], {
+        cwd: os.homedir(), env: process.env, windowsHide: false, detached: true, stdio: 'ignore',
+      });
+      child.unref();
+    } else {
+      const child = spawn('x-terminal-emulator', ['-e', status.executable, ...provider.loginArgs], {
+        cwd: os.homedir(), env: process.env, detached: true, stdio: 'ignore',
+      });
+      child.unref();
+    }
+    return { ok: true, message: `Открыто окно входа ${provider.title}.` };
+  });
+  handle('own-provider-install', async (input = {}) => {
+    const provider = ownProviderByKey(input.key);
+    if (!provider) throw new Error('Неизвестное подключение.');
+    await shell.openExternal(provider.installUrl);
+    return { ok: true };
   });
   handle('terms-accept', async (input = {}) => {
     const version = typeof input === 'string' ? input : input.version;

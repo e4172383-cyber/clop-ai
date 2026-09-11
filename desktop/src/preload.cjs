@@ -14,5 +14,7 @@ contextBridge.exposeInMainWorld('clop', {
   attach: invoke('attach'), terminal: invoke('terminal'), backups: invoke('backups'),
   window: invoke('window'), external: invoke('external'), serviceLinks: invoke('service-links'),
   checkUpdate: invoke('update-check'), installUpdate: invoke('update-install'),
+  ownProviders: invoke('own-providers'), ownProviderToggle: invoke('own-provider-toggle'),
+  ownProviderLogin: invoke('own-provider-login'), ownProviderInstall: invoke('own-provider-install'),
   onEvent: (fn) => { const listener = (_e, data) => fn(data); ipcRenderer.on('event', listener); return () => ipcRenderer.removeListener('event', listener); }
 });

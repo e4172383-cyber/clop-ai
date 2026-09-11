@@ -34,6 +34,7 @@
     'settingsModeName', 'settingsModeDescription', 'changeModeButton', 'openBackups',
     'cloudStorageUsage', 'cloudStorageQuota', 'cloudStorageProgress', 'cloudUploadButton', 'cloudBackupButton', 'cloudOptimizeButton', 'cloudStorageState', 'cloudFileList',
     'openTermsSettings', 'openWebsite', 'openBotBuilder', 'logoutButton', 'toastStack',
+    'refreshOwnProviders', 'ownProvidersList',
   ]) elements[id] = byId(id);
 
   const fallbackModels = [
@@ -114,7 +115,7 @@
     user: null,
     settings: {
       workDir: '', theme: 'dark', animations: true, agentVisible: true, remoteRequests: true, enterSends: true, approvalMode: 'smart',
-      shellTimeout: 90, model: '', effort: 'low', fast: false,
+      shellTimeout: 90, model: '', modelSource: 'clop', ownModel: '', ownProviders: {}, effort: 'low', fast: false,
     },
     mode: 'chat',
     chats: [],
@@ -159,6 +160,7 @@
     terminalHistory: [],
     terminalHistoryIndex: 0,
     remote: { version: '1.1 Beta', request: null, session: null, enabled: true },
+    ownProviders: [],
   };
 
   let settingsQueue = Promise.resolve();
@@ -215,6 +217,7 @@
       attachments: needsReattach ? [] : attachments,
       attachmentItems,
       model: cleanStoredString(value.model, 240),
+      modelSource: value.modelSource === 'own' ? 'own' : 'clop',
       effort: cleanStoredString(value.effort, 40),
       fast: Boolean(value.fast),
       ts: Number.isFinite(Number(value.ts)) ? Number(value.ts) : Date.now(),
@@ -473,7 +476,9 @@
 
   function availableModels() {
     const models = Array.isArray(state.user?.models) ? state.user.models : [];
-    return models.length ? models : fallbackModels;
+    const clopModels = models.length ? models : fallbackModels;
+    const own = state.ownProviders.flatMap((provider) => Array.isArray(provider.models) ? provider.models : []);
+    return [...clopModels.map((model) => ({ ...model, source: 'clop' })), ...own];
   }
 
   function availableEfforts() {
@@ -483,7 +488,8 @@
 
   function selectedModel() {
     const models = availableModels();
-    const configured = models.find((item) => item.key === state.settings.model);
+    const configuredKey = state.settings.modelSource === 'own' ? state.settings.ownModel : state.settings.model;
+    const configured = models.find((item) => item.key === configuredKey);
     const profileDefault = models.find((item) => item.key === state.user?.model);
     return (configured?.available !== false ? configured : null)
       || (profileDefault?.available !== false ? profileDefault : null)
@@ -506,6 +512,15 @@
   }
 
   function modelLimitDetails(model) {
+    if (model?.source === 'own') {
+      return {
+        provider: 'own',
+        short: { title: 'Локальный аккаунт', percent: null, resetAt: 0, tone: 'normal', text: 'Расходуется лимит вашего провайдера' },
+        long: { title: 'Оплата', percent: null, resetAt: 0, tone: 'normal', text: 'Clop не списывает свой лимит' },
+        compact: 'Своя квота',
+        title: `${model.providerTitle || 'Локальная модель'}: используется ваш аккаунт и его лимиты`,
+      };
+    }
     const provider = String(model?.provider || '').toLowerCase();
     const providerLimits = state.user?.limits?.[provider];
     const states = Array.isArray(providerLimits?.states)
@@ -684,7 +699,7 @@
     const efforts = availableEfforts();
     const model = selectedModel();
     const effort = selectedEffort();
-    const fastAvailable = model?.provider === 'gpt' || String(model?.key || '').startsWith('gpt-');
+    const fastAvailable = model?.source !== 'own' && (model?.provider === 'gpt' || String(model?.key || '').startsWith('gpt-'));
     elements.fastToggle.disabled = !fastAvailable;
     elements.fastToggle.closest('.fast-toggle')?.classList.toggle('hidden', !fastAvailable);
     elements.fastSetting.disabled = !fastAvailable;
@@ -709,7 +724,7 @@
     populateSelect(elements.effortSelect, efforts, effort?.key, effortTitle);
 
     const markClasses = ['coral', 'orange', 'violet', 'blue'];
-    const providerOrder = ['clop', 'gpt', 'kimi'];
+    const providerOrder = ['clop', 'gpt', 'kimi', 'own'];
     const orderedModels = [...models].sort((left, right) => {
       const providerDiff = providerOrder.indexOf(left.provider) - providerOrder.indexOf(right.provider);
       if (providerDiff) return providerDiff;
@@ -720,7 +735,7 @@
       ['all', 'Все'],
       ...providerOrder
         .filter((provider) => orderedModels.some((item) => modelLimitDetails(item).provider === provider))
-        .map((provider) => [provider, provider === 'clop' ? 'Clop' : provider.toUpperCase()]),
+        .map((provider) => [provider, provider === 'clop' ? 'Clop' : (provider === 'own' ? 'Свои' : provider.toUpperCase())]),
     ];
     const modelList = node('div', 'model-menu-scroll');
     const applyProviderFilter = () => {
@@ -751,16 +766,19 @@
     orderedModels.forEach((item, index) => {
       const available = item.available !== false;
       const details = modelLimitDetails(item);
-      if (details.provider !== visibleProvider) {
-        visibleProvider = details.provider;
-        const providerLabel = node('div', 'menu-provider-label', visibleProvider === 'clop' ? 'Clop' : visibleProvider.toUpperCase());
-        providerLabel.dataset.provider = visibleProvider;
+      const providerGroup = item.source === 'own' ? `own-${item.providerKey}` : details.provider;
+      if (providerGroup !== visibleProvider) {
+        visibleProvider = providerGroup;
+        const providerTitle = item.source === 'own' ? `Свои · ${item.providerTitle}` : (visibleProvider === 'clop' ? 'Clop' : visibleProvider.toUpperCase());
+        const providerLabel = node('div', 'menu-provider-label', providerTitle);
+        providerLabel.dataset.provider = details.provider;
         modelList.append(providerLabel);
       }
       const button = node('button', `model-option${available ? '' : ' model-option-locked'}`);
       button.type = 'button';
       button.dataset.model = item.key;
       button.dataset.provider = details.provider;
+      button.dataset.source = item.source || 'clop';
       button.dataset.available = String(available);
       button.dataset.plans = Array.isArray(item.plans) ? item.plans.join(',') : '';
       button.setAttribute('data-limit-5h-percent', details.short.percent ?? '');
@@ -787,7 +805,9 @@
       button.addEventListener('click', () => {
         if (!available) return;
         closeMenus();
-        saveSetting({ model: item.key });
+        saveSetting(item.source === 'own'
+          ? { modelSource: 'own', ownModel: item.key, fast: false }
+          : { modelSource: 'clop', model: item.key });
       });
       modelList.append(button);
     });
@@ -1523,6 +1543,7 @@
       attachments: attachmentItems.map((attachment) => attachment.id),
       attachmentItems,
       model: selectedModel()?.key,
+      modelSource: selectedModel()?.source === 'own' ? 'own' : 'clop',
       effort: selectedEffort()?.key,
       fast: Boolean(state.settings.fast),
       ts: Date.now(),
@@ -1573,6 +1594,7 @@
         text: item.text,
         attachments: item.attachments,
         model: item.model,
+        modelSource: item.modelSource,
         effort: item.effort,
         fast: item.fast,
       });
@@ -2197,8 +2219,70 @@
   function switchSettingsTab(tab) {
     all('[data-settings-tab]').forEach((button) => button.classList.toggle('active', button.dataset.settingsTab === tab));
     all('[data-settings-pane]').forEach((pane) => pane.classList.toggle('active', pane.dataset.settingsPane === tab));
-    elements.settingsTitle.textContent = ({ general: 'Основные', model: 'Модель', privacy: 'Доступ и данные', cloud: 'Облачное хранилище', about: 'О приложении' })[tab] || 'Настройки';
+    elements.settingsTitle.textContent = ({ general: 'Основные', model: 'Модель', connections: 'Свои подключения', privacy: 'Доступ и данные', cloud: 'Облачное хранилище', about: 'О приложении' })[tab] || 'Настройки';
     if (tab === 'cloud') loadCloudStorage();
+    if (tab === 'connections') loadOwnProviders();
+  }
+
+  function renderOwnProviders() {
+    if (!elements.ownProvidersList) return;
+    elements.ownProvidersList.replaceChildren();
+    if (!state.ownProviders.length) {
+      elements.ownProvidersList.append(node('div', 'own-provider-loading', 'Нажмите «Проверить на ПК», чтобы найти установленные CLI.'));
+      return;
+    }
+    for (const provider of state.ownProviders) {
+      const card = node('article', `own-provider-card${provider.enabled ? ' connected' : ''}`);
+      const head = node('div', 'own-provider-head');
+      head.append(node('span', 'own-provider-mark', provider.mark || provider.title?.charAt(0) || '?'));
+      const copy = node('span', 'own-provider-copy');
+      copy.append(node('strong', '', provider.title), node('small', '', provider.installed ? (provider.version || 'CLI найден на ПК') : 'CLI не найден на ПК'));
+      head.append(copy, node('span', 'own-provider-status', provider.enabled ? 'Подключено' : (provider.installed ? 'Готово' : 'Не найдено')));
+      const models = node('div', 'own-provider-models');
+      for (const model of (provider.models || []).slice(0, 4)) models.append(node('span', '', model.title));
+      const actions = node('div', 'own-provider-actions');
+      const install = node('button', '', provider.installed ? 'Переустановить' : 'Установить');
+      install.type = 'button';
+      install.addEventListener('click', () => api.ownProviderInstall({ key: provider.key }).catch((error) => toast(errorText(error), 'error')));
+      const login = node('button', '', 'Войти');
+      login.type = 'button';
+      login.disabled = !provider.installed;
+      login.addEventListener('click', async () => {
+        try { await api.ownProviderLogin({ key: provider.key }); toast(`Открыто окно входа ${provider.title}.`, 'success'); }
+        catch (error) { toast(errorText(error), 'error'); }
+      });
+      const toggle = node('button', `primary-action${provider.enabled ? ' disconnect' : ''}`, provider.enabled ? 'Отключить' : 'Подключить');
+      toggle.type = 'button';
+      toggle.disabled = !provider.installed;
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          const result = await api.ownProviderToggle({ key: provider.key, enabled: !provider.enabled });
+          state.ownProviders = result.providers || state.ownProviders;
+          if (result.settings) state.settings = { ...state.settings, ...result.settings };
+          renderOwnProviders();
+          renderSelectors();
+          toast(provider.enabled ? `${provider.title} отключён.` : `${provider.title} подключён. Модели появились в отдельной вкладке «Свои».`, 'success');
+        } catch (error) { toast(errorText(error), 'error'); toggle.disabled = false; }
+      });
+      actions.append(install, login, toggle);
+      card.append(head, models, actions);
+      elements.ownProvidersList.append(card);
+    }
+  }
+
+  async function loadOwnProviders() {
+    if (!api?.ownProviders || !elements.ownProvidersList) return;
+    elements.refreshOwnProviders.disabled = true;
+    if (!state.ownProviders.length) elements.ownProvidersList.replaceChildren(node('div', 'own-provider-loading', 'Проверяем установленные CLI…'));
+    try {
+      const result = await api.ownProviders();
+      state.ownProviders = Array.isArray(result?.providers) ? result.providers : [];
+      renderOwnProviders();
+      renderSelectors();
+    } catch (error) {
+      elements.ownProvidersList.replaceChildren(node('div', 'own-provider-loading', errorText(error)));
+    } finally { elements.refreshOwnProviders.disabled = false; }
   }
 
   function cloudBytes(value) {
@@ -2515,6 +2599,11 @@
         renderSettings();
         renderFolder();
         break;
+      case 'own-providers':
+        state.ownProviders = Array.isArray(event.providers) ? event.providers : [];
+        renderOwnProviders();
+        renderSelectors();
+        break;
       case 'agreement':
         state.agreementRequired = event.accepted !== true;
         break;
@@ -2688,6 +2777,7 @@
     state.agreementVersion = snapshot.agreementVersion || '';
     state.busy = Boolean(snapshot.busy);
     state.remote = { ...(state.remote || {}), ...(snapshot.remote || {}) };
+    state.ownProviders = Array.isArray(snapshot.ownProviders) ? snapshot.ownProviders : [];
     state.busyChatId = snapshot.busy ? (snapshot.currentChat?.id || '') : '';
     renderAccount();
     renderSettings();
@@ -2698,6 +2788,7 @@
     renderActivity();
     renderAttachments();
     renderRemote();
+    renderOwnProviders();
     restoreDraft();
     setBusy(state.busy, state.busyChatId, snapshot.busyStartedAt);
     setSidebar(!compactSidebar.matches);
@@ -2787,7 +2878,12 @@
     elements.remoteRequestsSetting.addEventListener('change', () => saveSetting({ remoteRequests: elements.remoteRequestsSetting.checked }));
     elements.enterSendsSetting.addEventListener('change', () => saveSetting({ enterSends: elements.enterSendsSetting.checked }));
     elements.approvalModeSetting.addEventListener('change', () => saveSetting({ approvalMode: elements.approvalModeSetting.value }));
-    elements.modelSelect.addEventListener('change', () => saveSetting({ model: elements.modelSelect.value }));
+    elements.modelSelect.addEventListener('change', () => {
+      const item = availableModels().find((model) => model.key === elements.modelSelect.value);
+      saveSetting(item?.source === 'own'
+        ? { modelSource: 'own', ownModel: item.key, fast: false }
+        : { modelSource: 'clop', model: elements.modelSelect.value });
+    });
     elements.effortSelect.addEventListener('change', () => saveSetting({ effort: elements.effortSelect.value }));
     elements.fastSetting.addEventListener('change', () => saveSetting({ fast: elements.fastSetting.checked }));
     elements.shellTimeoutSetting.addEventListener('change', () => saveSetting({ shellTimeout: Number(elements.shellTimeoutSetting.value) }));
@@ -2858,6 +2954,7 @@
 
     elements.settingsButton.addEventListener('click', () => openSettings('general'));
     all('[data-settings-tab]').forEach((button) => button.addEventListener('click', () => switchSettingsTab(button.dataset.settingsTab)));
+    elements.refreshOwnProviders.addEventListener('click', loadOwnProviders);
     elements.cloudUploadButton.addEventListener('click', async () => {
       try { elements.cloudStorageState.textContent = 'Загрузка…'; const result = await api.cloudUpload(); if (!result?.canceled) { renderCloudStorage(result); toast(result?.deduplicated ? 'Файл добавлен без повторного расхода места.' : 'Файл сохранён в облаке.'); } }
       catch (error) { toast(errorText(error), 'error'); }
@@ -3058,6 +3155,7 @@
     try {
       hydrate(await api.state());
       updateConnection();
+      loadOwnProviders().catch(() => undefined);
       window.setInterval(() => refreshAccount(false), 60_000);
       window.setInterval(renderRemote, 1_000);
       window.addEventListener('focus', () => refreshAccount(false));
