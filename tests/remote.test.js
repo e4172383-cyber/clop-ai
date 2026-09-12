@@ -70,3 +70,35 @@ test('Remote expiry removes queued commands and the last screen snapshot', () =>
     Date.now = realNow;
   }
 });
+
+test('Remote rejects a prompt completion without desktop action evidence', () => {
+  const userId = `evidence-${Date.now()}`;
+  const deviceId = 'desktop-evidence';
+  remote.heartbeat({ userId, deviceId, name: 'Evidence PC', version: '2.5.6', enabled: true });
+  const request = remote.requestAccess(userId, deviceId).request;
+  const session = remote.decideAccess(userId, deviceId, request.id, true).session;
+  const command = remote.queueCommand(userId, deviceId, session.id, 'prompt', { text: 'Открой браузер' });
+
+  remote.finishCommand(userId, deviceId, session.id, { id: command.id, ok: true, text: 'Готово.' });
+  const result = remote.remoteStatus(userId, deviceId).results[0];
+  assert.equal(result.ok, false);
+  assert.equal(result.text, '');
+  assert.match(result.error, /не подтвердило реальное действие/i);
+});
+
+test('Remote accepts a prompt completion with verified desktop evidence', () => {
+  const userId = `verified-${Date.now()}`;
+  const deviceId = 'desktop-verified';
+  remote.heartbeat({ userId, deviceId, name: 'Verified PC', version: '2.5.6', enabled: true });
+  const request = remote.requestAccess(userId, deviceId).request;
+  const session = remote.decideAccess(userId, deviceId, request.id, true).session;
+  const command = remote.queueCommand(userId, deviceId, session.id, 'prompt', { text: 'Открой браузер' });
+
+  remote.finishCommand(userId, deviceId, session.id, {
+    id: command.id, ok: true, text: 'Браузер открыт и проверен.', actionCount: 3, verified: true,
+  });
+  const result = remote.remoteStatus(userId, deviceId).results[0];
+  assert.equal(result.ok, true);
+  assert.equal(result.actionCount, 3);
+  assert.equal(result.verified, true);
+});

@@ -64,6 +64,8 @@ function publicResult(result) {
     y: result.y,
     finishedAt: result.finishedAt,
     hasScreen: Boolean(result.screen),
+    actionCount: result.actionCount || 0,
+    verified: result.verified === true,
   };
 }
 
@@ -187,12 +189,17 @@ export function finishCommand(userId, deviceId, sessionId, result = {}) {
   command.finishedAt = now();
   const screen = typeof result.screen === 'string' && /^data:image\/(?:png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(result.screen) && result.screen.length <= 8_000_000
     ? result.screen : null;
+  const actionCount = Number.isInteger(result.actionCount) && result.actionCount >= 0 && result.actionCount <= 200 ? result.actionCount : 0;
+  const promptEvidenceMissing = command.type === 'prompt' && result.ok !== false && (actionCount < 1 || result.verified !== true);
   const entry = {
-    id: command.id, type: command.type, ok: result.ok !== false,
-    error: cleanText(result.error, 1_000), text: cleanText(result.text, 20_000),
+    id: command.id, type: command.type, ok: result.ok !== false && !promptEvidenceMissing,
+    error: promptEvidenceMissing
+      ? 'Приложение не подтвердило реальное действие на компьютере. Задача не отмечена выполненной.'
+      : cleanText(result.error, 1_000),
+    text: promptEvidenceMissing ? '' : cleanText(result.text, 20_000),
     x: Number.isFinite(result.x) ? Math.round(result.x) : undefined,
     y: Number.isFinite(result.y) ? Math.round(result.y) : undefined,
-    screen, finishedAt: now(),
+    screen, actionCount, verified: result.verified === true, finishedAt: now(),
   };
   if (screen) device.latestScreen = { commandId: command.id, data: screen, at: entry.finishedAt };
   device.results.push(entry);

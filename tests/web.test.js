@@ -314,15 +314,15 @@ test('serves the public desktop release page and resumable installers without da
   assert.match(html, /iPhone/);
   assert.match(html, /Beta 1\.0 · PWA/);
   assert.match(html, /href="\/chat#iphone"/);
-  assert.match(html, /Clop-Code-Setup-2\.5\.6\.exe/);
-  assert.match(html, /Clop-Code-2\.5\.6-linux-x64\.tar\.xz/);
+  assert.match(html, /Clop-Code-Setup-2\.5\.7\.exe/);
+  assert.match(html, /Clop-Code-2\.5\.7-linux-x64\.tar\.xz/);
   assert.match(html, /Clop-VPN-Setup-1\.0\.0-beta\.4\.exe/);
   assert.match(html, /Clop-VPN-1\.0\.0-beta\.4-linux-x64\.tar\.xz/);
   assert.match(html, /Clop-VPN-Mobile-1\.0\.0-beta\.1\.apk/);
   assert.match(html, /1250 ГБ в неделю/);
   assert.match(html, /до 500 Мбит\/с/);
   assert.match(html, /Clop-AI-Mobile-1\.0\.7\.apk/);
-  assert.match(html, /href="\/downloads\/Clop-Code-Setup-2\.5\.6\.exe"/);
+  assert.match(html, /href="\/downloads\/Clop-Code-Setup-2\.5\.7\.exe"/);
   assert.doesNotMatch(html, /release-assets\.githubusercontent\.com/);
   assert.doesNotMatch(html, /\d[\d ]{3,}\s*токен/iu);
 
@@ -333,9 +333,9 @@ test('serves the public desktop release page and resumable installers without da
   assert.match(releaseData.vpn.windowsUrl, /Clop-VPN-Setup-1\.0\.0-beta\.4\.exe$/);
   assert.equal(releaseData.vpn.androidVersion, '1.0.0-beta.1');
   assert.match(releaseData.vpn.androidUrl, /Clop-VPN-Mobile-1\.0\.0-beta\.1\.apk$/);
-  assert.equal(releaseData.desktop.version, '2.5.6');
-  assert.match(releaseData.desktop.windowsUrl, /\/downloads\/Clop-Code-Setup-2\.5\.6\.exe$/);
-  assert.match(releaseData.desktop.linuxUrl, /\/downloads\/Clop-Code-2\.5\.6-linux-x64\.tar\.xz$/);
+  assert.equal(releaseData.desktop.version, '2.5.7');
+  assert.match(releaseData.desktop.windowsUrl, /\/downloads\/Clop-Code-Setup-2\.5\.7\.exe$/);
+  assert.match(releaseData.desktop.linuxUrl, /\/downloads\/Clop-Code-2\.5\.7-linux-x64\.tar\.xz$/);
 
   const partial = await fetch(baseUrl + '/downloads/Clop-Code-Setup-2.4.0.exe', {
     headers: { range: 'bytes=0-31' },
@@ -671,6 +671,29 @@ test('/desk/chat does not charge a desktop task when the model performs no actio
   assert.equal(body.tokens.total, 0);
   assert.equal(user.usage.length, 0);
   assert.equal(user.chats[0].messages.some((message) => message.content === 'Уточните, какой файл нужно изменить.'), false);
+});
+
+test('/desk/chat does not charge a Remote turn that returns text instead of a screen action', async () => {
+  const deviceId = 'desktop-remote-no-action';
+  desktop.addDevice(user, deviceId, 'Clop Remote no-action test');
+  const token = desktop.signToken(user.id, deviceId);
+  modelResults.push(okResult({
+    text: 'Задача выполнена.',
+    tokens: { input: 1200, output: 30, total: 1230, billable: 1230, promptTokens: 1200, cacheWrite: 0, cacheRead: 0 },
+  }));
+  const prompt = '<clop_remote_protocol version="1.1-beta">Start with screenshot.</clop_remote_protocol>\nUSER TASK: "Открой браузер"';
+
+  const response = await fetch(baseUrl + '/desk/chat', {
+    method: 'POST',
+    headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+    body: JSON.stringify({ text: prompt, model: 'gpt-luna' }),
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.ok, true);
+  assert.equal(body.quotaCharged, false);
+  assert.equal(body.tokens.total, 0);
+  assert.equal(user.usage.length, 0);
 });
 
 test('admin can refund a bounded window of failed desktop usage', async () => {

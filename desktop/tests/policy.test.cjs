@@ -12,6 +12,8 @@ const {
   isUnnecessaryClarification,
   looksLikeCodeDelivery,
   needsActionRecovery,
+  remoteTaskNeedsInteraction,
+  remoteCompletionProblem,
   codeFallbackAction,
   resolveTarget,
   decision,
@@ -67,6 +69,16 @@ test('needsActionRecovery catches code returned instead of creating the requeste
   assert.equal(requiresComputerAction('Видишь ли ты мой ПК экран?'), true);
   assert.equal(requiresComputerAction('Посмотри, что сейчас открыто на экране'), true);
   assert.equal(looksLikeCodeDelivery('Готово. Путь: C:\\site\\index.html'), false);
+});
+
+test('Remote cannot report completion before real actions and visual verification', () => {
+  assert.equal(remoteTaskNeedsInteraction('Открой браузер и перейди на мой сайт'), true);
+  assert.equal(remoteTaskNeedsInteraction('Посмотри, что сейчас видно на экране'), false);
+  assert.match(remoteCompletionProblem('Открой браузер', {}), /screenshot/i);
+  assert.match(remoteCompletionProblem('Открой браузер', { screenshots: 1, interactions: 0 }), /мышью|клавиатурой/i);
+  assert.match(remoteCompletionProblem('Открой браузер', { screenshots: 1, interactions: 1, verifiedAfterInteraction: false }), /проверь/i);
+  assert.equal(remoteCompletionProblem('Открой браузер', { screenshots: 2, interactions: 1, verifiedAfterInteraction: true }), '');
+  assert.equal(remoteCompletionProblem('Что видно на экране?', { screenshots: 1, interactions: 0 }), '');
 });
 
 test('a natural-language project request requires real desktop actions', () => {

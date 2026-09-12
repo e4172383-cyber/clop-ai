@@ -299,7 +299,7 @@ export const freeGoActive = () => Date.now() < FREE_GO_UNTIL;
 export const PUBLIC_URL = (process.env.PUBLIC_URL || 'https://clop.195-201-169-74.sslip.io').replace(/\/+$/, '');
 export const DOWNLOAD_BASE_URL = (
   process.env.DOWNLOAD_BASE_URL
-  || 'https://github.com/e4172383-cyber/clop-ai/releases/download/v2.5.6'
+  || 'https://github.com/e4172383-cyber/clop-ai/releases/download/v2.5.7'
 ).replace(/\/+$/, '');
 
 export const MODEL_PROMO = {

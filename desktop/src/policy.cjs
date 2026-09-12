@@ -65,6 +65,23 @@ function looksLikeCodeDelivery(responseText) {
 function needsActionRecovery(userText, responseText) {
   return requiresComputerAction(userText) && looksLikeCodeDelivery(responseText);
 }
+
+function remoteTaskNeedsInteraction(userText) {
+  const request = String(userText || '').trim();
+  const interaction = /(?:нажм(?:и|ите)|кликн(?:и|ите)|выбер(?:и|ите)|введ(?:и|ите)|напиш(?:и|ите)|откро(?:й|йте)|закро(?:й|йте)|запуст(?:и|ите)|останов(?:и|ите)|перейд(?:и|ите)|скача(?:й|йте)|установ(?:и|ите)|удал(?:и|ите)|перетащ(?:и|ите)|прокрут(?:и|ите)|включ(?:и|ите)|выключ(?:и|ите)|click|press|choose|select|type|enter|open|close|launch|start|stop|download|install|delete|scroll|enable|disable)/iu.test(request);
+  const observationOnly = /(?:что\s+(?:сейчас\s+)?(?:видно|открыто)|вид(?:ишь|но)\s+ли|посмотр(?:и|ите)|проверь(?:те)?|покаж(?:и|ите)|опиш(?:и|ите)|прочита(?:й|йте)|screenshot|screen|what(?:'s|\s+is)\s+on)/iu.test(request)
+    && !interaction;
+  return interaction || !observationOnly;
+}
+
+function remoteCompletionProblem(userText, evidence = {}) {
+  const screenshots = Number.isInteger(evidence.screenshots) ? evidence.screenshots : 0;
+  const interactions = Number.isInteger(evidence.interactions) ? evidence.interactions : 0;
+  if (screenshots < 1) return 'Сначала запроси screenshot и изучи экран.';
+  if (remoteTaskNeedsInteraction(userText) && interactions < 1) return 'Ты ещё не выполнил ни одного действия мышью или клавиатурой.';
+  if (interactions > 0 && evidence.verifiedAfterInteraction !== true) return 'После последнего действия запроси screenshot и проверь фактический результат.';
+  return '';
+}
 function codeFallbackAction(userText, responseText) {
   if (!needsActionRecovery(userText, responseText)) return null;
   const response = String(responseText || '');
@@ -124,4 +141,4 @@ function approvalDecision(mode, tool, target = {}, approvalMode = 'smart', optio
   if (options.alwaysAsk || (target.outside && mode === 'full') || options.targetExists) verdict = 'ask';
   return verdict;
 }
-module.exports = { defaults, cleanSettings, parseAction, requiresComputerAction, isUnnecessaryClarification, looksLikeCodeDelivery, needsActionRecovery, codeFallbackAction, resolveTarget, decision, approvalDecision, sensitive };
+module.exports = { defaults, cleanSettings, parseAction, requiresComputerAction, isUnnecessaryClarification, looksLikeCodeDelivery, needsActionRecovery, remoteTaskNeedsInteraction, remoteCompletionProblem, codeFallbackAction, resolveTarget, decision, approvalDecision, sensitive };

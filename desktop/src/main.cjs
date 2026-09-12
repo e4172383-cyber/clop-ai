@@ -47,6 +47,7 @@ const {
   isUnnecessaryClarification,
   looksLikeCodeDelivery,
   needsActionRecovery,
+  remoteCompletionProblem,
   codeFallbackAction,
   resolveTarget,
   approvalDecision,
@@ -2200,6 +2201,10 @@ async function runRemotePrompt(text, commandId) {
   let nextText = remoteProtocol(text);
   let nextImages = [];
   let finalText = '';
+  let screenCaptures = 0;
+  let interactions = 0;
+  let verifiedAfterInteraction = false;
+  let recoveryAttempts = 0;
   try {
     for (let step = 0; step < 60; step += 1) {
       if (!remoteSession || remoteSession.expiresAt <= Date.now()) throw new Error('Сеанс Clop Remote завершён.');
@@ -2211,11 +2216,41 @@ async function runRemotePrompt(text, commandId) {
       if (response.chatId) chat.remoteChatId = response.chatId;
       const action = parseAction(response.text);
       if (!action) {
+        const problem = remoteCompletionProblem(text, {
+          screenshots: screenCaptures,
+          interactions,
+          verifiedAfterInteraction,
+        });
+        if (problem) {
+          logQuality('remote-finished-without-evidence', {
+            chatId: chat.id, request: text, response: response.text,
+            screenshots: screenCaptures, interactions, verifiedAfterInteraction,
+          });
+          if (recoveryAttempts < 4) {
+            recoveryAttempts += 1;
+            nextText = `<clop_remote_protocol_reminder>Задача ещё не выполнена: ${problem} Не пиши финальный ответ и не заявляй о завершении. Верни ровно один clop_action для следующего реального шага.</clop_remote_protocol_reminder>`;
+            nextImages = [];
+            emit('action', {
+              status: 'running', tool: 'thinking', chatId: chat.id, remote: true,
+              detail: 'Модель попыталась завершить задачу без подтверждения — Clop продолжает автоматически',
+            });
+            continue;
+          }
+          throw new Error('ИИ не подтвердил выполнение реальными действиями на компьютере. Задача не отмечена выполненной, пустые ответы не списаны.');
+        }
         finalText = String(response.text || 'Готово.').trim().slice(0, 20_000);
         break;
       }
       if (!['screenshot', 'click', 'type', 'key'].includes(action.tool)) throw new Error('ИИ запросил действие вне разрешений Remote.');
       const outcome = await executeRemoteScreenAction(action, chat.id);
+      if (outcome.result?.ok === false) throw new Error('Действие Remote не выполнено на компьютере.');
+      if (action.tool === 'screenshot') {
+        screenCaptures += 1;
+        if (interactions > 0) verifiedAfterInteraction = true;
+      } else {
+        interactions += 1;
+        verifiedAfterInteraction = false;
+      }
       nextText = modelResult(outcome.result);
       nextImages = outcome.images || [];
     }
@@ -2226,7 +2261,13 @@ async function runRemotePrompt(text, commandId) {
     chat.updatedAt = Date.now();
     saveHistory();
     emit('message', { chatId: chat.id, message: assistant, chat });
-    return finalText;
+    return {
+      text: finalText,
+      actionCount: screenCaptures + interactions,
+      screenCaptures,
+      interactions,
+      verified: screenCaptures > 0 && (interactions === 0 || verifiedAfterInteraction),
+    };
   } finally {
     if (currentRun === run) currentRun = null;
     emit('busy', { value: false, chatId: chat.id, remote: true });
@@ -2253,8 +2294,8 @@ async function processRemoteCommand(command) {
     }
     let result;
     if (command.type === 'prompt') {
-      const text = await runRemotePrompt(command.payload?.text, command.id);
-      result = { ok: true, text };
+      const completed = await runRemotePrompt(command.payload?.text, command.id);
+      result = { ok: true, ...completed };
     } else {
       const action = { tool: command.type, ...(command.payload || {}) };
       const outcome = await executeRemoteScreenAction(action, `remote-${remoteSession.id}`);
