@@ -21,7 +21,7 @@ Releases.
 WEB_HOST=0.0.0.0
 PUBLIC_URL=https://<домен-сервиса-koyeb>
 SELF_URL=https://<домен-сервиса-koyeb>
-DOWNLOAD_BASE_URL=https://github.com/e4172383-cyber/clop-ai/releases/download/v2.5.7
+DOWNLOAD_BASE_URL=https://github.com/e4172383-cyber/clop-ai/releases/download/v2.5.8
 CLOUD_API_URL=https://clop-cloud-api-2.onrender.com
 ```
 

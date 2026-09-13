@@ -1,0 +1,290 @@
+/* Clop visual system: warm mineral surfaces, one terracotta accent. */
+body.taste-chat,
+body.taste-home,
+body.taste-download {
+  font-family: "Geist", "Segoe UI Variable", "Segoe UI", sans-serif;
+  font-size: 14px;
+  letter-spacing: -.01em;
+}
+
+body.taste-chat {
+  --bg: #151412;
+  --bg-deep: #121110;
+  --ink: #f4f0e9;
+  --text: #f4f0e9;
+  --muted: #b4aba1;
+  --muted-2: #a99e92;
+  --accent: #d7835e;
+  --accent-deep: #d7835e;
+  --accent2: #d7835e;
+  --bad: #e18a7b;
+  --ok: #8bb99d;
+  --glass: #24211e;
+  --glass-strong: #2b2723;
+  --glass-line: rgba(244, 231, 214, .12);
+  --glass-glow: inset 0 1px 0 rgba(255, 255, 255, .055);
+  --paper: #24211e;
+  --paper-solid: #292521;
+  --paper-soft: #292521;
+  --panel: #24211e;
+  --panel2: #292521;
+  --surface: #24211e;
+  --surface-2: #302c27;
+  --line: rgba(244,231,214,.12);
+  --line-strong: rgba(244,231,214,.2);
+  --shadow-sm: none;
+  --shadow-lg: 0 28px 70px rgba(0,0,0,.25);
+  --blur: none;
+  background: var(--bg);
+}
+body.taste-chat .bg {
+  background: #151412;
+}
+body.taste-chat .blob { display: none; }
+body.taste-chat .grain { opacity: .02; }
+body.taste-chat #app { padding: 0; gap: 0; }
+body.taste-chat .sidebar {
+  width: 274px;
+  border-radius: 0;
+  border: 0;
+  border-right: 1px solid var(--glass-line);
+  background: #1b1917;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+body.taste-chat .sidebar-head { padding: 21px 19px 17px; }
+body.taste-chat .sidebar-brand b { font-size: 18px; letter-spacing: -.045em; }
+body.taste-chat .sidebar-brand small { color: var(--muted); font-size: 11px; }
+body.taste-chat .brand-mark {
+  background: #d7835e;
+  color: #211510;
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.3);
+  font-family: inherit;
+}
+body.taste-chat .brand-lockup b { font-family: inherit; }
+body.taste-chat .login-story { background: #292521; }
+body.taste-chat .login-story-copy h2 { font: 650 clamp(29px,3vw,42px)/1.12 "Geist","Segoe UI Variable","Segoe UI",sans-serif; letter-spacing: -.055em; }
+body.taste-chat .login-content {
+  --ink: #2a2520;
+  --text: #2a2520;
+  --muted: #6f665d;
+  --muted-2: #847a70;
+  color: var(--ink);
+  background: #fffdf9;
+}
+body.taste-chat .login-content h1 { font: 650 clamp(33px,4vw,48px)/1.05 "Geist","Segoe UI Variable","Segoe UI",sans-serif; letter-spacing: -.055em; }
+body.taste-chat .login-points span, body.taste-chat .login-privacy { color: #6f665d; }
+body.taste-chat .sidebar-tools { padding: 0 13px 14px; }
+body.taste-chat #newChatBtn {
+  min-height: 42px;
+  width: 100%;
+  justify-content: flex-start;
+  background: #d7835e;
+  color: #211510;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: none;
+}
+body.taste-chat #newChatBtn:hover { background: #e09a79; box-shadow: none; transform: translateY(-1px); }
+body.taste-chat .chat-search { min-height: 40px; border-radius: 10px; background: #24211e; }
+body.taste-chat .chat-search input { color: var(--text); font-size: 13px; }
+body.taste-chat .sidebar-section-title { padding: 4px 20px 9px; color: var(--muted); font-size: 11px; }
+body.taste-chat .chat-list { padding: 0 12px 12px; min-height: 72px; }
+body.taste-chat .chat-item { min-height: 39px; margin-bottom: 3px; border-radius: 9px; }
+body.taste-chat .chat-item:hover { transform: none; }
+body.taste-chat .chat-item.active { background: #322a24; border-color: rgba(215,131,94,.3); box-shadow: none; }
+body.taste-chat .chat-item.active::before { width: 2px; background: var(--accent); box-shadow: none; }
+body.taste-chat .sidebar-foot { max-height: 54%; overflow-y: auto; padding: 9px 12px 14px; }
+body.taste-chat .sidebar-foot { background: #1b1917; border-top-color: var(--line); }
+body.taste-chat .side-nav { gap: 2px; }
+body.taste-chat .side-nav button { min-height: 36px; padding: 8px 10px; font-size: 12.5px; }
+body.taste-chat .side-nav button:hover { transform: none; background: #2a2622; }
+body.taste-chat .side-user { font-size: 12px; }
+body.taste-chat .main {
+  border: 0;
+  border-radius: 0;
+  background: #201e1b;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+body.taste-chat .workspace-header { min-height: 76px; padding: 14px 26px; background: #211f1c; }
+body.taste-chat .workspace-header h1 { font-family: inherit; color: var(--ink); }
+body.taste-chat .title-eyebrow { color: var(--muted); font-size: 11px; }
+body.taste-chat #chatTitle { font-size: 20px; letter-spacing: -.045em; }
+body.taste-chat .header-controls { gap: 9px; }
+body.taste-chat .model-control,
+body.taste-chat .effort-control { font-size: 11px; color: var(--muted); background: #2d2925; border-color: var(--line); }
+body.taste-chat .model-control select,
+body.taste-chat .api-body select,
+body.taste-chat select { min-height: 38px; max-width: 200px; background: #2d2925; border-color: var(--glass-line); color: var(--text); box-shadow: none; }
+body.taste-chat .model-usage,
+body.taste-chat #fastToggle { background: #2d2925; border-color: var(--line); color: var(--text); }
+body.taste-chat .connection-strip { background: #282420; border-bottom-color: var(--line); color: var(--muted); font-size: 11px; }
+body.taste-chat select option { background: #2d2925; }
+body.taste-chat #messages { max-width: 940px; padding: 31px 38px 42px; gap: 18px; }
+body.taste-chat .msg { font-size: 15px; line-height: 1.68; }
+body.taste-chat .msg.user { background: #ad684d; color: #fffaf5; box-shadow: none; }
+body.taste-chat .msg.assistant {
+  max-width: 88%;
+  background: transparent;
+  border: 0;
+  border-left: 2px solid rgba(215,131,94,.6);
+  border-radius: 0;
+  box-shadow: none;
+  padding-left: 19px;
+}
+body.taste-chat .msg.error { background: rgba(225,138,123,.08); }
+body.taste-chat .composer { padding: 14px 25px 22px; background: #211f1c; }
+body.taste-chat .composer-inner { max-width: 940px; background: #2c2824; border: 1px solid rgba(244,231,214,.17); border-radius: 18px; box-shadow: inset 0 1px 0 rgba(255,255,255,.05); }
+body.taste-chat .composer-inner:focus-within { border-color: rgba(215,131,94,.55); box-shadow: 0 0 0 3px rgba(215,131,94,.12); }
+body.taste-chat textarea { font-size: 15px; background: transparent; border-color: transparent; box-shadow: none; }
+body.taste-chat textarea:focus { border-color: transparent; box-shadow: none; }
+body.taste-chat #send, body.taste-chat .buy-btn, body.taste-chat #pgSend, body.taste-chat .tg-btn {
+  background: #d7835e;
+  color: #211510;
+  box-shadow: none;
+  font-weight: 720;
+}
+body.taste-chat #send:hover:not(:disabled), body.taste-chat .tg-btn:hover { background: #e09a79; box-shadow: none; transform: translateY(-1px); }
+body.taste-chat .api-modal, body.taste-chat .login-card { background: #292521; border: 1px solid rgba(244,231,214,.18); box-shadow: 0 30px 90px rgba(0,0,0,.3); }
+body.taste-chat .login-card h1, body.taste-chat .api-head b { font-family: inherit; font-weight: 650; }
+body.taste-chat .overlay { background: rgba(13,12,11,.78); }
+body.taste-chat .avatar { background: #8d5841; box-shadow: none; }
+body.taste-chat .lim-fill, body.taste-chat .storage-meter i { background: var(--accent); }
+body.taste-chat .stat, body.taste-chat .plan-card { box-shadow: none; }
+body.taste-chat button:active:not(:disabled) { transform: scale(.98); }
+
+body.taste-home,
+body.taste-download {
+  --bg: #f4f0ea;
+  --bg-deep: #ebe5dc;
+  --paper: rgba(255,253,249,.9);
+  --paper-solid: #fffdf9;
+  --paper-soft: rgba(255,253,249,.72);
+  --panel: var(--paper);
+  --panel2: var(--paper-solid);
+  --ink: #2a2520;
+  --text: #2a2520;
+  --soft: #514942;
+  --muted: #6f675f;
+  --muted-2: #847b72;
+  --dim: #847b72;
+  --accent: #c46f4d;
+  --accent-deep: #9e5136;
+  --accent-soft: rgba(196,111,77,.12);
+  --accent-line: rgba(196,111,77,.3);
+  --orange: #c46f4d;
+  --peach: #d58b6c;
+  --blue: #a76449;
+  --accent2: #a76449;
+  --violet: #a76449;
+  --green: #587c65;
+  --ok: #587c65;
+  --line: rgba(76,61,49,.14);
+  --line2: rgba(76,61,49,.23);
+  --line-strong: rgba(76,61,49,.23);
+  --shadow: 0 18px 42px rgba(70,48,32,.08);
+  --shadow-sm: 0 9px 28px rgba(70,48,32,.05);
+  --shadow-lg: 0 25px 65px rgba(70,48,32,.13);
+  color: var(--ink);
+  color-scheme: light;
+  background: #f4f0ea;
+}
+body.taste-home { background: #f4f0ea; }
+body.taste-home::before { opacity: .018; }
+body.taste-home .page-shell { width: min(100%, 1460px); }
+body.taste-home .app-header { min-height: 69px; border-radius: 18px; padding: 10px 18px; margin-bottom: 18px; }
+body.taste-home .glass-panel,
+body.taste-home .panel,
+body.taste-home .card { border-color: var(--line); background: var(--paper); box-shadow: var(--shadow-sm); backdrop-filter: blur(18px); }
+body.taste-home .brand-mark { font-family: inherit; background: #c46f4d; box-shadow: none; border-radius: 12px; }
+body.taste-home .panel,
+body.taste-home .card { border-radius: 18px; }
+body.taste-home h1,
+body.taste-home h2,
+body.taste-home h3 { font-family: inherit; letter-spacing: -.035em; }
+body.taste-home button:active:not(:disabled), body.taste-home a:active { transform: scale(.98); }
+
+body.taste-download::before { background: #f4f0ea; }
+body.taste-download::after { opacity: .035; mask-image: none; }
+body.taste-download .page { width: min(1400px, calc(100% - 42px)); }
+body.taste-download .glass { background: rgba(255,253,249,.88); border-color: var(--line); box-shadow: var(--shadow-sm), inset 0 1px rgba(255,255,255,.7); backdrop-filter: blur(18px); }
+body.taste-download .topbar-wrap { padding-top: 12px; }
+body.taste-download .topbar { min-height: 68px; border-radius: 16px; }
+body.taste-download .logo { font-family: inherit; background: #c46f4d; color: #fffaf5; box-shadow: none; border-radius: 11px; }
+body.taste-download .menu a { color: var(--muted); font-size: 12.5px; }
+body.taste-download .menu a:hover, body.taste-download .menu a.active { background: var(--accent-soft); color: var(--ink); }
+body.taste-download .live-pill { background: #f7f2eb; color: var(--ink); }
+body.taste-download .hero {
+  min-height: 535px;
+  align-items: flex-start;
+  border-radius: 24px;
+  padding: clamp(38px,7vw,86px);
+  background: #2a2622;
+  color: #fffaf5;
+  box-shadow: none;
+}
+body.taste-download .hero::before { right: -50px; top: 30px; width: 500px; height: 500px; border-color: rgba(215,139,108,.3); box-shadow: inset 0 0 0 42px rgba(215,139,108,.035); }
+body.taste-download .hero::after { right: 12%; bottom: 5%; font: 650 330px/1 "Geist", "Segoe UI Variable", sans-serif; color: rgba(215,139,108,.13); transform: none; }
+body.taste-download .hero h1 { max-width: 650px; font-family: inherit; font-size: clamp(44px,5.8vw,80px); line-height: 1.03; letter-spacing: -.065em; }
+body.taste-download .hero > p:not(.eyebrow) { max-width: 590px; color: #d6cec5; font-size: 16px; line-height: 1.65; }
+body.taste-download .hero .eyebrow { color: #e6a282; }
+body.taste-download .hero-actions .primary,
+body.taste-download .download-button { background: #c46f4d; color: #fffaf5; border-color: #c46f4d; box-shadow: none; }
+body.taste-download .hero-actions .secondary { color: #f7f1e9; border-color: rgba(255,255,255,.25); background: rgba(255,255,255,.04); }
+body.taste-download .hero-stats { background: rgba(255,255,255,.055); border-color: rgba(255,255,255,.16); }
+body.taste-download .hero-stats span { color: #c9bfb4; }
+body.taste-download .hero-stats strong { color: #fffaf5; }
+body.taste-download .section-head h2 { color: var(--ink); font-family: inherit; letter-spacing: -.045em; }
+body.taste-download .section-head p { color: var(--muted); }
+body.taste-download .download-grid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; }
+body.taste-download .download-card { min-height: 230px; border-radius: 18px; box-shadow: none; }
+body.taste-download .download-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-sm); }
+body.taste-download .platform h3,
+body.taste-download .info-card h3,
+body.taste-download .data-card h3 { color: var(--ink); font-family: inherit; }
+body.taste-download .meta, body.taste-download .model-card p { color: var(--muted); }
+body.taste-download .provider-grid { grid-template-columns: 1.15fr .85fr; }
+body.taste-download .provider-panel,
+body.taste-download .info-card,
+body.taste-download .data-card,
+body.taste-download .speed-shell { border-radius: 18px; box-shadow: none; }
+body.taste-download .provider-mark { font-family: inherit; color: var(--accent); background: var(--accent-soft); }
+body.taste-download .model-card,
+body.taste-download .speed-value,
+body.taste-download .chart-card { background: #fbf8f3; border-color: var(--line); }
+body.taste-download .speed-number { color: var(--ink); }
+body.taste-download .latency-chart { background: repeating-linear-gradient(to top,transparent 0,transparent 36px,rgba(76,61,49,.05) 37px); }
+body.taste-download button:active:not(:disabled), body.taste-download a:active { transform: scale(.98); }
+
+@media (max-width: 1380px) {
+  body.taste-chat .workspace-header { align-items: flex-start; flex-direction: column; gap: 9px; min-height: 0; }
+  body.taste-chat .header-controls { width: 100%; justify-content: flex-start; flex-wrap: wrap; overflow: visible; padding-left: 0; }
+  body.taste-chat .model-control { flex: 0 1 265px; min-width: 210px; }
+  body.taste-chat .model-control select { width: 100%; }
+}
+
+@media (max-width: 980px) {
+  body.taste-download .provider-grid { grid-template-columns: 1fr; }
+  body.taste-download .menu { background: #fffdf9; border-color: var(--line); box-shadow: var(--shadow); }
+  body.taste-download .mobile-menu { background: #fffdf9; color: var(--ink); }
+}
+@media (max-width: 760px) {
+  body.taste-chat #app { padding: 0; }
+  body.taste-chat .sidebar { width: min(85vw,310px); border-radius: 0; }
+  body.taste-chat .main { border-radius: 0; }
+  body.taste-chat .workspace-header { min-height: 65px; padding: 11px 15px; }
+  body.taste-chat #messages { padding: 22px 16px 30px; }
+  body.taste-chat .msg { max-width: 92%; }
+  body.taste-chat .composer { padding: 10px 11px max(12px,env(safe-area-inset-bottom)); }
+  body.taste-download .page { width: min(100% - 24px,1400px); }
+  body.taste-download .hero { min-height: 500px; padding: 38px 26px; }
+  body.taste-download .hero::before { width: 300px; height: 300px; right: -160px; }
+  body.taste-download .hero::after { display: none; }
+  body.taste-download .download-grid { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.taste-chat *, body.taste-home *, body.taste-download * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}

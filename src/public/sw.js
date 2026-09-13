@@ -1,10 +1,10 @@
 // Минимальный service worker: нужен, чтобы приложение считалось
 // устанавливаемым и показывало понятный экран без сети.
 // Ответы ИИ и данные аккаунта НЕ кэшируем — они всегда идут с сервера.
-const SHELL = 'clop-shell-v4';
+const SHELL = 'clop-shell-v5';
 const WORKSPACE_CSS = '/workspace.css?v=20260906-6';
-const ASSETS = ['/chat', WORKSPACE_CSS, '/icon-180.png', '/icon-192.png', '/icon-512.png', '/manifest.webmanifest'];
-const CACHEABLE_PATHS = new Set(['/chat', '/workspace.css', '/icon-180.png', '/icon-192.png', '/icon-512.png', '/manifest.webmanifest']);
+const ASSETS = ['/chat', WORKSPACE_CSS, '/taste.css?v=1', '/icon-180.png', '/icon-192.png', '/icon-512.png', '/manifest.webmanifest'];
+const CACHEABLE_PATHS = new Set(['/chat', '/workspace.css', '/taste.css', '/icon-180.png', '/icon-192.png', '/icon-512.png', '/manifest.webmanifest']);
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(SHELL).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
@@ -32,7 +32,7 @@ self.addEventListener('fetch', (e) => {
       }
       return response;
     } catch {
-      const cached = await caches.match(e.request, { ignoreSearch: url.pathname === '/workspace.css' });
+      const cached = await caches.match(e.request, { ignoreSearch: url.pathname === '/workspace.css' || url.pathname === '/taste.css' });
       if (cached) return cached;
       if (e.request.mode === 'navigate') return (await caches.match('/chat')) || Response.error();
       return Response.error();

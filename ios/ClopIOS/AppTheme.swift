@@ -1,12 +1,12 @@
 import SwiftUI
 
 enum ClopTheme {
-    static let orange = Color(red: 1.0, green: 0.45, blue: 0.20)
-    static let orangeSoft = Color(red: 0.84, green: 0.30, blue: 0.13)
-    static let background = Color(red: 0.055, green: 0.047, blue: 0.043)
-    static let surface = Color(red: 0.105, green: 0.090, blue: 0.080)
-    static let elevated = Color(red: 0.145, green: 0.125, blue: 0.110)
-    static let secondary = Color.white.opacity(0.62)
+    static let orange = Color(red: 0.843, green: 0.514, blue: 0.369)
+    static let orangeSoft = Color(red: 0.678, green: 0.408, blue: 0.302)
+    static let background = Color(red: 0.090, green: 0.082, blue: 0.075)
+    static let surface = Color(red: 0.137, green: 0.125, blue: 0.114)
+    static let elevated = Color(red: 0.184, green: 0.165, blue: 0.145)
+    static let secondary = Color(red: 0.780, green: 0.731, blue: 0.682)
 }
 
 struct ClopMark: View {
@@ -14,19 +14,11 @@ struct ClopMark: View {
 
     var body: some View {
         ZStack {
-            Circle()
-                .fill(
-                    LinearGradient(
-                        colors: [Color(red: 1, green: 0.59, blue: 0.29), ClopTheme.orangeSoft],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .shadow(color: ClopTheme.orange.opacity(0.35), radius: size * 0.18)
-            HStack(spacing: size * 0.13) {
-                Capsule().fill(.white).frame(width: size * 0.13, height: size * 0.28)
-                Capsule().fill(.white).frame(width: size * 0.13, height: size * 0.28)
-            }
+            RoundedRectangle(cornerRadius: size * 0.25, style: .continuous)
+                .fill(ClopTheme.orange)
+            Text("C")
+                .font(.system(size: size * 0.52, weight: .bold, design: .rounded))
+                .foregroundStyle(ClopTheme.background)
         }
         .frame(width: size, height: size)
         .accessibilityLabel("Clop")
@@ -42,11 +34,11 @@ struct ClopCard<Content: View>: View {
 
     var body: some View {
         content
-            .padding(16)
-            .background(ClopTheme.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .padding(20)
+            .background(ClopTheme.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
             }
     }
 }

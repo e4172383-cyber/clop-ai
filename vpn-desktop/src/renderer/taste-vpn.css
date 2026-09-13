@@ -1,0 +1,104 @@
+/* Clop VPN: same mineral palette and typography as Clop Code. */
+:root {
+  font-family: "Geist", "Segoe UI Variable", "Segoe UI", sans-serif;
+  color: #2a2520;
+  background: #f4f0ea;
+}
+body {
+  background: #f4f0ea;
+  color: #2a2520;
+  font-family: inherit;
+}
+.ambient { display: none; }
+.grain { opacity: .025; }
+.glass {
+  background: #fffdf9;
+  border: 1px solid rgba(76,61,49,.15);
+  box-shadow: 0 10px 30px rgba(70,48,32,.055), inset 0 1px 0 rgba(255,255,255,.8);
+  backdrop-filter: none;
+}
+.titlebar { height: 61px; padding: 0 22px; background: #fffdf9; border-bottom-color: rgba(76,61,49,.14); }
+.brand { gap: 11px; font-size: 14px; letter-spacing: -.03em; }
+.brand-mark { width: 30px; height: 30px; border-radius: 9px; background: #c46f4d; box-shadow: none; }
+.beta { padding: 4px 8px; color: #a85537; border-color: rgba(196,111,77,.25); background: rgba(196,111,77,.08); font-size: 10px; }
+.window-actions button { color: #675c53; }
+main { height: calc(100dvh - 61px); grid-template-columns: 270px minmax(0,1fr); gap: 0; padding: 0; }
+.sidebar { border-radius: 0; border: 0; border-right: 1px solid rgba(76,61,49,.14); padding: 24px 18px 18px; box-shadow: none; }
+.account { padding: 4px 4px 23px; border-bottom-color: rgba(76,61,49,.14); }
+.avatar { width: 42px; height: 42px; border-radius: 12px; background: #2a2520; }
+.account strong { font-size: 14px; }
+.account span { font-size: 12px; color: #6f665d; }
+.side-label { margin: 30px 10px 12px; font-size: 10px; color: #847a70; }
+.side-label.lower { margin-top: 31px; }
+.location { min-height: 69px; border: 1px solid rgba(196,111,77,.34); border-radius: 12px; padding: 12px; background: rgba(196,111,77,.085); box-shadow: none; }
+.location strong { font-size: 13px; }
+.location small { font-size: 11px; color: #6f665d; }
+.flag { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; background: #c46f4d; color: #fffaf5; font-size: 11px; font-weight: 750; letter-spacing: .03em; }
+.latency { padding: 5px 8px; font-size: 10px; color: #9e5136; background: #fffdf9; }
+.security-note { padding: 10px; }
+.shield { width: 34px; height: 34px; border: 1px solid rgba(76,61,49,.13); background: #f8f4ee; color: #a85537; box-shadow: none; }
+.security-note strong { font-size: 12px; }
+.security-note small { font-size: 11px; line-height: 1.4; color: #6f665d; }
+.side-footer { font-size: 11px; color: #6f665d; }
+.side-footer button { font-size: 11px; }
+.workspace { gap: 17px; padding: 32px clamp(24px,4vw,52px) 25px; overflow-y: auto; }
+.topline { align-items: flex-end; padding: 0; }
+.eyebrow { font-size: 10px; color: #847a70; }
+.topline h1 { font-size: 30px; letter-spacing: -.055em; margin-top: 9px; }
+.protocol { font-size: 10px; color: #665d55; border-color: rgba(76,61,49,.14); background: #fffdf9; }
+.connection-card { flex: 0 0 275px; height: 275px; border-radius: 20px; overflow: hidden; background: #282521; border-color: #282521; box-shadow: none; color: #fffaf5; }
+.map { opacity: .7; }
+.map path { stroke: rgba(244,230,215,.16); }
+.map .route { stroke: rgba(215,131,94,.7); }
+.map circle { fill: #d7835e; }
+.map .target { fill: #282521; stroke: #d7835e; }
+.connect-orb { width: 124px; height: 124px; border: 1px solid rgba(255,255,255,.25); background: #39332d; box-shadow: 0 12px 30px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.16); }
+.connect-orb:hover { transform: translateY(-2px); box-shadow: 0 16px 35px rgba(0,0,0,.24); }
+.connect-orb:active:not(:disabled) { transform: scale(.97); }
+.orb-ring { border-color: rgba(255,255,255,.23); }
+.power { background: #d7835e; box-shadow: none; }
+.connection-card.connected .connect-orb { background: #504032; box-shadow: 0 12px 30px rgba(0,0,0,.2); }
+.connection-card.connected .power { background: #fffaf5; }
+.connection-label { margin-top: 15px; font-size: 15px; }
+.connection-time { margin-top: 5px; color: #c5b9ad; font-size: 11px; }
+.server-pill { right: 20px; bottom: 18px; border-radius: 10px; border-color: rgba(255,255,255,.17); background: rgba(255,255,255,.09); box-shadow: none; }
+.server-pill > span { display: grid; place-items: center; width: 27px; height: 27px; border-radius: 7px; background: #d7835e; color: #211510; font-size: 10px; font-weight: 750; }
+.server-pill small { color: #c6b9ac; font-size: 9px; }
+.server-pill strong { color: #fffaf5; font-size: 11px; }
+.metric-grid { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 0; border: 1px solid rgba(76,61,49,.14); background: #fffdf9; border-radius: 17px; overflow: hidden; }
+.metric { min-width: 0; height: 96px; border: 0; border-right: 1px solid rgba(76,61,49,.14); border-radius: 0; padding: 18px; background: transparent; box-shadow: none; }
+.metric:last-child { border-right: 0; }
+.metric-icon { width: 34px; height: 34px; border-radius: 9px; color: #a85537; background: rgba(196,111,77,.1); }
+.metric-icon.up,.metric-icon.ping { color: #a85537; background: rgba(196,111,77,.1); }
+.metric small { font-size: 10px; color: #847a70; }
+.metric strong { font-size: 20px; }
+.metric em { font-size: 11px; color: #6f665d; }
+.spark i,.spark.orange i { background: #c46f4d; }
+.quality { font-size: 9px !important; }
+.usage { border-radius: 17px; padding: 20px 23px; box-shadow: none; }
+.usage-head > div:first-child strong { font-size: 21px; }
+.usage-head strong small { font-size: 12px; color: #6f665d; }
+.reset small { font-size: 10px; }
+.reset strong { font-size: 12px; }
+.progress { height: 7px; background: #e8ded3; }
+.progress i { background: #c46f4d; }
+.usage-foot { font-size: 11px; color: #6f665d; }
+.usage-foot i { background: #c46f4d; }
+.modal { inset: 61px 0 0; background: rgba(34,29,25,.58); }
+.login-card { width: min(440px,calc(100vw - 30px)); border-radius: 20px; padding: 35px; text-align: left; }
+.telegram-logo { margin: 0 0 20px; border-radius: 13px; background: #c46f4d; box-shadow: none; }
+.login-card h2 { font: 650 28px/1.12 "Geist","Segoe UI Variable","Segoe UI",sans-serif; letter-spacing: -.045em; }
+.login-card p { margin: 13px 0 24px; max-width: none; font-size: 13px; color: #6f665d; }
+.primary { min-height: 45px; background: #c46f4d; border-radius: 10px; box-shadow: none; }
+.primary:hover { background: #ab5e40; }
+.text-button { font-size: 12px; }
+.toast { font-size: 12px; }
+@media (max-height: 740px) {
+  .workspace { padding-top: 18px; gap: 11px; }
+  .connection-card { flex-basis: 232px; height: 232px; }
+  .metric { height: 80px; }
+  .usage { padding: 16px 20px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,*::before,*::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}

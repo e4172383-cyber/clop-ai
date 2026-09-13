@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Clop VPN</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="taste-vpn.css">
 </head>
 <body>
   <div class="ambient one"></div><div class="ambient two"></div><div class="grain"></div>
@@ -20,7 +21,7 @@
         <button class="icon-button" id="logout" title="Выйти">↗</button>
       </section>
       <div class="side-label">ЛОКАЦИИ</div>
-      <button class="location selected"><span class="flag">🇩🇪</span><span><strong>Германия</strong><small>Фалькенштайн</small></span><span class="latency" id="latency">— мс</span></button>
+      <button class="location selected"><span class="flag">DE</span><span><strong>Германия</strong><small>Фалькенштайн</small></span><span class="latency" id="latency">— мс</span></button>
       <div class="side-label lower">БЕЗОПАСНОСТЬ</div>
       <div class="security-note"><span class="shield">✓</span><div><strong>WireGuard</strong><small>Современное шифрование трафика</small></div></div>
       <div class="side-footer"><span class="status-dot"></span><span id="dependencyLabel">Проверка WireGuard…</span><button id="installDependency">Установить</button></div>
@@ -30,7 +31,7 @@
       <div class="connection-card glass" id="connectionCard">
         <div class="map" aria-hidden="true"><svg viewBox="0 0 720 260" preserveAspectRatio="none"><path d="M28 189c41-53 91-29 132-61 44-34 44-90 104-94 58-4 65 69 119 80 45 9 77-32 121-21 44 10 56 72 99 79 31 5 52-17 89-38"/><path class="route" d="M142 169c114-83 226-92 410-28"/><circle cx="142" cy="169" r="6"/><circle class="target" cx="552" cy="141" r="9"/></svg></div>
         <div class="orb-wrap"><button class="connect-orb" id="connectButton" aria-label="Подключить VPN"><span class="orb-ring"></span><span class="power"><i></i></span></button><span class="connection-label" id="connectionLabel">Подключить</span><span class="connection-time" id="connectionTime">Германия · Фалькенштайн</span></div>
-        <div class="server-pill"><span>🇩🇪</span><div><small>ВАШ СЕРВЕР</small><strong>Германия</strong></div><i></i></div>
+        <div class="server-pill"><span>DE</span><div><small>ВАШ СЕРВЕР</small><strong>Германия</strong></div><i></i></div>
       </div>
       <div class="metric-grid">
         <article class="metric glass"><span class="metric-icon down">↓</span><div><small>ЗАГРУЗКА</small><strong><span id="downloadSpeed">0.0</span> <em>Мбит/с</em></strong></div><span class="spark"><i></i><i></i><i></i><i></i><i></i></span></article>

@@ -23,17 +23,19 @@ struct ChatView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 18) {
+        VStack(alignment: .leading, spacing: 19) {
             Spacer()
-            ClopMark(size: 68)
-            Text("Чем помочь?")
-                .font(.system(size: 28, weight: .bold, design: .rounded))
-            Text("Ответы идут напрямую через Clop API\nи учитывают ваш тариф.")
-                .multilineTextAlignment(.center)
+            ClopMark(size: 58)
+            Text("Чем помочь сегодня?")
+                .font(.system(size: 29, weight: .semibold))
+                .tracking(-1.1)
+            Text("Опишите задачу. Clop сохранит контекст в этом чате и покажет доступные модели в верхнем меню.")
+                .font(.system(size: 15))
                 .foregroundStyle(ClopTheme.secondary)
             Spacer()
         }
         .frame(maxWidth: .infinity)
+        .padding(.horizontal, 27)
     }
 
     private var transcript: some View {
@@ -67,13 +69,17 @@ struct ChatView: View {
                 .focused($composerFocused)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 11)
-                .background(ClopTheme.elevated, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .background(ClopTheme.elevated, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 15, style: .continuous)
+                        .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                }
             Button(action: send) {
                 Image(systemName: "arrow.up")
                     .font(.headline)
                     .frame(width: 42, height: 42)
-                    .background(canSend ? ClopTheme.orange : Color.white.opacity(0.12), in: Circle())
-                    .foregroundStyle(canSend ? .white : Color.white.opacity(0.35))
+                    .background(canSend ? ClopTheme.orange : Color.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                    .foregroundStyle(canSend ? ClopTheme.background : ClopTheme.secondary)
             }
             .disabled(!canSend)
         }
@@ -157,8 +163,15 @@ private struct MessageBubble: View {
                 }
             }
             .padding(14)
-            .background(message.role == .user ? ClopTheme.orangeSoft : ClopTheme.surface,
+            .background(message.role == .user ? ClopTheme.orangeSoft : Color.clear,
                         in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(alignment: .leading) {
+                if message.role == .assistant {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(ClopTheme.orange)
+                        .frame(width: 2)
+                }
+            }
             if message.role == .assistant { Spacer(minLength: 34) }
         }
         .padding(.horizontal, 12)

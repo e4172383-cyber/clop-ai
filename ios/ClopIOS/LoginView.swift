@@ -7,19 +7,19 @@ struct LoginView: View {
     var body: some View {
         ZStack {
             ClopTheme.background.ignoresSafeArea()
-            Circle()
-                .fill(ClopTheme.orange.opacity(0.12))
-                .frame(width: 330, height: 330)
-                .blur(radius: 70)
-                .offset(y: -260)
-
-            VStack(spacing: 24) {
+            VStack(alignment: .leading, spacing: 26) {
                 Spacer()
-                ClopMark(size: 84)
-                VStack(spacing: 8) {
+                ClopMark(size: 66)
+                VStack(alignment: .leading, spacing: 11) {
+                    Text("ОДИН АККАУНТ НА ВСЕХ УСТРОЙСТВАХ")
+                        .font(.system(size: 11, weight: .semibold))
+                        .tracking(1.8)
+                        .foregroundStyle(ClopTheme.orange)
                     Text("Clop для iPhone")
-                        .font(.system(size: 34, weight: .bold, design: .rounded))
+                        .font(.system(size: 33, weight: .semibold))
+                        .tracking(-1.3)
                     Text("Нативный чат, модели и ваше облако")
+                        .font(.system(size: 15))
                         .foregroundStyle(ClopTheme.secondary)
                 }
 
@@ -67,13 +67,14 @@ struct LoginView: View {
                         }
                     }
                 }
-                .padding(.horizontal, 20)
                 Spacer()
                 Text("Clop iOS Beta 1.0")
                     .font(.caption)
-                    .foregroundStyle(Color.white.opacity(0.35))
+                    .foregroundStyle(ClopTheme.secondary)
                     .padding(.bottom, 12)
             }
+            .frame(maxWidth: 520)
+            .padding(.horizontal, 25)
         }
     }
 }

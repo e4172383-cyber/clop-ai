@@ -861,8 +861,9 @@
   .storage-modal{width:min(860px,96vw)}.storage-body{display:grid;gap:14px}.storage-summary{padding:18px;border:1px solid var(--line);border-radius:18px;background:linear-gradient(135deg,rgba(106,143,198,.12),transparent)}.storage-summary-head{display:flex;align-items:end;justify-content:space-between;gap:12px;margin-bottom:12px}.storage-summary h3{margin:0 0 5px}.storage-meter{height:13px;overflow:hidden;border:1px solid var(--line);border-radius:999px;background:var(--surface-2)}.storage-meter i{display:block;width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,#6e91c8,#e08458);transition:width .35s}.storage-actions{display:flex;gap:8px;flex-wrap:wrap}.storage-actions button,.storage-row button{border:1px solid var(--line);border-radius:10px;background:var(--surface-2);color:var(--text);padding:9px 12px;cursor:pointer}.storage-actions .primary{background:var(--accent);border-color:transparent;color:#fff;font-weight:800}.storage-list{display:grid;gap:8px;max-height:360px;overflow:auto}.storage-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:10px;padding:11px;border:1px solid var(--line);border-radius:13px;background:var(--surface)}.storage-icon{display:grid;place-items:center;width:38px;height:38px;border-radius:11px;background:rgba(106,143,198,.13);color:#7fa2d6}.storage-copy{min-width:0}.storage-copy b,.storage-copy small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.storage-copy small{color:var(--muted);margin-top:3px}.storage-row a{color:var(--accent);text-decoration:none;font-size:12px;font-weight:750}@media(max-width:620px){.storage-summary-head{align-items:flex-start;flex-direction:column}.storage-row{grid-template-columns:auto minmax(0,1fr) auto}.storage-row a{grid-column:2}.storage-row button{grid-column:3;grid-row:1/3}}
 </style>
 <link rel="stylesheet" href="/workspace.css?v=20260909-1">
+<link rel="stylesheet" href="/taste.css?v=1">
 </head>
-<body>
+<body class="taste-chat">
 <div class="bg"><div class="blob a"></div><div class="blob b"></div><div class="blob c"></div></div>
 <div class="grain"></div>
 
@@ -988,7 +989,7 @@
         </div>
       </div>
       <div class="header-controls">
-        <button class="bug-mini" id="bugBtn" type="button">🐞 Баг?</button>
+        <button class="bug-mini" id="bugBtn" type="button">Баг?</button>
         <span class="tag promo-tag" id="promoTag" style="display:none"></span>
         <label class="model-control"><span>Модель</span><select id="modelSelect" aria-label="Модель"></select></label>
         <div class="model-usage" id="modelUsage" role="button" tabindex="0" aria-label="Лимит и оценка выбранной модели">
@@ -2621,7 +2622,7 @@ function renderRemoteDevices(data) {
   const host = document.getElementById('remoteDevices');
   const devices = data?.devices || [];
   if (!devices.length) {
-    host.innerHTML = '<div class="muted-sm">Компьютеры не найдены. Откройте Clop Code 2.5.7, войдите через тот же Telegram и включите запросы Remote в настройках.</div>';
+    host.innerHTML = '<div class="muted-sm">Компьютеры не найдены. Откройте Clop Code 2.5.8, войдите через тот же Telegram и включите запросы Remote в настройках.</div>';
     return;
   }
   host.innerHTML = devices.map(device => {

@@ -1,0 +1,156 @@
+/* Clop Code visual system. Keep interaction hooks and layout state intact. */
+:root,
+.app[data-theme="dark"] {
+  --bg: #1f1d1b;
+  --bg-deep: #171614;
+  --surface: #282521;
+  --surface-solid: #282521;
+  --surface-raised: #302c27;
+  --surface-hover: rgba(240,225,209,.07);
+  --surface-active: rgba(215,131,94,.15);
+  --glass: #292621;
+  --line: rgba(240,225,209,.11);
+  --line-strong: rgba(240,225,209,.18);
+  --text: #f4f0e9;
+  --text-soft: #dfd7cd;
+  --muted: #b0a69b;
+  --dim: #91877d;
+  --accent: #d7835e;
+  --accent-bright: #e29b79;
+  --accent-soft: rgba(215,131,94,.15);
+  --accent-ink: #26150e;
+  --titlebar-height: 48px;
+  font-family: "Geist", "Segoe UI Variable", "Segoe UI", sans-serif;
+}
+.app[data-theme="light"] {
+  --bg: #f4f0ea;
+  --bg-deep: #eae4db;
+  --surface: #fffdf9;
+  --surface-solid: #fffdf9;
+  --surface-raised: #f8f4ee;
+  --surface-hover: rgba(72,51,37,.06);
+  --surface-active: rgba(196,111,77,.12);
+  --glass: #fffdf9;
+  --line: rgba(76,61,49,.14);
+  --line-strong: rgba(76,61,49,.24);
+  --text: #2a2520;
+  --text-soft: #514941;
+  --muted: #6f665d;
+  --dim: #847a70;
+  --accent: #c46f4d;
+  --accent-bright: #a85537;
+  --accent-soft: rgba(196,111,77,.12);
+  --accent-ink: #fffaf5;
+}
+.app { font-family: "Geist", "Segoe UI Variable", "Segoe UI", sans-serif; font-size: 13px; }
+.titlebar { min-height: 48px; padding-right: 8px; }
+.titlebar-drag { padding-left: 18px; gap: 11px; }
+.app-mark { width: 27px; height: 27px; border-radius: 9px; background: var(--accent); box-shadow: none; font-family: inherit; }
+.titlebar-name { font-size: 13px; font-weight: 720; letter-spacing: -.025em; }
+.workspace-crumb { font-size: 11px; }
+.titlebar-status { font-size: 11px; }
+.bug-report-button { min-height: 30px; font-size: 11px; }
+.shell { grid-template-columns: 282px minmax(430px,1fr) 318px; }
+.shell.inspector-collapsed { grid-template-columns: 282px minmax(430px,1fr); }
+.shell.sidebar-collapsed { grid-template-columns: minmax(430px,1fr) 318px; }
+.shell.sidebar-collapsed.inspector-collapsed { grid-template-columns: minmax(430px,1fr); }
+.sidebar { background: var(--bg-deep); }
+.sidebar-head { padding: 14px 13px 8px; }
+.new-chat-button { height: 43px; border-radius: 10px; color: var(--text); background: var(--surface-raised); font-size: 12px; }
+.new-chat-button:hover { background: var(--accent-soft); }
+.activity-rail { gap: 3px; }
+.activity-rail .rail-button { height: 39px; border-radius: 9px; padding: 0 11px; font-size: 12px; }
+.activity-rail .rail-button.active { color: var(--text); background: var(--accent-soft); box-shadow: inset 2px 0 var(--accent); }
+.activity-rail .rail-button svg { width: 17px; height: 17px; }
+.search-wrap { min-height: 39px; margin-top: 10px; background: var(--surface-raised); border: 1px solid var(--line); border-radius: 9px; }
+.search-wrap input { font-size: 12px; }
+.chat-scroll-bar { padding: 15px 18px 8px; font-size: 11px; }
+.chat-groups { padding: 4px 12px 14px; }
+.chat-group h2 { margin: 10px 8px 7px; font-size: 10px; }
+.chat-item { min-height: 42px; border-radius: 9px; padding: 9px 10px; }
+.chat-item strong { font-size: 12px; }
+.chat-item.active { background: var(--accent-soft); }
+.sidebar-footer { padding: 11px; }
+.account-card { min-height: 56px; border-radius: 10px; }
+.account-card strong { font-size: 12px; }
+.account-card small { font-size: 10px; }
+.workspace { background: var(--bg); }
+.chat-toolbar { min-height: 67px; padding: 10px 20px 10px 28px; border-bottom: 1px solid var(--line); }
+.chat-title-wrap h1 { max-width: 420px; font-size: 16px; font-weight: 650; letter-spacing: -.03em; }
+.chat-subtitle { font-size: 11px; }
+.mode-switch { padding: 3px; background: var(--surface-raised); border: 1px solid var(--line); border-radius: 11px; }
+.mode-switch button { min-width: 72px; height: 36px; border-radius: 8px; }
+.mode-switch button.active { background: var(--accent-soft); box-shadow: inset 0 0 0 1px rgba(215,131,94,.26); }
+.mode-button-copy strong { font-size: 11px; }
+.mode-button-copy small { font-size: 9px; }
+.empty-state { max-width: 880px; padding: 54px 48px 38px; align-items: flex-start; text-align: left; }
+.empty-state h2 { font: 650 clamp(30px,3.2vw,42px)/1.08 "Geist","Segoe UI Variable Display","Segoe UI",sans-serif; letter-spacing: -.055em; }
+.empty-note { max-width: 630px; font-size: 13px; line-height: 1.6; }
+.starter-grid { max-width: 690px; gap: 10px; }
+.starter { min-height: 68px; padding: 12px; border-radius: 11px; background: var(--surface-raised); border-color: var(--line); }
+.starter strong { font-size: 12px; }
+.starter small { font-size: 10px; line-height: 1.35; }
+.message-list { max-width: 940px; padding: 38px 48px 76px; }
+.message { grid-template-columns: 30px minmax(0,1fr); gap: 13px; margin-bottom: 29px; }
+.message-avatar { width: 29px; height: 29px; border-radius: 9px; font-family: inherit; }
+.message.assistant .message-avatar { background: var(--accent); color: var(--accent-ink); }
+.message.user .message-main { width: min(78%,640px); padding: 12px 15px; border-radius: 13px; background: var(--surface-raised); }
+.message-content { font-size: 14px; line-height: 1.7; }
+.message-content pre { background: #151412; border-radius: 11px; }
+.message-meta { font-size: 11px; }
+.composer-zone { padding: 0 28px 21px; background: linear-gradient(0deg,var(--bg) 70%,transparent); }
+.mode-companion,.composer { width: min(860px,100%); }
+.mode-companion { min-height: 39px; margin-bottom: 7px; }
+.mode-companion-copy strong { font-size: 11px; }
+.mode-companion-copy small { display: block; font-size: 9px; }
+.composer { border: 1px solid var(--line-strong); border-radius: 16px; background: var(--surface-raised); box-shadow: inset 0 1px 0 rgba(255,255,255,.045); }
+.composer:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.composer textarea { min-height: 61px; max-height: 190px; padding: 15px 17px 8px; font-size: 14px; }
+.composer-bottom { min-height: 49px; padding: 5px 9px 9px; }
+.round-button { width: 35px; height: 35px; }
+.control-pill { height: 36px; max-width: 230px; }
+.control-copy strong { max-width: 165px; font-size: 11px; }
+.control-copy small { font-size: 9px; }
+.model-control-mark,.model-mark { font-family: inherit; background: var(--accent-soft); color: var(--accent-bright); }
+.send-button { border-radius: 10px; }
+.fine-print { margin-top: 8px; font-size: 10px; }
+.menu-popover { width: min(465px,calc(100vw - 20px)); border-radius: 15px; background: var(--surface-solid); box-shadow: 0 22px 60px rgba(0,0,0,.24); }
+.menu-label { font-size: 13px; }
+.menu-subtitle,.menu-provider-label { font-size: 10px; }
+.menu-popover .model-option { min-height: 62px; padding: 9px 11px; grid-template-columns: 37px minmax(0,1fr) auto; }
+.menu-popover strong { font-size: 12px; }
+.menu-popover small { font-size: 10px; }
+.menu-popover .model-provider-tab { min-height: 33px; font-size: 10px; }
+.model-limit-chip,.model-lock { font-size: 10px; }
+.model-limit-provider { font-size: 10px; }
+.model-limit-window { font-size: 11px; }
+.model-limit-value { font-size: 10px; }
+.modal { border-radius: 18px; }
+.modal h2 { font: 650 26px/1.18 "Geist","Segoe UI Variable","Segoe UI",sans-serif; }
+.settings-modal { width: min(900px,95vw); height: min(650px,90vh); grid-template-columns: 220px minmax(0,1fr); }
+.settings-nav { padding: 17px 12px; }
+.settings-brand strong { font-size: 13px; }
+.settings-nav button:not(.settings-account) { height: 40px; font-size: 12px; }
+.settings-account strong { font-size: 11px; }
+.settings-account small { font-size: 10px; }
+.settings-content { padding: 32px 38px; }
+.settings-top h2 { font-size: 27px; }
+.settings-content p,
+.settings-content label,
+.settings-content small,
+.settings-content button { font-size: max(11px,1em); }
+.app button:active:not(:disabled) { transform: scale(.98); }
+@media (max-width: 1120px) {
+  .shell,.shell.inspector-collapsed { grid-template-columns: 250px minmax(390px,1fr); }
+  .inspector { width: 300px; }
+}
+@media (max-width: 820px) {
+  .shell,.shell.inspector-collapsed { grid-template-columns: minmax(0,1fr); }
+  .sidebar { width: 270px; }
+  .chat-toolbar { padding: 9px 15px; }
+  .message-list { padding: 25px 20px 60px; }
+  .composer-zone { padding: 0 13px 13px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app *, .app *::before, .app *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}

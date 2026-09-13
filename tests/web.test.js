@@ -379,28 +379,28 @@ test('serves the public desktop release page and resumable installers without da
   assert.match(html, /iPhone/);
   assert.match(html, /Beta 1\.0 · PWA/);
   assert.match(html, /href="\/chat#iphone"/);
-  assert.match(html, /Clop-Code-Setup-2\.5\.7\.exe/);
-  assert.match(html, /Clop-Code-2\.5\.7-linux-x64\.tar\.xz/);
-  assert.match(html, /Clop-VPN-Setup-1\.0\.0-beta\.5\.exe/);
-  assert.match(html, /Clop-VPN-1\.0\.0-beta\.5-linux-x64\.tar\.xz/);
-  assert.match(html, /Clop-VPN-Mobile-1\.0\.0-beta\.2\.apk/);
+  assert.match(html, /Clop-Code-Setup-2\.5\.8\.exe/);
+  assert.match(html, /Clop-Code-2\.5\.8-linux-x64\.tar\.xz/);
+  assert.match(html, /Clop-VPN-Setup-1\.0\.0-beta\.6\.exe/);
+  assert.match(html, /Clop-VPN-1\.0\.0-beta\.6-linux-x64\.tar\.xz/);
+  assert.match(html, /Clop-VPN-Mobile-1\.0\.0-beta\.3\.apk/);
   assert.match(html, /1250 ГБ в неделю/);
   assert.match(html, /до 500 Мбит\/с/);
   assert.match(html, /Clop-AI-Mobile-1\.0\.7\.apk/);
-  assert.match(html, /href="\/downloads\/Clop-Code-Setup-2\.5\.7\.exe"/);
+  assert.match(html, /href="\/downloads\/Clop-Code-Setup-2\.5\.8\.exe"/);
   assert.doesNotMatch(html, /release-assets\.githubusercontent\.com/);
   assert.doesNotMatch(html, /\d[\d ]{3,}\s*токен/iu);
 
   const releases = await fetch(baseUrl + '/releases.json');
   assert.equal(releases.status, 200);
   const releaseData = await releases.json();
-  assert.equal(releaseData.vpn.version, '1.0.0-beta.5');
-  assert.match(releaseData.vpn.windowsUrl, /Clop-VPN-Setup-1\.0\.0-beta\.5\.exe$/);
-  assert.equal(releaseData.vpn.androidVersion, '1.0.0-beta.2');
-  assert.match(releaseData.vpn.androidUrl, /Clop-VPN-Mobile-1\.0\.0-beta\.2\.apk$/);
-  assert.equal(releaseData.desktop.version, '2.5.7');
-  assert.match(releaseData.desktop.windowsUrl, /\/downloads\/Clop-Code-Setup-2\.5\.7\.exe$/);
-  assert.match(releaseData.desktop.linuxUrl, /\/downloads\/Clop-Code-2\.5\.7-linux-x64\.tar\.xz$/);
+  assert.equal(releaseData.vpn.version, '1.0.0-beta.6');
+  assert.match(releaseData.vpn.windowsUrl, /Clop-VPN-Setup-1\.0\.0-beta\.6\.exe$/);
+  assert.equal(releaseData.vpn.androidVersion, '1.0.0-beta.3');
+  assert.match(releaseData.vpn.androidUrl, /Clop-VPN-Mobile-1\.0\.0-beta\.3\.apk$/);
+  assert.equal(releaseData.desktop.version, '2.5.8');
+  assert.match(releaseData.desktop.windowsUrl, /\/downloads\/Clop-Code-Setup-2\.5\.8\.exe$/);
+  assert.match(releaseData.desktop.linuxUrl, /\/downloads\/Clop-Code-2\.5\.8-linux-x64\.tar\.xz$/);
 
   const partial = await fetch(baseUrl + '/downloads/Clop-Code-Setup-2.4.0.exe', {
     headers: { range: 'bytes=0-31' },
@@ -431,6 +431,10 @@ test('publishes an installable iPhone beta shell with Apple metadata', async () 
   assert.match(html, /rel="apple-touch-icon" href="\/icon-180\.png"/);
   assert.match(html, /location\.hash === '#iphone'/);
 
+  const design = await fetch(baseUrl + '/taste.css?v=1');
+  assert.equal(design.status, 200);
+  assert.match(await design.text(), /body\.taste-chat/);
+
   const manifestResponse = await fetch(baseUrl + '/manifest.webmanifest');
   assert.equal(manifestResponse.status, 200);
   const manifest = await manifestResponse.json();
@@ -442,7 +446,9 @@ test('publishes an installable iPhone beta shell with Apple metadata', async () 
   const worker = await fetch(baseUrl + '/sw.js');
   assert.equal(worker.status, 200);
   assert.equal(worker.headers.get('service-worker-allowed'), '/');
-  assert.match(await worker.text(), /clop-shell-v4/);
+  const workerBody = await worker.text();
+  assert.match(workerBody, /clop-shell-v5/);
+  assert.match(workerBody, /\/taste\.css\?v=1/);
 });
 
 test('public status reports API and model routes without secrets or quota sizes', async () => {

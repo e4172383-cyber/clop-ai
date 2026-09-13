@@ -16,13 +16,13 @@ import { wantsProjectOutput, hasProjectOutput, projectPrompt, continuationPrompt
 import { deliverFinalMessage } from './telegram-delivery.js';
 
 const DESKTOP_RELEASE = Object.freeze({
-  version: '2.5.7',
-  released: '11.09.2026',
-  windows: 'Clop-Code-Setup-2.5.7.exe',
-  linux: 'Clop-Code-2.5.7-linux-x64.tar.xz',
+  version: '2.5.8',
+  released: '13.09.2026',
+  windows: 'Clop-Code-Setup-2.5.8.exe',
+  linux: 'Clop-Code-2.5.8-linux-x64.tar.xz',
   androidVersion: '1.0.7',
   android: 'Clop-AI-Mobile-1.0.7.apk',
-  vpnAndroid: 'Clop-VPN-Mobile-1.0.0-beta.2.apk',
+  vpnAndroid: 'Clop-VPN-Mobile-1.0.0-beta.3.apk',
 });
 
 // Единая точка входа: Claude-модели идут через Claude CLI, GPT-модели — через

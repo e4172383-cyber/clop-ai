@@ -42,11 +42,11 @@ public final class ConnectionOrbView extends View {
     @Override protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         float w = getWidth(), h = getHeight(), cy = h * .48f;
-        int accent = connected ? Color.rgb(63, 183, 132) : Color.rgb(241, 132, 82);
+        int accent = connected ? Color.rgb(117, 175, 138) : Color.rgb(196, 111, 77);
 
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(dp(1.4f));
-        paint.setColor(Color.argb(42, 101, 82, 70));
+        paint.setColor(Color.argb(72, 244, 230, 215));
         for (int row = 0; row < 3; row++) {
             wave.reset();
             for (int x = 0; x <= w; x += 6) {
@@ -63,7 +63,7 @@ public final class ConnectionOrbView extends View {
         canvas.drawCircle(w / 2, cy, radius, paint);
         paint.setColor(Color.argb(32, 255, 255, 255));
         canvas.drawCircle(w / 2, cy, dp(58), paint);
-        paint.setShader(new RadialGradient(w / 2 - dp(16), cy - dp(18), dp(62), Color.rgb(255, 192, 150), accent, Shader.TileMode.CLAMP));
+        paint.setShader(new RadialGradient(w / 2 - dp(16), cy - dp(18), dp(62), Color.rgb(226, 154, 121), accent, Shader.TileMode.CLAMP));
         canvas.drawCircle(w / 2, cy, dp(47), paint);
         paint.setShader(null);
 

@@ -36,6 +36,7 @@ html = html
   .replaceAll('href="/chat#iphone"', `href="${apiBase}/chat#iphone"`)
   .replaceAll('href="/chat#remote"', 'href="#service-status"')
   .replaceAll('href="/chat#bug"', `href="${releasePage}"`)
+  .replace('href="/taste.css?v=1"', 'href="taste.css?v=1"')
   .replace('>Создать Telegram-бота <span>↗</span></a>', '>Чат временно переносится <span>↗</span></a>')
   .replace(
     '<main id="top">',
@@ -43,7 +44,7 @@ html = html
   )
   .replace(
     '</style>',
-    '.migration-banner{margin-top:10px;padding:15px 18px;border-radius:17px;display:flex;align-items:center;justify-content:space-between;gap:18px;border-color:rgba(227,181,95,.28);background:rgba(71,53,28,.7)}.migration-banner strong{color:var(--yellow)}.migration-banner span{color:var(--soft);font-size:12px}@media(max-width:650px){.migration-banner{align-items:flex-start;flex-direction:column;gap:5px}}</style>',
+    '.migration-banner{margin-top:10px;padding:15px 18px;border-radius:17px;display:flex;align-items:center;justify-content:space-between;gap:18px;border-color:rgba(76,61,49,.14);background:#fffdf9}.migration-banner strong{color:#9e5136}.migration-banner span{color:#514942;font-size:12px}@media(max-width:650px){.migration-banner{align-items:flex-start;flex-direction:column;gap:5px}}</style>',
   )
   .replace(
     /<script>\r?\n\s*const byId=/,
@@ -54,6 +55,7 @@ html = html
 fs.mkdirSync(outputDir, { recursive: true });
 fs.writeFileSync(path.join(outputDir, 'index.html'), html);
 fs.writeFileSync(path.join(outputDir, '404.html'), html);
+fs.copyFileSync(path.join(root, 'src', 'public', 'taste.css'), path.join(outputDir, 'taste.css'));
 fs.writeFileSync(path.join(outputDir, '.nojekyll'), '');
 
 console.log(`Fallback site generated in ${outputDir}`);

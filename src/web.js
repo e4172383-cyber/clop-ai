@@ -197,7 +197,9 @@ const DESKTOP_DOWNLOADS = new Set([
   'Clop-Code-Setup-2.5.2.exe',
   'Clop-Code-Setup-2.5.3.exe',
   'Clop-Code-Setup-2.5.7.exe',
+  'Clop-Code-Setup-2.5.8.exe',
   'Clop-VPN-Setup-1.0.0-beta.5.exe',
+  'Clop-VPN-Setup-1.0.0-beta.6.exe',
   'Clop-Code-2.0.6-linux-x64.tar.xz',
   'Clop-Code-2.0.9-linux-x64.tar.xz',
   'Clop-Code-2.0.10-linux-x64.tar.xz',
@@ -216,8 +218,11 @@ const DESKTOP_DOWNLOADS = new Set([
   'Clop-Code-2.5.2-linux-x64.tar.xz',
   'Clop-Code-2.5.3-linux-x64.tar.xz',
   'Clop-Code-2.5.7-linux-x64.tar.xz',
+  'Clop-Code-2.5.8-linux-x64.tar.xz',
   'Clop-VPN-1.0.0-beta.5-linux-x64.tar.xz',
+  'Clop-VPN-1.0.0-beta.6-linux-x64.tar.xz',
   'Clop-VPN-Mobile-1.0.0-beta.2.apk',
+  'Clop-VPN-Mobile-1.0.0-beta.3.apk',
   'Clop-AI-Mobile-1.0.0.apk',
   'Clop-AI-Mobile-1.0.1.apk',
   'Clop-AI-Mobile-1.0.2.apk',
@@ -638,17 +643,17 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
     if (url.pathname === '/releases.json' && req.method === 'GET') {
       return sendJson(res, 200, {
         desktop: {
-          version: '2.5.7',
-          url: publicDownloadUrl('Clop-Code-Setup-2.5.7.exe'),
-          windowsUrl: publicDownloadUrl('Clop-Code-Setup-2.5.7.exe'),
-          linuxUrl: publicDownloadUrl('Clop-Code-2.5.7-linux-x64.tar.xz'),
+          version: '2.5.8',
+          url: publicDownloadUrl('Clop-Code-Setup-2.5.8.exe'),
+          windowsUrl: publicDownloadUrl('Clop-Code-Setup-2.5.8.exe'),
+          linuxUrl: publicDownloadUrl('Clop-Code-2.5.8-linux-x64.tar.xz'),
         },
         vpn: {
-          version: '1.0.0-beta.5',
-          windowsUrl: publicDownloadUrl('Clop-VPN-Setup-1.0.0-beta.5.exe'),
-          linuxUrl: publicDownloadUrl('Clop-VPN-1.0.0-beta.5-linux-x64.tar.xz'),
-          androidVersion: '1.0.0-beta.2',
-          androidUrl: publicDownloadUrl('Clop-VPN-Mobile-1.0.0-beta.2.apk'),
+          version: '1.0.0-beta.6',
+          windowsUrl: publicDownloadUrl('Clop-VPN-Setup-1.0.0-beta.6.exe'),
+          linuxUrl: publicDownloadUrl('Clop-VPN-1.0.0-beta.6-linux-x64.tar.xz'),
+          androidVersion: '1.0.0-beta.3',
+          androidUrl: publicDownloadUrl('Clop-VPN-Mobile-1.0.0-beta.3.apk'),
           location: 'Germany',
         },
         android: { version: '1.0.7', url: publicDownloadUrl('Clop-AI-Mobile-1.0.7.apk') },
@@ -1521,8 +1526,8 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
     // Стили рабочего интерфейса подключаются публичной страницей /chat и
     // поэтому тоже должны быть доступны до Basic Auth панели. Раздаём только
     // один заранее известный файл, с защитой от MIME-sniffing и коротким кэшем.
-    if (url.pathname === '/workspace.css' && (req.method === 'GET' || req.method === 'HEAD')) {
-      const full = path.join(PUBLIC, 'workspace.css');
+    if ((url.pathname === '/workspace.css' || url.pathname === '/taste.css') && (req.method === 'GET' || req.method === 'HEAD')) {
+      const full = path.join(PUBLIC, url.pathname.slice(1));
       if (!fs.existsSync(full)) { res.writeHead(404); return res.end('404'); }
       res.writeHead(200, {
         'content-type': 'text/css; charset=utf-8',

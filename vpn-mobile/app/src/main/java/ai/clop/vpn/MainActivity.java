@@ -44,9 +44,11 @@ import java.util.concurrent.Executors;
 
 public final class MainActivity extends Activity {
     private static final int VPN_PERMISSION = 701;
-    private static final int INK = Color.rgb(46, 39, 34);
-    private static final int MUTED = Color.rgb(142, 128, 118);
-    private static final int ACCENT = Color.rgb(241, 132, 82);
+    private static final int INK = Color.rgb(42, 37, 32);
+    private static final int MUTED = Color.rgb(111, 102, 93);
+    private static final int ACCENT = Color.rgb(196, 111, 77);
+    private static final int SURFACE = Color.rgb(255, 253, 249);
+    private static final int BACKGROUND = Color.rgb(244, 240, 234);
     private static final int GREEN = Color.rgb(63, 183, 132);
 
     private final Handler ui = new Handler(Looper.getMainLooper());
@@ -92,25 +94,25 @@ public final class MainActivity extends Activity {
     }
 
     private void buildInterface() {
-        getWindow().setStatusBarColor(Color.rgb(248, 245, 241));
-        getWindow().setNavigationBarColor(Color.rgb(248, 245, 241));
+        getWindow().setStatusBarColor(BACKGROUND);
+        getWindow().setNavigationBarColor(BACKGROUND);
         if (Build.VERSION.SDK_INT >= 23) getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
 
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
-        scroll.setBackgroundColor(Color.rgb(248, 245, 241));
+        scroll.setBackgroundColor(BACKGROUND);
         LinearLayout root = column();
-        root.setPadding(dp(22), dp(20), dp(22), dp(32));
+        root.setPadding(dp(22), dp(24), dp(22), dp(32));
         scroll.addView(root, new ScrollView.LayoutParams(-1, -2));
 
         LinearLayout header = row();
         TextView mark = text("C", 18, Color.WHITE, true);
         mark.setGravity(Gravity.CENTER);
-        mark.setBackground(round(ACCENT, 15, 0, 0));
+        mark.setBackground(round(ACCENT, 12, 0, 0));
         header.addView(mark, lp(dp(46), dp(46), 0));
         LinearLayout brand = column();
         brand.setPadding(dp(12), 0, 0, 0);
-        brand.addView(text("Clop VPN", 20, INK, true));
+        brand.addView(text("Clop VPN", 21, INK, true));
         brand.addView(text("MOBILE BETA", 10, MUTED, true));
         header.addView(brand, new LinearLayout.LayoutParams(0, -2, 1));
         TextView secure = pill("WIREGUARD", Color.rgb(112, 94, 82), Color.WHITE);
@@ -119,11 +121,11 @@ public final class MainActivity extends Activity {
 
         LinearLayout account = row();
         account.setGravity(Gravity.CENTER_VERTICAL);
-        account.setPadding(dp(15), dp(13), dp(12), dp(13));
+        account.setPadding(dp(17), dp(16), dp(14), dp(16));
         account.setBackground(glass(18));
         LinearLayout accountCopy = column();
-        accountName = text(token.isEmpty() ? "Войдите в Clop" : "Загрузка аккаунта…", 14, INK, true);
-        planText = text("Единый аккаунт через Telegram", 11, MUTED, false);
+        accountName = text(token.isEmpty() ? "Войдите в Clop" : "Загрузка аккаунта…", 15, INK, true);
+        planText = text("Единый аккаунт через Telegram", 12, MUTED, false);
         accountCopy.addView(accountName); accountCopy.addView(planText);
         account.addView(accountCopy, new LinearLayout.LayoutParams(0, -2, 1));
         accountButton = smallButton(token.isEmpty() ? "Войти" : "Профиль");
@@ -135,19 +137,19 @@ public final class MainActivity extends Activity {
         TextView overline = text("ЗАЩИЩЁННОЕ СОЕДИНЕНИЕ", 10, MUTED, true);
         overline.setLetterSpacing(.12f);
         root.addView(overline);
-        connectionTitle = text("Готов к подключению", 27, INK, true);
+        connectionTitle = text("Готов к подключению", 29, INK, true);
         connectionTitle.setPadding(0, dp(3), 0, dp(15));
         root.addView(connectionTitle);
 
         FrameLayout hero = new FrameLayout(this);
-        hero.setBackground(glass(26));
+        hero.setBackground(round(INK, 22, 0, 0));
         hero.setPadding(dp(5), 0, dp(5), dp(4));
         orb = new ConnectionOrbView(this);
         hero.addView(orb, new FrameLayout.LayoutParams(-1, dp(285)));
         LinearLayout heroCopy = column();
         heroCopy.setGravity(Gravity.CENTER);
-        connectionSubtitle = text("Нажмите, чтобы подключиться", 14, INK, true);
-        TextView locationSmall = text("Германия · Фалькенштайн", 11, MUTED, false);
+        connectionSubtitle = text("Нажмите, чтобы подключиться", 15, Color.WHITE, true);
+        TextView locationSmall = text("Германия · Фалькенштайн", 12, Color.rgb(207, 192, 180), false);
         heroCopy.addView(connectionSubtitle); heroCopy.addView(locationSmall);
         FrameLayout.LayoutParams copyLp = new FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM);
         copyLp.setMargins(dp(10), 0, dp(10), dp(21));
@@ -157,13 +159,13 @@ public final class MainActivity extends Activity {
 
         LinearLayout location = row();
         location.setGravity(Gravity.CENTER_VERTICAL);
-        location.setPadding(dp(15), dp(14), dp(15), dp(14));
+        location.setPadding(dp(16), dp(17), dp(16), dp(17));
         location.setBackground(glass(18));
         TextView flag = pill("DE", Color.rgb(45, 39, 35), Color.WHITE);
         location.addView(flag);
         LinearLayout locationCopy = column(); locationCopy.setPadding(dp(12), 0, 0, 0);
-        locationTitle = text("Германия", 14, INK, true);
-        locationCopy.addView(locationTitle); locationCopy.addView(text("Фалькенштайн · оптимальный маршрут", 11, MUTED, false));
+        locationTitle = text("Германия", 15, INK, true);
+        locationCopy.addView(locationTitle); locationCopy.addView(text("Фалькенштайн · оптимальный маршрут", 12, MUTED, false));
         location.addView(locationCopy, new LinearLayout.LayoutParams(0, -2, 1));
         location.addView(text("Изменить  ›", 12, ACCENT, true));
         location.setOnClickListener(v -> showLocations());
@@ -193,7 +195,7 @@ public final class MainActivity extends Activity {
 
     private TextView stat(LinearLayout parent, String label, String value) {
         LinearLayout box = column(); box.setGravity(Gravity.CENTER);
-        TextView v = text(value, 17, INK, true); TextView l = text(label, 9, MUTED, true); l.setLetterSpacing(.08f);
+        TextView v = text(value, 19, INK, true); TextView l = text(label, 10, MUTED, true); l.setLetterSpacing(.08f);
         box.addView(v); box.addView(l); parent.addView(box, new LinearLayout.LayoutParams(0, -2, 1)); return v;
     }
 
@@ -353,10 +355,10 @@ public final class MainActivity extends Activity {
     private void showError(Exception error) { ui.post(() -> { setBusy(null); Toast.makeText(this, error.getMessage()==null?"Ошибка соединения":error.getMessage(), Toast.LENGTH_LONG).show(); }); }
     private String speed(long bytes,long ms){return String.format(Locale.US,"%.1f Мбит/с",bytes*8.0/ms/1000.0);} private String bytes(long n){if(n>=1_000_000_000L)return String.format(Locale.US,"%.1f ГБ",n/1e9);if(n>=1_000_000)return String.format(Locale.US,"%.1f МБ",n/1e6);if(n>=1000)return String.format(Locale.US,"%.1f КБ",n/1e3);return n+" Б";}
     private LinearLayout column(){LinearLayout v=new LinearLayout(this);v.setOrientation(LinearLayout.VERTICAL);return v;} private LinearLayout row(){LinearLayout v=new LinearLayout(this);v.setOrientation(LinearLayout.HORIZONTAL);return v;}
-    private TextView text(String value,float sp,int color,boolean bold){TextView v=new TextView(this);v.setText(value);v.setTextSize(sp);v.setTextColor(color);v.setTypeface(Typeface.create("sans",bold?Typeface.BOLD:Typeface.NORMAL));v.setIncludeFontPadding(false);v.setLineSpacing(0,1.1f);return v;}
+    private TextView text(String value,float sp,int color,boolean bold){TextView v=new TextView(this);v.setText(value);v.setTextSize(sp);v.setTextColor(color);v.setTypeface(Typeface.create("sans-serif",bold?Typeface.BOLD:Typeface.NORMAL));v.setIncludeFontPadding(false);v.setLineSpacing(0,1.15f);return v;}
     private TextView pill(String value,int bg,int fg){TextView v=text(value,10,fg,true);v.setGravity(Gravity.CENTER);v.setPadding(dp(11),dp(7),dp(11),dp(7));v.setBackground(round(bg,99,0,0));return v;}
     private Button smallButton(String value){Button b=new Button(this);b.setText(value);b.setTextSize(11);b.setTextColor(Color.WHITE);b.setAllCaps(false);b.setTypeface(Typeface.DEFAULT,Typeface.BOLD);b.setPadding(dp(13),0,dp(13),0);b.setMinHeight(0);b.setMinimumHeight(0);b.setBackground(round(INK,13,0,0));return b;}
-    private GradientDrawable glass(int radius){return round(Color.argb(205,255,255,255),radius,1,Color.rgb(231,223,216));} private GradientDrawable round(int color,int radius,int stroke,int strokeColor){GradientDrawable g=new GradientDrawable();g.setColor(color);g.setCornerRadius(dp(radius));if(stroke>0)g.setStroke(dp(stroke),strokeColor);return g;}
+    private GradientDrawable glass(int radius){return round(SURFACE,radius,1,Color.rgb(219,210,199));} private GradientDrawable round(int color,int radius,int stroke,int strokeColor){GradientDrawable g=new GradientDrawable();g.setColor(color);g.setCornerRadius(dp(radius));if(stroke>0)g.setStroke(dp(stroke),strokeColor);return g;}
     private LinearLayout.LayoutParams lp(int w,int h,float weight){return new LinearLayout.LayoutParams(w,h,weight);} private LinearLayout.LayoutParams matchWrap(){return new LinearLayout.LayoutParams(-1,-2);} private int dp(float value){return Math.round(value*getResources().getDisplayMetrics().density);}
 
     @Override protected void onDestroy() { ui.removeCallbacksAndMessages(null); io.shutdown(); super.onDestroy(); }
