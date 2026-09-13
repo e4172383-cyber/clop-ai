@@ -2,7 +2,7 @@ import dns from 'node:dns/promises';
 import { SMTPServer } from 'smtp-server';
 import { simpleParser } from 'mailparser';
 import nodemailer from 'nodemailer';
-import { MAIL_MAX_ATTACHMENT_BYTES, MAIL_PUBLIC_DOMAIN, deliverExternal, mailboxByAddress, publicAddress, recordExternalSent, shortAddress, updateOutboundStatus } from './clop-mail.js';
+import { MAIL_MAX_ATTACHMENT_BYTES, MAIL_PUBLIC_DOMAIN, deliverExternalBatch, mailboxByAddress, publicAddress, recordExternalSent, shortAddress, updateOutboundStatus } from './clop-mail.js';
 
 const MAX_MESSAGE_BYTES = 25 * 1024 * 1024;
 let server = null;
@@ -37,13 +37,15 @@ export function startMailSmtp({ port = Number(process.env.SMTP_PORT || 0), host 
           filename: item.filename, contentType: item.contentType, size: item.size, content: item.content,
         }));
         if (attachments.some((item) => item.size > MAIL_MAX_ATTACHMENT_BYTES)) throw smtpError('Attachment too large', 552);
-        const delivered = [];
-        for (const target of session.envelope.rcptTo) {
-          const result = await deliverExternal({ from, to: target.address, subject, text, attachments });
-          if (!result.ok) throw smtpError(result.reason === 'recipient_storage' ? 'Mailbox storage full' : 'Mailbox unavailable', result.reason === 'recipient_storage' ? 452 : 550);
-          delivered.push(result);
-        }
-        for (const item of delivered) await notify?.(item.message, item.recipient);
+        const result = await deliverExternalBatch({
+          from,
+          recipients: session.envelope.rcptTo.map((target) => target.address),
+          subject,
+          text,
+          attachments,
+        });
+        if (!result.ok) throw smtpError(result.reason === 'recipient_storage' ? 'Mailbox storage full' : 'Mailbox unavailable', result.reason === 'recipient_storage' ? 452 : 550);
+        for (const item of result.delivered) await notify?.(item.message, item.recipient);
         callback();
       } catch (error) {
         callback(error.responseCode ? error : smtpError('Message rejected', 451));
@@ -98,7 +100,10 @@ export async function sendInternetMail({ fromUser, from, to, subject, text, atta
     const transport = nodemailer.createTransport({
       host, port: 25, secure: false, name: MAIL_PUBLIC_DOMAIN,
       connectionTimeout: 15_000, greetingTimeout: 15_000, socketTimeout: 30_000,
-      tls: { rejectUnauthorized: false },
+      // Nodemailer upgrades with STARTTLS when the receiving MX offers it.
+      // Keep normal certificate validation enabled; accepting an arbitrary
+      // certificate would expose outbound mail to interception.
+      requireTLS: false,
     });
     try {
       const info = await transport.sendMail({

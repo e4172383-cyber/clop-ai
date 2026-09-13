@@ -44,7 +44,14 @@ export function parseCookies(req) {
   for (const part of header.split(';')) {
     const idx = part.indexOf('=');
     if (idx === -1) continue;
-    out[part.slice(0, idx).trim()] = decodeURIComponent(part.slice(idx + 1).trim());
+    const name = part.slice(0, idx).trim();
+    if (!name) continue;
+    try {
+      out[name] = decodeURIComponent(part.slice(idx + 1).trim());
+    } catch {
+      // A malformed percent escape in an untrusted Cookie header must not
+      // turn a single unauthenticated request into an uncaught exception.
+    }
   }
   return out;
 }
@@ -56,5 +63,14 @@ export function sessionUserId(req) {
 
 export function setSessionCookie(res, userId) {
   const token = signSession(userId);
-  res.setHeader('Set-Cookie', `${SESSION_COOKIE}=${encodeURIComponent(token)}; Max-Age=${Math.floor(SESSION_MAX_AGE_MS / 1000)}; Path=/; HttpOnly; SameSite=Lax`);
+  res.setHeader('Set-Cookie', `${SESSION_COOKIE}=${encodeURIComponent(token)}; Max-Age=${Math.floor(SESSION_MAX_AGE_MS / 1000)}; Path=/; HttpOnly; SameSite=Lax${secureCookieAttribute()}`);
+}
+
+export function clearSessionCookie(res) {
+  res.setHeader('Set-Cookie', `${SESSION_COOKIE}=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax${secureCookieAttribute()}`);
+}
+
+function secureCookieAttribute() {
+  const publicUrl = String(process.env.PUBLIC_URL || process.env.SELF_URL || '').trim();
+  return process.env.NODE_ENV === 'production' || /^https:\/\//i.test(publicUrl) ? '; Secure' : '';
 }

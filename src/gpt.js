@@ -33,7 +33,7 @@ function transcript(chat, prompt) {
  * (например gpt-5.6-terra). Держит контекст через resume по thread_id,
  * при потере сессии — досылает историю текстом заново.
  */
-export async function ask({ chat, modelCli, prompt, onDelta, fixedEffort, hideIdentity, identityTitle, fast, images, signal }) {
+export async function ask({ chat, modelCli, prompt, onDelta, fixedEffort, hideIdentity, identityTitle, fast, images, signal, runImpl }) {
   const started = Date.now();
   const threadId = chat.gptThreadId;
   const job = {
@@ -52,15 +52,24 @@ export async function ask({ chat, modelCli, prompt, onDelta, fixedEffort, hideId
   console.log(`[gpt] -> модель=${modelCli} эффорт=${fixedEffort || 'н/д'} чат=${chat.id} `
     + `resume=${Boolean(threadId)} где=${домаЛи ? 'ретранслятор' : 'свой процесс'}`);
 
-  const res = домаЛи ? await relay.run(job, onDelta, signal) : await runJob(job, onDelta, signal);
+  const runner = runImpl || (домаЛи ? relay.run : runJob);
+  let res = await runner(job, onDelta, signal);
+  if (!res.ok && !signal?.aborted && transientConnectionFailure(res)) {
+    console.warn(`[gpt] временный сетевой сбой чат=${chat.id}; один повтор`);
+    await new Promise((resolve) => setTimeout(resolve, 750));
+    if (!signal?.aborted) res = await runner(job, onDelta, signal);
+  }
 
-  if (!res.text && !res.ok) {
+  // Codex can emit an intermediate agent_message before a network error or
+  // timeout. That text is not a completed answer and must never be billed or
+  // shown to the user as if the requested code had been delivered.
+  if (!res.ok) {
     const reason = res.errMsg || res.error || (res.stderr || '').trim().split('\n').slice(-1)[0] || `exit ${res.code}`;
     // Полный вывод CLI в лог: по одной строке причину не отличить —
     // истёкший вход, нехватка прав и сетевой сбой выглядят одинаково
     console.error(`[gpt] <- ОШИБКА code=${res.code} errMsg=${res.errMsg || '—'}`);
     if (res.stderr) console.error(`[gpt] stderr: ${String(res.stderr).slice(0, 1500)}`);
-    return { ok: false, error: reason, durationMs: Date.now() - started };
+    return { ok: false, error: publicError(reason), durationMs: Date.now() - started };
   }
   const text = (res.text || '').trim();
   if (!text) return { ok: false, error: 'пустой ответ модели', durationMs: Date.now() - started };
@@ -80,6 +89,18 @@ export async function ask({ chat, modelCli, prompt, onDelta, fixedEffort, hideId
     durationMs: Date.now() - started,
     stopReason: null,
   };
+}
+
+export function transientConnectionFailure(result) {
+  const reason = String(result?.errMsg || result?.error || result?.stderr || '');
+  return !/aborted|cancelled|unauthorized|invalid_grant|rate.?limit|quota|not supported/iu.test(reason)
+    && /EAI_AGAIN|ENETUNREACH|ECONNRESET|ECONNREFUSED|ETIMEDOUT|fetch failed|network|internet|connection (?:reset|closed|failed)|temporarily unavailable/iu.test(reason);
+}
+
+function publicError(reason) {
+  if (/^timeout$/i.test(reason)) return 'Модель не завершила ответ за 10 минут. Лимит не списан; попробуйте разбить большую задачу на части.';
+  if (transientConnectionFailure({ error: reason })) return 'Временный сбой сети между сервером и моделью. Лимит не списан; попробуйте ещё раз.';
+  return String(reason || 'Модель временно недоступна.').slice(0, 300);
 }
 
 /* Здоровье GPT-пути: на сервере считаем по ретранслятору, а не по своему CLI —

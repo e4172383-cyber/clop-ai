@@ -4,14 +4,34 @@ import path from 'node:path';
 const root = path.resolve(import.meta.dirname, '..');
 const sourcePath = path.join(root, 'src', 'public', 'download.html');
 const outputDir = path.join(root, 'docs');
-const releaseBase = 'https://github.com/e4172383-cyber/clop-ai/releases/download/v2.4.3';
+const releasesBase = 'https://github.com/e4172383-cyber/clop-ai/releases/download';
 const releasePage = 'https://github.com/e4172383-cyber/clop-ai/releases/latest';
 const apiBase = 'https://clop.195-201-169-74.sslip.io';
+
+export function releaseTagForAsset(name) {
+  const desktopVersion = String(name).match(/^Clop-Code-(?:Setup-)?(\d+\.\d+\.\d+)/)?.[1];
+  if (desktopVersion) return `v${desktopVersion}`;
+  if (name === 'Clop-AI-Mobile-1.0.7.apk') return 'v2.4.1';
+  const mobile = /^Clop-VPN-Mobile-(\d+\.\d+\.\d+-beta\.\d+)\.apk$/.exec(name);
+  if (mobile) return `vpn-mobile-v${mobile[1]}`;
+  const desktopVpn = /^Clop-VPN-(?:Setup-)?(\d+\.\d+\.\d+-beta\.\d+)(?:-linux-x64)?\.(?:exe|tar\.xz)$/.exec(name);
+  if (desktopVpn) return `vpn-v${desktopVpn[1]}`;
+  const vpnVersion = String(name).match(/^Clop-VPN-(?:Setup-)?(\d+\.\d+\.\d+-beta\.\d+)/)?.[1];
+  if (vpnVersion) return `vpn-v${vpnVersion}`;
+  throw new Error(`No release tag configured for ${name}`);
+}
+
+function releaseUrl(name) {
+  return `${releasesBase}/${releaseTagForAsset(name)}/${encodeURIComponent(name)}`;
+}
 
 let html = fs.readFileSync(sourcePath, 'utf8');
 
 html = html
-  .replaceAll('href="/downloads/', `href="${releaseBase}/`)
+  .replace(/href="\/downloads\/([^"?#]+)"/g, (_match, encodedName) => {
+    const name = decodeURIComponent(encodedName);
+    return `href="${releaseUrl(name)}"`;
+  })
   .replaceAll('href="/chat#bots"', 'href="#service-status"')
   .replaceAll('href="/chat#iphone"', `href="${apiBase}/chat#iphone"`)
   .replaceAll('href="/chat#remote"', 'href="#service-status"')

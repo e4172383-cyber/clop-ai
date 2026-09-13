@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { redisClient } from './store.js';
 import { PUBLIC_URL } from './config.js';
 import { hostingQuota, hostingUsage } from './hosting.js';
@@ -21,6 +22,7 @@ const IDX = (uid) => `clop:usites:${uid}`;
 // Без Redis (локальный запуск) сайты живут в памяти процесса
 const mem = new Map();
 const memIdx = new Map();
+const userMutations = new Map();
 
 export const MAX_SITE_BYTES = 64 * 1024 * 1024;
 export const FREE_SITES_PER_USER = 3;
@@ -51,7 +53,17 @@ const TYPES = {
 };
 export const typeOf = (path) => TYPES[String(path).split('.').pop().toLowerCase()] || 'text/plain; charset=utf-8';
 
-const slugId = () => Math.random().toString(36).slice(2, 9);
+const slugId = () => crypto.randomBytes(6).toString('hex');
+
+function serializeUserMutation(userId, task) {
+  const key = String(userId);
+  const previous = userMutations.get(key) || Promise.resolve();
+  const current = previous.catch(() => undefined).then(task);
+  userMutations.set(key, current);
+  return current.finally(() => {
+    if (userMutations.get(key) === current) userMutations.delete(key);
+  });
+}
 
 // Пути приходят от модели, поэтому нормализуем жёстко: никаких выходов вверх,
 // абсолютных путей и обратных слэшей
@@ -67,7 +79,7 @@ async function readSite(slug) {
   if (!r) return mem.get(slug) || null;
   try { return (await r.get(KEY(slug))) || null; } catch (e) {
     console.error('[sites] чтение не удалось', e.message);
-    return null;
+    throw e;
   }
 }
 
@@ -76,20 +88,32 @@ async function writeSite(slug, site) {
   if (!r) { mem.set(slug, site); return true; }
   try { await r.set(KEY(slug), site); return true; } catch (e) {
     console.error('[sites] запись не удалась', e.message);
-    return false;
+    throw e;
   }
+}
+
+async function deleteSite(slug) {
+  const r = redisClient();
+  if (!r) { mem.delete(slug); return; }
+  await r.del(KEY(slug));
 }
 
 async function readIndex(uid) {
   const r = redisClient();
   if (!r) return memIdx.get(String(uid)) || [];
-  try { return (await r.get(IDX(uid))) || []; } catch { return []; }
+  try { return (await r.get(IDX(uid))) || []; } catch (e) {
+    console.error('[sites] чтение индекса не удалось', e.message);
+    throw e;
+  }
 }
 
 async function writeIndex(uid, list) {
   const r = redisClient();
   if (!r) { memIdx.set(String(uid), list); return; }
-  try { await r.set(IDX(uid), list); } catch (e) { console.error('[sites] индекс', e.message); }
+  try { await r.set(IDX(uid), list); } catch (e) {
+    console.error('[sites] запись индекса не удалась', e.message);
+    throw e;
+  }
 }
 
 /* Ищем в ответе модели готовый сайт.
@@ -127,7 +151,7 @@ function titleOf(html) {
   return (m ? m[1] : '').trim() || 'Сайт';
 }
 
-export async function publish(userId, site, planKey = 'free') {
+async function publishUnlocked(userId, site, planKey = 'free') {
   const total = Object.values(site.files).reduce((n, c) => n + Buffer.byteLength(c, 'utf8'), 0);
   if (total > MAX_SITE_BYTES) return { ok: false, error: 'сайт слишком большой' };
 
@@ -142,19 +166,31 @@ export async function publish(userId, site, planKey = 'free') {
     return { ok: false, error: `Достигнут лимит: ${limit} сайтов на вашем тарифе. Удалите старый сайт через /sites и повторите публикацию.` };
   }
 
-  let slug = slugId();
-  for (let i = 0; i < 5 && (await readSite(slug)); i++) slug = slugId();
+  let slug = '';
+  for (let i = 0; i < 20; i += 1) {
+    const candidate = slugId();
+    if (!(await readSite(candidate))) { slug = candidate; break; }
+  }
+  if (!slug) return { ok: false, error: 'не удалось выделить адрес сайта' };
 
   const title = titleOf(site.files[site.entry]);
-  const ok = await writeSite(slug, {
+  await writeSite(slug, {
     owner: String(userId), entry: site.entry, files: site.files,
     title, ts: Date.now(), bytes: total,
   });
-  if (!ok) return { ok: false, error: 'не удалось сохранить сайт' };
 
   list.unshift({ slug, title, ts: Date.now(), bytes: total });
-  await writeIndex(userId, list);
+  try {
+    await writeIndex(userId, list);
+  } catch (error) {
+    await deleteSite(slug).catch(() => undefined);
+    throw error;
+  }
   return { ok: true, slug, url: `${PUBLIC_URL}/s/${slug}`, title, bytes: total, limit, count: list.length, hosting: hostingUsage(used + total, planKey) };
+}
+
+export function publish(userId, site, planKey = 'free') {
+  return serializeUserMutation(userId, () => publishUnlocked(userId, site, planKey));
 }
 
 export async function getFile(slug, path) {
@@ -179,26 +215,45 @@ export async function listSites(userId) {
   }));
 }
 
-export async function renameSite(userId, slug, nextTitle) {
+async function renameSiteUnlocked(userId, slug, nextTitle) {
   const title = String(nextTitle || '').replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
   if (!title) return { ok: false, error: 'Введите название сайта.' };
   const site = await readSite(slug);
   if (!site || site.owner !== String(userId)) return { ok: false, error: 'Сайт не найден.' };
+  const previousTitle = site.title;
   site.title = title;
-  if (!(await writeSite(slug, site))) return { ok: false, error: 'Не удалось сохранить название.' };
+  await writeSite(slug, site);
   const list = await readIndex(userId);
   const item = list.find((entry) => entry.slug === slug);
   if (item) item.title = title;
-  await writeIndex(userId, list);
+  try {
+    await writeIndex(userId, list);
+  } catch (error) {
+    site.title = previousTitle;
+    await writeSite(slug, site).catch(() => undefined);
+    throw error;
+  }
   return { ok: true, slug, title };
 }
 
-export async function removeSite(userId, slug) {
+export function renameSite(userId, slug, nextTitle) {
+  return serializeUserMutation(userId, () => renameSiteUnlocked(userId, slug, nextTitle));
+}
+
+async function removeSiteUnlocked(userId, slug) {
   const site = await readSite(slug);
   if (!site || site.owner !== String(userId)) return false;
-  const r = redisClient();
-  if (r) { try { await r.del(KEY(slug)); } catch (e) { console.error('[sites] удаление', e.message); } }
-  else mem.delete(slug);
-  await writeIndex(userId, (await readIndex(userId)).filter((s) => s.slug !== slug));
+  const previousIndex = await readIndex(userId);
+  await deleteSite(slug);
+  try {
+    await writeIndex(userId, previousIndex.filter((s) => s.slug !== slug));
+  } catch (error) {
+    await writeSite(slug, site).catch(() => undefined);
+    throw error;
+  }
   return true;
+}
+
+export function removeSite(userId, slug) {
+  return serializeUserMutation(userId, () => removeSiteUnlocked(userId, slug));
 }

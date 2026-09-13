@@ -467,7 +467,7 @@ export const corporatePlansReady = () => Boolean(CORPORATE_LIMITS);
 
 export const MAX_CONTEXT_MESSAGES = 24;
 export const MAX_CHATS = 30;
-export const REQUEST_TIMEOUT_MS = 5 * MINUTE;
+export const REQUEST_TIMEOUT_MS = 10 * MINUTE;
 
 // --- Генерация изображений (бета) ---
 // Сейчас доступен только один генератор — GPT Image 2 (через Codex CLI, тот

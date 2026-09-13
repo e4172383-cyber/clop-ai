@@ -1,6 +1,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { addCounters, planFor, resetPeriod, WEEK_MS } from './plans.mjs';
@@ -164,11 +165,35 @@ function json(res, status, body) {
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let raw = '';
+    let settled = false;
     req.setEncoding('utf8');
-    req.on('data', (chunk) => { raw += chunk; if (raw.length > 50_000) reject(new Error('body too large')); });
-    req.on('end', () => { try { resolve(raw ? JSON.parse(raw) : {}); } catch { reject(new Error('invalid json')); } });
-    req.on('error', reject);
+    req.on('data', (chunk) => {
+      if (settled) return;
+      raw += chunk;
+      if (raw.length > 50_000) {
+        settled = true;
+        raw = '';
+        reject(new Error('body too large'));
+      }
+    });
+    req.on('end', () => {
+      if (settled) return;
+      settled = true;
+      try { resolve(raw ? JSON.parse(raw) : {}); } catch { reject(new Error('invalid json')); }
+    });
+    req.on('error', (error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    });
   });
+}
+
+function authorized(value) {
+  if (!SECRET) return false;
+  const given = Buffer.from(String(value || ''), 'utf8');
+  const expected = Buffer.from(`Bearer ${SECRET}`, 'utf8');
+  return given.length === expected.length && crypto.timingSafeEqual(given, expected);
 }
 
 loadState();
@@ -178,7 +203,7 @@ setInterval(() => updateTraffic().catch((error) => console.error('[traffic]', er
 http.createServer(async (req, res) => {
   const url = new URL(req.url || '/', 'http://vpn-control');
   if (url.pathname === '/health') return json(res, 200, { ok: true, peers: Object.keys(state.peers).length, interface: IFACE });
-  if (!SECRET || req.headers.authorization !== `Bearer ${SECRET}`) return json(res, 401, { ok: false, error: 'нет доступа' });
+  if (!authorized(req.headers.authorization)) return json(res, 401, { ok: false, error: 'нет доступа' });
   try {
     await updateTraffic();
     const match = /^\/peers\/([^/]+)(?:\/status)?$/.exec(url.pathname);

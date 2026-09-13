@@ -62,6 +62,33 @@ test('internal and internet mail are stored, readable and removable by their own
   assert.equal(mail.inbox(recipient).length, 1);
 });
 
+test('external multi-recipient delivery validates the full batch before storing any copy', async () => {
+  const first = store.getUser({ id: 81004, first_name: 'Batch First' });
+  const second = store.getUser({ id: 81005, first_name: 'Batch Second' });
+  mail.createMailbox(first, 'batch-first', 'free');
+  mail.createMailbox(second, 'batch-second', 'free');
+
+  const refused = await mail.deliverExternalBatch({
+    from: 'sender@example.com',
+    recipients: ['batch-first@clop', 'missing@clop'],
+    subject: 'Atomic',
+    text: 'Must not be partially delivered',
+  });
+  assert.equal(refused.ok, false);
+  assert.equal(mail.inbox(first).length, 0);
+
+  const delivered = await mail.deliverExternalBatch({
+    from: 'sender@example.com',
+    recipients: ['batch-first@clop', 'batch-second@clop'],
+    subject: 'Atomic',
+    text: 'Delivered once to both recipients',
+  });
+  assert.equal(delivered.ok, true);
+  assert.equal(delivered.delivered.length, 2);
+  assert.equal(mail.inbox(first).length, 1);
+  assert.equal(mail.inbox(second).length, 1);
+});
+
 test.after(async () => {
   await fs.rm(temp, { recursive: true, force: true });
 });

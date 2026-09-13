@@ -1,6 +1,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { BILLING_VERSION } from './token-accounting.js';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -38,7 +39,7 @@ import { addOfferUsage, claimOffer, grantOffer, offerActiveFor, offerState } fro
 import { giveawayState, joinGiveaway } from './giveaway.js';
 import { getBotUsername } from './botinfo.js';
 import { createCode, peekClaimed, consumeCode } from './weblogin.js';
-import { setSessionCookie, sessionUserId } from './webchat.js';
+import { clearSessionCookie, setSessionCookie, sessionUserId } from './webchat.js';
 import { extractFiles, filesForJson } from './files.js';
 import { buildZip } from './zip.js';
 import { listApiKeys, createApiKey, deleteApiKey, proxyApiRequest, cloudEnabled } from './cloud.js';
@@ -70,7 +71,7 @@ function checkBasicAuth(req) {
   const header = req.headers['authorization'] || '';
   if (!header.startsWith('Basic ')) return false;
   const [, pass] = Buffer.from(header.slice(6), 'base64').toString('utf8').split(':');
-  return pass === WEB_PASSWORD;
+  return safeSecretEquals(pass, WEB_PASSWORD);
 }
 
 // Беседы веб-сайта (hm550863.webhm.cloud) — отдельные от Telegram-бота,
@@ -137,17 +138,30 @@ function readJsonBody(req, maxBytes = 200_000) {
   return new Promise((resolve, reject) => {
     let size = 0;
     const chunks = [];
+    let settled = false;
     req.on('data', (c) => {
+      if (settled) return;
       size += c.length;
-      if (size > maxBytes) { req.destroy(); reject(new Error('body too large')); return; }
+      if (size > maxBytes) {
+        settled = true;
+        chunks.length = 0;
+        reject(new Error('body too large'));
+        return;
+      }
       chunks.push(c);
     });
     req.on('end', () => {
+      if (settled) return;
+      settled = true;
       const raw = Buffer.concat(chunks).toString('utf8').trim();
       if (!raw) return resolve({});
       try { resolve(JSON.parse(raw)); } catch { reject(new Error('invalid json')); }
     });
-    req.on('error', reject);
+    req.on('error', (error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    });
   });
 }
 
@@ -183,7 +197,7 @@ const DESKTOP_DOWNLOADS = new Set([
   'Clop-Code-Setup-2.5.2.exe',
   'Clop-Code-Setup-2.5.3.exe',
   'Clop-Code-Setup-2.5.7.exe',
-  'Clop-VPN-Setup-1.0.0-beta.4.exe',
+  'Clop-VPN-Setup-1.0.0-beta.5.exe',
   'Clop-Code-2.0.6-linux-x64.tar.xz',
   'Clop-Code-2.0.9-linux-x64.tar.xz',
   'Clop-Code-2.0.10-linux-x64.tar.xz',
@@ -202,8 +216,8 @@ const DESKTOP_DOWNLOADS = new Set([
   'Clop-Code-2.5.2-linux-x64.tar.xz',
   'Clop-Code-2.5.3-linux-x64.tar.xz',
   'Clop-Code-2.5.7-linux-x64.tar.xz',
-  'Clop-VPN-1.0.0-beta.4-linux-x64.tar.xz',
-  'Clop-VPN-Mobile-1.0.0-beta.1.apk',
+  'Clop-VPN-1.0.0-beta.5-linux-x64.tar.xz',
+  'Clop-VPN-Mobile-1.0.0-beta.2.apk',
   'Clop-AI-Mobile-1.0.0.apk',
   'Clop-AI-Mobile-1.0.1.apk',
   'Clop-AI-Mobile-1.0.2.apk',
@@ -220,12 +234,33 @@ function releaseTagForAsset(name) {
   if (desktopVersion) return `v${desktopVersion}`;
   // Android 1.0.7 is published in the v2.4.1 release.
   if (name === 'Clop-AI-Mobile-1.0.7.apk') return 'v2.4.1';
-  if (name === 'Clop-VPN-Mobile-1.0.0-beta.1.apk') return 'vpn-mobile-v1.0.0-beta.1';
+  const mobileVpn = /^Clop-VPN-Mobile-(\d+\.\d+\.\d+-beta\.\d+)\.apk$/.exec(name);
+  if (mobileVpn) return `vpn-mobile-v${mobileVpn[1]}`;
+  const desktopVpn = /^Clop-VPN-(?:Setup-)?(\d+\.\d+\.\d+-beta\.\d+)(?:-linux-x64)?\.(?:exe|tar\.xz)$/.exec(name);
+  if (desktopVpn) return `vpn-v${desktopVpn[1]}`;
   return 'v2.4.1';
 }
 
 function publicDownloadUrl(name) {
   return `${PUBLIC_URL.replace(/\/$/, '')}/downloads/${encodeURIComponent(name)}`;
+}
+
+export async function pipeWebResponseBody(body, destination, signal) {
+  await pipeline(Readable.fromWeb(body), destination, { signal });
+}
+
+function streamFile(res, full, options) {
+  void pipeline(fs.createReadStream(full, options), res).catch((error) => {
+    if (error?.code === 'ERR_STREAM_PREMATURE_CLOSE' || res.destroyed) return;
+    console.error('[web] file stream failed', path.basename(full), error?.message || error);
+    if (!res.headersSent) {
+      res.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('file temporarily unavailable');
+    } else {
+      res.destroy();
+    }
+  });
+  return undefined;
 }
 
 async function proxyReleaseAsset(req, res, name) {
@@ -264,9 +299,16 @@ async function proxyReleaseAsset(req, res, name) {
     }
     res.writeHead(upstream.status, headers);
     if (req.method === 'HEAD' || !upstream.body) return res.end();
-    return Readable.fromWeb(upstream.body).pipe(res);
+    // pipe() does not make the source stream's asynchronous errors part of
+    // this try/catch. When a user cancelled a large installer download,
+    // AbortController rejected the web stream after pipe() had returned and
+    // Node treated it as an unhandled `error`, terminating the whole service.
+    // pipeline() owns both streams and rejects here, where cancellation is
+    // handled as the normal end of an abandoned request.
+    await pipeWebResponseBody(upstream.body, res, controller.signal);
+    return undefined;
   } catch (error) {
-    if (error?.name === 'AbortError') return;
+    if (error?.name === 'AbortError' || error?.code === 'ERR_STREAM_PREMATURE_CLOSE' || controller.signal.aborted) return;
     console.error('[download] proxy failed', name, error?.message || error);
     if (!res.headersSent) res.writeHead(502, { 'content-type': 'text/plain; charset=utf-8' });
     return res.end('download temporarily unavailable');
@@ -302,11 +344,11 @@ function serveDesktopFile(req, res, name, { download = false } = {}) {
       ...headers,
     });
     if (req.method === 'HEAD') return res.end();
-    return fs.createReadStream(full, { start, end }).pipe(res);
+    return streamFile(res, full, { start, end });
   }
   res.writeHead(200, { 'content-type': contentType, 'content-length': stat.size, ...headers });
   if (req.method === 'HEAD') return res.end();
-  return fs.createReadStream(full).pipe(res);
+  return streamFile(res, full);
 }
 
 // Публичный срез лимитов для интерфейсов: проценты и время сброса нужны для
@@ -393,29 +435,28 @@ function availableModelOf(u, requestedKey) {
 
 // Общий секрет с clop-cloud-api (та же переменная, что бот шлёт наружу в
 // cloud.js как CLOUD_INTERNAL_SECRET — сверяем в обе стороны одним значением)
+function safeSecretEquals(given, expected) {
+  if (!expected) return false;
+  const a = Buffer.from(String(given || ''), 'utf8');
+  const b = Buffer.from(String(expected), 'utf8');
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
 function checkInternalSecret(req) {
   const header = req.headers['x-internal-secret'] || '';
   const real = process.env.CLOUD_INTERNAL_SECRET || '';
-  if (!real) return false;
-  const a = Buffer.from(String(header).padEnd(real.length, '\0'));
-  const b = Buffer.from(real.padEnd(real.length, '\0'));
-  return header && a.length === b.length && crypto.timingSafeEqual(a, b);
+  return safeSecretEquals(header, real);
 }
 
 function checkRecoverySecret(req) {
   const header = req.headers['x-recovery-secret'] || '';
-  if (!WEB_PASSWORD) return false;
-  const a = Buffer.from(String(header).padEnd(WEB_PASSWORD.length, '\0'));
-  const b = Buffer.from(WEB_PASSWORD.padEnd(WEB_PASSWORD.length, '\0'));
-  return header && a.length === b.length && crypto.timingSafeEqual(a, b);
+  return safeSecretEquals(header, WEB_PASSWORD);
 }
 
 function checkSiteKey(req) {
   const header = req.headers['x-site-key'] || '';
   const real = getSiteKey();
-  const a = Buffer.from(String(header).padEnd(real.length, '\0'));
-  const b = Buffer.from(real.padEnd(real.length, '\0'));
-  return header && a.length === b.length && crypto.timingSafeEqual(a, b);
+  return safeSecretEquals(header, real);
 }
 
 function buildStats() {
@@ -554,7 +595,13 @@ function buildUserDetail(id) {
 
 export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } = {}) {
   const server = http.createServer((req, res) => {
-    const url = new URL(req.url, 'http://localhost');
+    try {
+      res.setHeader('x-content-type-options', 'nosniff');
+      res.setHeader('referrer-policy', 'strict-origin-when-cross-origin');
+      if (process.env.NODE_ENV === 'production' || /^https:\/\//i.test(PUBLIC_URL)) {
+        res.setHeader('strict-transport-security', 'max-age=31536000; includeSubDomains');
+      }
+      const url = new URL(req.url, 'http://localhost');
 
     // Лёгкий пинг для само-разогрева на Render (без пароля, без AI) — просто
     // подтверждает, что процесс жив, ничего не считает и не трогает store
@@ -597,11 +644,11 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           linuxUrl: publicDownloadUrl('Clop-Code-2.5.7-linux-x64.tar.xz'),
         },
         vpn: {
-          version: '1.0.0-beta.4',
-          windowsUrl: publicDownloadUrl('Clop-VPN-Setup-1.0.0-beta.4.exe'),
-          linuxUrl: publicDownloadUrl('Clop-VPN-1.0.0-beta.4-linux-x64.tar.xz'),
-          androidVersion: '1.0.0-beta.1',
-          androidUrl: publicDownloadUrl('Clop-VPN-Mobile-1.0.0-beta.1.apk'),
+          version: '1.0.0-beta.5',
+          windowsUrl: publicDownloadUrl('Clop-VPN-Setup-1.0.0-beta.5.exe'),
+          linuxUrl: publicDownloadUrl('Clop-VPN-1.0.0-beta.5-linux-x64.tar.xz'),
+          androidVersion: '1.0.0-beta.2',
+          androidUrl: publicDownloadUrl('Clop-VPN-Mobile-1.0.0-beta.2.apk'),
           location: 'Germany',
         },
         android: { version: '1.0.7', url: publicDownloadUrl('Clop-AI-Mobile-1.0.7.apk') },
@@ -821,7 +868,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
     if (url.pathname === '/chat') {
       const full = path.join(PUBLIC, 'chat.html');
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-      return fs.createReadStream(full).pipe(res);
+      return streamFile(res, full);
     }
 
     // Файлы устанавливаемого приложения (PWA) обязаны быть публичными: они
@@ -1043,7 +1090,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
             'cache-control': 'private, no-store',
             'x-content-type-options': 'nosniff',
           });
-          return fs.createReadStream(item.path).pipe(res);
+          return streamFile(res, item.path);
         }).catch((e) => sendJson(res, 500, { ok: false, error: String(e.message || e) }));
         return;
       }
@@ -1483,7 +1530,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
         'cache-control': 'public, max-age=3600',
       });
       if (req.method === 'HEAD') return res.end();
-      return fs.createReadStream(full).pipe(res);
+      return streamFile(res, full);
     }
 
     if (url.pathname === '/download' && (req.method === 'GET' || req.method === 'HEAD')) {
@@ -1507,7 +1554,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
       // Область действия service worker должна охватывать весь сайт
       if (url.pathname === '/sw.js') { head['service-worker-allowed'] = '/'; head['cache-control'] = 'no-cache'; }
       res.writeHead(200, head);
-      return fs.createReadStream(full).pipe(res);
+      return streamFile(res, full);
     }
 
     // Шаг 1: сайт просит код → отдаём код и диплинк на бота
@@ -1768,7 +1815,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
           'cache-control': 'private, no-store',
           'x-content-type-options': 'nosniff',
         });
-        return fs.createReadStream(item.path).pipe(res);
+        return streamFile(res, item.path);
       })().catch((e) => sendJson(res, 500, { ok: false, error: String(e.message || e) }));
       return;
     }
@@ -2200,7 +2247,7 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
 
     // Выйти — просто стираем cookie
     if (url.pathname === '/chat/api/logout' && req.method === 'POST') {
-      res.setHeader('Set-Cookie', `clop_session=; Max-Age=0; Path=/`);
+      clearSessionCookie(res);
       return sendJson(res, 200, { ok: true });
     }
     // Собственно сообщение — те же модели, та же сила мышления, тот же лимит,
@@ -2569,11 +2616,19 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
       });
       return;
     }
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      res.writeHead(405, { allow: 'GET, HEAD', 'content-type': 'text/plain; charset=utf-8' });
+      return res.end('method not allowed');
+    }
     const file = url.pathname === '/'
       ? 'index.html'
       : (url.pathname === '/download' ? 'download.html' : url.pathname.replace(/^\/+/, ''));
-    const full = path.join(PUBLIC, file);
-    if (!full.startsWith(PUBLIC) || !fs.existsSync(full)) {
+    const full = path.resolve(PUBLIC, file);
+    const relative = path.relative(PUBLIC, full);
+    const contained = relative && !relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative);
+    let stat = null;
+    try { if (contained) stat = fs.statSync(full); } catch {}
+    if (!contained || !stat?.isFile()) {
       res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
       return res.end('404');
     }
@@ -2586,7 +2641,6 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
     // Service worker обязан отдаваться с корня, иначе его область (scope)
     // окажется уже нужной и установка приложения не сработает
     const isDownload = file.startsWith('downloads/');
-    const stat = fs.statSync(full);
     const extra = full.endsWith('sw.js')
       ? { 'service-worker-allowed': '/', 'cache-control': 'no-cache' }
       : (isDownload ? {
@@ -2608,11 +2662,18 @@ export function startWeb({ reloadEachRequest = false, askModelImpl = askModel } 
         'content-range': `bytes ${start}-${end}/${stat.size}`,
         ...extra,
       });
-      return fs.createReadStream(full, { start, end }).pipe(res);
+      if (req.method === 'HEAD') return res.end();
+      return streamFile(res, full, { start, end });
     }
     res.writeHead(200, { 'content-type': type, 'content-length': stat.size, ...extra });
     if (req.method === 'HEAD') return res.end();
-    fs.createReadStream(full).pipe(res);
+    streamFile(res, full);
+    } catch (error) {
+      console.error('[web] request failed', req.method, req.url, error?.message || error);
+      if (res.destroyed) return;
+      if (res.headersSent) return res.destroy();
+      return sendJson(res, 500, { ok: false, error: 'internal server error' });
+    }
   });
   server.listen(WEB_PORT, WEB_HOST, () => {
     console.log(`[web] панель: http://${WEB_HOST}:${WEB_PORT}`);

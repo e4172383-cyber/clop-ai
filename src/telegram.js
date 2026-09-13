@@ -128,7 +128,9 @@ export async function sendMessage(chatId, text, extra = {}) {
     try {
       last = await api('sendMessage', params);
     } catch (e) {
-      // фолбэк — без разметки
+      // Retry only when Telegram explicitly rejected Markdown. A network
+      // timeout is ambiguous: the first message may have been delivered.
+      if (e.telegram?.error_code !== 400 || !/parse entities/i.test(e.telegram?.description || '')) throw e;
       last = await api('sendMessage', { ...params, text: parts[i], parse_mode: undefined });
     }
   }
@@ -141,7 +143,8 @@ export async function editMessage(chatId, messageId, text, extra = {}) {
       chat_id: chatId, message_id: messageId, text: fixMarkdown(text),
       parse_mode: 'Markdown', link_preview_options: { is_disabled: true }, ...extra,
     });
-  } catch {
+  } catch (error) {
+    if (error.telegram?.error_code !== 400 || !/parse entities/i.test(error.telegram?.description || '')) return null;
     try {
       return await api('editMessageText', { chat_id: chatId, message_id: messageId, text, ...extra });
     } catch { return null; }

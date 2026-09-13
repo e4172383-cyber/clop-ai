@@ -1,0 +1,57 @@
+name: Clop CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: clop-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [root, desktop, vpn-desktop, vpn-server]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            desktop/package-lock.json
+            vpn-desktop/package-lock.json
+      - name: Install dependencies
+        if: matrix.project != 'vpn-server'
+        working-directory: ${{ matrix.project == 'root' && '.' || matrix.project }}
+        run: npm ci
+      - name: Run tests
+        working-directory: ${{ matrix.project == 'root' && '.' || matrix.project }}
+        run: npm test
+      - name: Audit production dependencies
+        if: matrix.project == 'root'
+        run: npm audit --omit=dev --audit-level=high
+
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: vpn-mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - name: Build and test Android app
+        run: bash ./gradlew test assembleDebug --no-daemon

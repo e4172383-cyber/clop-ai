@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { once } from 'node:events';
+import { PassThrough } from 'node:stream';
 import test, { after, before, beforeEach } from 'node:test';
 
 // Конфигурация читается при импорте модулей, поэтому тестовый порт и секреты
@@ -130,6 +131,70 @@ test('serves only the fixed workspace stylesheet publicly with safe headers', as
   const protectedResponse = await fetch(baseUrl + '/');
   assert.equal(protectedResponse.status, 401, 'the dashboard remains protected by Basic Auth');
   await protectedResponse.text();
+});
+
+test('cancelled web streams reject through pipeline instead of emitting an unhandled error', async () => {
+  let sourceCancelled = false;
+  const source = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array([1, 2, 3]));
+    },
+    cancel() {
+      sourceCancelled = true;
+    },
+  });
+  const destination = new PassThrough();
+  destination.resume();
+  const controller = new AbortController();
+  const transfer = web.pipeWebResponseBody(source, destination, controller.signal);
+  controller.abort();
+  await assert.rejects(transfer, (error) => error?.name === 'AbortError' || error?.code === 'ABORT_ERR');
+  assert.equal(sourceCancelled, true);
+});
+
+test('malformed cookies are ignored and session cookies use complete security attributes', () => {
+  const malformed = webchat.parseCookies({ headers: { cookie: 'bad=%; okay=value' } });
+  assert.deepEqual(malformed, { okay: 'value' });
+
+  const headers = new Map();
+  const response = { setHeader: (name, value) => headers.set(name, value) };
+  const previousNodeEnv = process.env.NODE_ENV;
+  try {
+    process.env.NODE_ENV = 'production';
+    webchat.setSessionCookie(response, user.id);
+    assert.match(headers.get('Set-Cookie'), /; Path=\/; HttpOnly; SameSite=Lax; Secure$/);
+    webchat.clearSessionCookie(response);
+    assert.equal(headers.get('Set-Cookie'), 'clop_session=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax; Secure');
+  } finally {
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+  }
+});
+
+test('oversized JSON is rejected without breaking the HTTP service', async () => {
+  const response = await authed('/chat/api/bugs', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ description: 'x'.repeat(210_000), platform: 'audit' }),
+  });
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /body too large/);
+  const health = await fetch(baseUrl + '/health');
+  assert.equal(health.status, 200);
+  assert.equal(await health.text(), 'ok');
+});
+
+test('static fallback rejects non-read methods and traversal-like paths', async () => {
+  const credentials = Buffer.from(':web-test-password').toString('base64');
+  const headers = { authorization: `Basic ${credentials}` };
+  const wrongMethod = await fetch(baseUrl + '/index.html', { method: 'POST', headers });
+  assert.equal(wrongMethod.status, 405);
+  assert.equal(wrongMethod.headers.get('allow'), 'GET, HEAD');
+  await wrongMethod.text();
+
+  const traversal = await fetch(baseUrl + '/..\\package.json', { headers });
+  assert.equal(traversal.status, 404);
+  await traversal.text();
 });
 
 test('/chat/api/plans publishes corporate prices and seats without exposing token pools', async () => {
@@ -316,9 +381,9 @@ test('serves the public desktop release page and resumable installers without da
   assert.match(html, /href="\/chat#iphone"/);
   assert.match(html, /Clop-Code-Setup-2\.5\.7\.exe/);
   assert.match(html, /Clop-Code-2\.5\.7-linux-x64\.tar\.xz/);
-  assert.match(html, /Clop-VPN-Setup-1\.0\.0-beta\.4\.exe/);
-  assert.match(html, /Clop-VPN-1\.0\.0-beta\.4-linux-x64\.tar\.xz/);
-  assert.match(html, /Clop-VPN-Mobile-1\.0\.0-beta\.1\.apk/);
+  assert.match(html, /Clop-VPN-Setup-1\.0\.0-beta\.5\.exe/);
+  assert.match(html, /Clop-VPN-1\.0\.0-beta\.5-linux-x64\.tar\.xz/);
+  assert.match(html, /Clop-VPN-Mobile-1\.0\.0-beta\.2\.apk/);
   assert.match(html, /1250 ГБ в неделю/);
   assert.match(html, /до 500 Мбит\/с/);
   assert.match(html, /Clop-AI-Mobile-1\.0\.7\.apk/);
@@ -329,10 +394,10 @@ test('serves the public desktop release page and resumable installers without da
   const releases = await fetch(baseUrl + '/releases.json');
   assert.equal(releases.status, 200);
   const releaseData = await releases.json();
-  assert.equal(releaseData.vpn.version, '1.0.0-beta.4');
-  assert.match(releaseData.vpn.windowsUrl, /Clop-VPN-Setup-1\.0\.0-beta\.4\.exe$/);
-  assert.equal(releaseData.vpn.androidVersion, '1.0.0-beta.1');
-  assert.match(releaseData.vpn.androidUrl, /Clop-VPN-Mobile-1\.0\.0-beta\.1\.apk$/);
+  assert.equal(releaseData.vpn.version, '1.0.0-beta.5');
+  assert.match(releaseData.vpn.windowsUrl, /Clop-VPN-Setup-1\.0\.0-beta\.5\.exe$/);
+  assert.equal(releaseData.vpn.androidVersion, '1.0.0-beta.2');
+  assert.match(releaseData.vpn.androidUrl, /Clop-VPN-Mobile-1\.0\.0-beta\.2\.apk$/);
   assert.equal(releaseData.desktop.version, '2.5.7');
   assert.match(releaseData.desktop.windowsUrl, /\/downloads\/Clop-Code-Setup-2\.5\.7\.exe$/);
   assert.match(releaseData.desktop.linuxUrl, /\/downloads\/Clop-Code-2\.5\.7-linux-x64\.tar\.xz$/);

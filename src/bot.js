@@ -12,6 +12,8 @@ import { wantsGeneratedImage } from './image-intent.js';
 import { createImageJob, imageJobRecoveryAction, prepareImageJobRetry } from './image-job.js';
 import { addOfferUsage, claimOffer, offerActiveFor, offerState } from './limited-offer.js';
 import { recordProviderResult } from './provider-status.js';
+import { wantsProjectOutput, hasProjectOutput, projectPrompt, continuationPrompt, combineModelUsage } from './project-output.js';
+import { deliverFinalMessage } from './telegram-delivery.js';
 
 const DESKTOP_RELEASE = Object.freeze({
   version: '2.5.7',
@@ -20,7 +22,7 @@ const DESKTOP_RELEASE = Object.freeze({
   linux: 'Clop-Code-2.5.7-linux-x64.tar.xz',
   androidVersion: '1.0.7',
   android: 'Clop-AI-Mobile-1.0.7.apk',
-  vpnAndroid: 'Clop-VPN-Mobile-1.0.0-beta.1.apk',
+  vpnAndroid: 'Clop-VPN-Mobile-1.0.0-beta.2.apk',
 });
 
 // Единая точка входа: Claude-модели идут через Claude CLI, GPT-модели — через
@@ -61,7 +63,13 @@ export async function askModel({ chat, model, effortKey, prompt, onDelta, images
       return result;
     };
 
-    return invokeModel(prompt, onDelta);
+    const projectRequested = client === 'chat' && wantsProjectOutput(prompt);
+    const first = await invokeModel(projectRequested ? projectPrompt(prompt) : prompt, onDelta);
+    if (!projectRequested || !first.ok || hasProjectOutput(first.text)) return first;
+    const second = await invokeModel(continuationPrompt(), onDelta);
+    if (!second.ok) return second;
+    if (!hasProjectOutput(second.text)) return { ok: false, error: 'Модель не выдала запрошенный код. Попробуйте уточнить задачу или выбрать другую модель.' };
+    return combineModelUsage(first, second);
   }, signal);
 }
 import * as sites from './sites.js';
@@ -950,7 +958,6 @@ async function handleAsk(u, chatId, text, images = null) {
   const effort = effortOf(u, model);
 
   const chat = store.activeChat(u);
-  store.pushMessage(chat, 'user', text);
 
   busy.add(u.id);
   await tg.typing(chatId);
@@ -963,14 +970,18 @@ async function handleAsk(u, chatId, text, images = null) {
   } catch { /* без живого превью — не критично, отправим ответ обычным сообщением в конце */ }
 
   let frame = 0, lastEdit = 0, lastSent = '', streamedAny = false, editInFlight = false, pendingShown = null;
+  let finalized = false;
+  let inFlightEdit = Promise.resolve();
 
   const flushEdit = (shown) => {
-    if (!msgId) return;
+    if (!msgId || finalized) return;
     if (editInFlight) { pendingShown = shown; return; }
     editInFlight = true;
-    tg.editMessage(chatId, msgId, shown).finally(() => {
+    inFlightEdit = tg.editMessage(chatId, msgId, shown).catch((error) => {
+      console.warn('[telegram] preview edit failed:', error?.message || error);
+    }).finally(() => {
       editInFlight = false;
-      if (pendingShown != null) { const next = pendingShown; pendingShown = null; flushEdit(next); }
+      if (!finalized && pendingShown != null) { const next = pendingShown; pendingShown = null; flushEdit(next); }
     });
   };
 
@@ -982,6 +993,7 @@ async function handleAsk(u, chatId, text, images = null) {
   const typingTicker = setInterval(() => tg.typing(chatId), 4500);
 
   const onDelta = (full) => {
+    if (finalized) return;
     streamedAny = true;
     if (!msgId) return;
     const now = Date.now();
@@ -1013,8 +1025,9 @@ async function handleAsk(u, chatId, text, images = null) {
   };
 
   const finish = async (finalText) => {
-    if (msgId) { try { await tg.editMessage(chatId, msgId, finalText); return; } catch {} }
-    await tg.sendMessage(chatId, finalText);
+    finalized = true;
+    pendingShown = null;
+    await deliverFinalMessage(tg, chatId, msgId, finalText, inFlightEdit);
   };
 
   try {
@@ -1026,7 +1039,6 @@ async function handleAsk(u, chatId, text, images = null) {
     if (!res.ok) {
       u.stats.errors += 1;
       store.saveSoon();
-      chat.messages.pop();
       await finish(`⚠️ Не получилось получить ответ: \`${res.error}\`\n\nПопробуйте ещё раз.`);
       return;
     }
@@ -1037,6 +1049,7 @@ async function handleAsk(u, chatId, text, images = null) {
     // Текущий размер контекста этого чата — вход+кэш этого хода примерно равен
     // тому, что сейчас реально загружено в окно контекста модели
     chat.contextTokens = res.tokens.input + res.tokens.cacheWrite;
+    store.pushMessage(chat, 'user', text);
     store.pushMessage(chat, 'assistant', res.text, { tokens: res.tokens.total, model: model.key, effort: effort.key });
     // В быстром режиме GPT списывает на 20% больше. total/costUsd остаются
     // фактическими, а повышающий коэффициент применяется только к лимиту.

@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, safeStorage, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, safeStorage, session, shell } = require('electron');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const fsp = fs.promises;
@@ -142,7 +142,13 @@ async function withBusy(action) {
 }
 
 function registerIpc() {
-  const handle = (name, fn) => ipcMain.handle(name, async (_event, ...args) => fn(...args));
+  const handle = (name, fn) => ipcMain.handle(name, async (event, ...args) => {
+    const frameUrl = event.senderFrame?.url || '';
+    if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents || !frameUrl.startsWith('file:')) {
+      throw new Error('Недоверенный источник IPC.');
+    }
+    return fn(...args);
+  });
   handle('state', async () => {
     if (token && !account) await refreshRemote().catch(() => {});
     return publicState();
@@ -225,13 +231,35 @@ function registerIpc() {
   });
 }
 
+function secureSession() {
+  const currentSession = session.defaultSession;
+  currentSession.setPermissionCheckHandler(() => false);
+  currentSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+  if (typeof currentSession.setDevicePermissionHandler === 'function') currentSession.setDevicePermissionHandler(() => false);
+  currentSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({ responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [CSP] } });
+  });
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1100, height: 760, minWidth: 920, minHeight: 650, show: false, frame: false,
     backgroundColor: '#f2eee9', title: 'Clop VPN', autoHideMenuBar: true,
-    webPreferences: { preload: PRELOAD, sandbox: true, contextIsolation: true, nodeIntegration: false, devTools: !app.isPackaged && !SMOKE_TEST },
+    webPreferences: {
+      preload: PRELOAD,
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+      nodeIntegrationInWorker: false,
+      nodeIntegrationInSubFrames: false,
+      webviewTag: false,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+      devTools: !app.isPackaged && !SMOKE_TEST,
+    },
   });
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  mainWindow.webContents.on('will-attach-webview', (event) => event.preventDefault());
   mainWindow.webContents.on('will-navigate', (event, url) => { if (url !== mainWindow.webContents.getURL()) event.preventDefault(); });
   mainWindow.once('ready-to-show', () => { if (!SMOKE_TEST) mainWindow.show(); });
   mainWindow.loadFile(RENDERER);
@@ -256,6 +284,7 @@ else {
     fs.writeFileSync(elevatedHelperPath, fs.readFileSync(ELEVATED_SOURCE, 'utf8'), { mode: 0o600 });
     loadSession();
     server = (await resolveServer()).url;
+    secureSession();
     registerIpc();
     createWindow();
     refreshTimer = setInterval(refreshAndBroadcast, 5_000);

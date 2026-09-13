@@ -4,7 +4,6 @@ import android.Manifest;
 import android.app.Activity;
 import android.app.Dialog;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -52,7 +51,7 @@ public final class MainActivity extends Activity {
 
     private final Handler ui = new Handler(Looper.getMainLooper());
     private final ExecutorService io = Executors.newFixedThreadPool(3);
-    private SharedPreferences prefs;
+    private SecureStore secureStore;
     private GoBackend backend;
     private Config pendingConfig;
     private String token = "";
@@ -76,8 +75,8 @@ public final class MainActivity extends Activity {
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
-        prefs = getSharedPreferences("clop_vpn", MODE_PRIVATE);
-        token = prefs.getString("token", "");
+        secureStore = new SecureStore(this);
+        token = secureStore.get("token");
         backend = new GoBackend(getApplicationContext());
         loadKeys();
         buildInterface();
@@ -221,7 +220,7 @@ public final class MainActivity extends Activity {
                 String newToken = result.optString("token", "");
                 if (!newToken.isEmpty()) {
                     token = newToken; pendingLogin = null;
-                    prefs.edit().putString("token", token).apply();
+                    secureStore.put("token", token);
                     ui.post(() -> { setBusy(null); Toast.makeText(this, "Вход выполнен", Toast.LENGTH_SHORT).show(); refreshAccount(); });
                 } else ui.postDelayed(this::pollLogin, 1800);
             } catch (Exception error) { ui.postDelayed(this::pollLogin, 2200); }
@@ -348,8 +347,8 @@ public final class MainActivity extends Activity {
         d.setContentView(box); d.show(); Window w=d.getWindow(); if(w!=null){w.setBackgroundDrawableResource(android.R.color.transparent);w.setLayout((int)(getResources().getDisplayMetrics().widthPixels*.88),-2);}
     }
 
-    private void logout() { if (connected) disconnect(); token=""; prefs.edit().remove("token").apply(); refreshAccount(); }
-    private void loadKeys() { try { String privateKey=prefs.getString("private_key",""); keys=privateKey.isEmpty()?new KeyPair():new KeyPair(com.wireguard.crypto.Key.fromBase64(privateKey)); if(privateKey.isEmpty()) prefs.edit().putString("private_key",keys.getPrivateKey().toBase64()).apply(); } catch(Exception e){ keys=new KeyPair(); prefs.edit().putString("private_key",keys.getPrivateKey().toBase64()).apply(); } }
+    private void logout() { if (connected) disconnect(); token=""; secureStore.remove("token"); refreshAccount(); }
+    private void loadKeys() { try { String privateKey=secureStore.get("private_key"); keys=privateKey.isEmpty()?new KeyPair():new KeyPair(com.wireguard.crypto.Key.fromBase64(privateKey)); if(privateKey.isEmpty()) secureStore.put("private_key",keys.getPrivateKey().toBase64()); } catch(Exception e){ keys=new KeyPair(); secureStore.put("private_key",keys.getPrivateKey().toBase64()); } }
     private void setBusy(String message) { accountButton.setEnabled(message==null); if(message!=null) accountButton.setText("Подождите…"); else accountButton.setText(token.isEmpty()?"Войти":"Профиль"); }
     private void showError(Exception error) { ui.post(() -> { setBusy(null); Toast.makeText(this, error.getMessage()==null?"Ошибка соединения":error.getMessage(), Toast.LENGTH_LONG).show(); }); }
     private String speed(long bytes,long ms){return String.format(Locale.US,"%.1f Мбит/с",bytes*8.0/ms/1000.0);} private String bytes(long n){if(n>=1_000_000_000L)return String.format(Locale.US,"%.1f ГБ",n/1e9);if(n>=1_000_000)return String.format(Locale.US,"%.1f МБ",n/1e6);if(n>=1000)return String.format(Locale.US,"%.1f КБ",n/1e3);return n+" Б";}

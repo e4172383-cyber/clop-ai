@@ -28,6 +28,18 @@ test('free accounts cannot publish a fourth site while paid accounts can publish
   assert.match(paidBlocked.error, /10 сайтов/);
 });
 
+test('parallel publications are serialized so plan limits and the site index stay consistent', async () => {
+  const owner = `sites-parallel-${Date.now()}`;
+  const results = await Promise.all(Array.from({ length: 8 }, (_, index) =>
+    sites.publish(owner, sample(`Parallel ${index + 1}`), 'free')));
+  assert.equal(results.filter((result) => result.ok).length, 3);
+  assert.equal(results.filter((result) => !result.ok).length, 5);
+  const listed = await sites.listSites(owner);
+  assert.equal(listed.length, 3);
+  assert.equal(new Set(listed.map((site) => site.slug)).size, 3);
+  for (const site of listed) assert.ok(await sites.getFile(site.slug, ''));
+});
+
 test('only the owner can rename or delete a site', async () => {
   const owner = `sites-owner-${Date.now()}`;
   const made = await sites.publish(owner, sample('До переименования'), 'free');

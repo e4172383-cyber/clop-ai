@@ -19,6 +19,13 @@ export const MAIL_POLICIES = Object.freeze({
 
 const RESERVED = new Set(['admin', 'abuse', 'hostmaster', 'mailer-daemon', 'no-reply', 'postmaster', 'root', 'security', 'support']);
 const MAIL_DIR = path.join(DATA_DIR, 'clop-mail');
+let mailMutation = Promise.resolve();
+
+function serializeMailMutation(task) {
+  const current = mailMutation.catch(() => undefined).then(task);
+  mailMutation = current;
+  return current;
+}
 
 function state() {
   const db = store.raw();
@@ -155,7 +162,7 @@ function contentBytes({ subject, text, attachments }) {
     + (attachments || []).reduce((sum, item) => sum + Math.max(0, Number(item.size || item.content?.length) || 0), 0);
 }
 
-export async function deliverInternal({ fromUser, from, to, subject, text, attachments = [], now = Date.now() }) {
+async function deliverInternalUnlocked({ fromUser, from, to, subject, text, attachments = [], now = Date.now() }) {
   const senderBox = mailboxByAddress(from);
   if (!senderBox || String(senderBox.ownerId) !== String(fromUser.id)) return { ok: false, reason: 'sender' };
   const recipientBox = mailboxByAddress(to);
@@ -183,37 +190,75 @@ export async function deliverInternal({ fromUser, from, to, subject, text, attac
     await store.save({ strict: true });
     return { ok: true, message, recipient };
   } catch (error) {
+    delete state().messages[id];
     await removeMessageFiles({ id });
     throw error;
   }
 }
 
-export async function deliverExternal({ from, to, subject, text, attachments = [], now = Date.now() }) {
-  const recipientBox = mailboxByAddress(to);
-  if (!recipientBox) return { ok: false, reason: 'recipient' };
-  const recipient = store.findUser(recipientBox.ownerId);
-  if (!recipient) return { ok: false, reason: 'recipient' };
+export function deliverInternal(message) {
+  return serializeMailMutation(() => deliverInternalUnlocked(message));
+}
+
+async function deliverExternalBatchUnlocked({ from, recipients, subject, text, attachments = [], now = Date.now() }) {
+  const targets = [];
+  const seen = new Set();
+  for (const to of recipients || []) {
+    const address = shortAddress(to);
+    if (!address || seen.has(address)) continue;
+    seen.add(address);
+    const recipientBox = mailboxByAddress(address);
+    const recipient = recipientBox && store.findUser(recipientBox.ownerId);
+    if (!recipientBox || !recipient) return { ok: false, reason: 'recipient', delivered: [] };
+    targets.push({ recipientBox, recipient });
+  }
+  if (!targets.length) return { ok: false, reason: 'recipient', delivered: [] };
   const bytes = contentBytes({ subject, text, attachments });
-  const policy = mailPolicy(planOf(recipient).key);
-  if (storageUsed(recipient) + bytes > policy.storageBytes) return { ok: false, reason: 'recipient_storage' };
-  const id = crypto.randomBytes(8).toString('hex');
-  let saved = [];
+  const addedByOwner = new Map();
+  for (const { recipient } of targets) {
+    const ownerId = String(recipient.id);
+    addedByOwner.set(ownerId, (addedByOwner.get(ownerId) || 0) + bytes);
+  }
+  for (const { recipient } of targets) {
+    const ownerId = String(recipient.id);
+    const policy = mailPolicy(planOf(recipient).key);
+    if (storageUsed(recipient) + addedByOwner.get(ownerId) > policy.storageBytes) {
+      return { ok: false, reason: 'recipient_storage', delivered: [] };
+    }
+  }
+  const created = [];
   try {
-    saved = await persistAttachments(id, attachments);
-    const message = {
-      id, from: String(from || 'unknown').trim().toLowerCase().slice(0, 254), to: recipientBox.address,
-      fromOwnerId: null, toOwnerId: String(recipient.id), subject: String(subject || 'Без темы').trim().slice(0, 120) || 'Без темы',
-      text: String(text || '').slice(0, 20_000), attachments: saved,
-      storageBytes: contentBytes({ subject, text, attachments: saved }), createdAt: now, readAt: 0,
-      source: 'internet', deletedByRecipient: false, deletedBySender: false,
-    };
-    state().messages[id] = message;
+    for (const { recipientBox, recipient } of targets) {
+      const id = crypto.randomBytes(8).toString('hex');
+      const saved = await persistAttachments(id, attachments);
+      const message = {
+        id, from: String(from || 'unknown').trim().toLowerCase().slice(0, 254), to: recipientBox.address,
+        fromOwnerId: null, toOwnerId: String(recipient.id), subject: String(subject || 'Без темы').trim().slice(0, 120) || 'Без темы',
+        text: String(text || '').slice(0, 20_000), attachments: saved,
+        storageBytes: contentBytes({ subject, text, attachments: saved }), createdAt: now, readAt: 0,
+        source: 'internet', deletedByRecipient: false, deletedBySender: false,
+      };
+      state().messages[id] = message;
+      created.push({ ok: true, message, recipient });
+    }
     await store.save({ strict: true });
-    return { ok: true, message, recipient };
+    return { ok: true, delivered: created };
   } catch (error) {
-    await removeMessageFiles({ id });
+    for (const item of created) {
+      delete state().messages[item.message.id];
+      await removeMessageFiles(item.message);
+    }
     throw error;
   }
+}
+
+export function deliverExternalBatch(message) {
+  return serializeMailMutation(() => deliverExternalBatchUnlocked(message));
+}
+
+export async function deliverExternal(message) {
+  const result = await deliverExternalBatch({ ...message, recipients: [message.to] });
+  return result.ok ? result.delivered[0] : result;
 }
 
 export function getMessage(user, id, { markRead = true } = {}) {
@@ -226,7 +271,7 @@ export function getMessage(user, id, { markRead = true } = {}) {
   return message;
 }
 
-export async function deleteMessage(user, id) {
+async function deleteMessageUnlocked(user, id) {
   const message = state().messages[String(id)] || null;
   if (!message) return false;
   let changed = false;
@@ -241,7 +286,11 @@ export async function deleteMessage(user, id) {
   return true;
 }
 
-export async function deleteMailbox(user, value) {
+export function deleteMessage(user, id) {
+  return serializeMailMutation(() => deleteMessageUnlocked(user, id));
+}
+
+async function deleteMailboxUnlocked(user, value) {
   const address = shortAddress(value);
   const mailbox = address && state().mailboxes[address];
   if (!mailbox || String(mailbox.ownerId) !== String(user.id)) return false;
@@ -258,6 +307,10 @@ export async function deleteMailbox(user, value) {
   return true;
 }
 
+export function deleteMailbox(user, value) {
+  return serializeMailMutation(() => deleteMailboxUnlocked(user, value));
+}
+
 export async function attachmentData(user, messageId, index) {
   const message = getMessage(user, messageId, { markRead: false });
   const attachment = message?.attachments?.[Number(index)];
@@ -268,22 +321,32 @@ export async function attachmentData(user, messageId, index) {
   return { ...attachment, content: await fs.readFile(resolved) };
 }
 
-export async function recordExternalSent({ fromUser, from, to, subject, text, attachments = [], now = Date.now() }) {
+async function recordExternalSentUnlocked({ fromUser, from, to, subject, text, attachments = [], now = Date.now() }) {
   const senderBox = mailboxByAddress(from);
   if (!senderBox || String(senderBox.ownerId) !== String(fromUser.id)) return null;
   const bytes = contentBytes({ subject, text, attachments });
   if (storageUsed(fromUser) + bytes > mailPolicy(planOf(fromUser).key).storageBytes) return null;
   const id = crypto.randomBytes(8).toString('hex');
-  const saved = await persistAttachments(id, attachments);
-  const message = {
-    id, from: senderBox.address, to: String(to).toLowerCase(), fromOwnerId: String(fromUser.id), toOwnerId: null,
-    subject: String(subject || 'Без темы').trim().slice(0, 120) || 'Без темы', text: String(text || '').slice(0, 20_000),
-    attachments: saved, storageBytes: contentBytes({ subject, text, attachments: saved }), createdAt: now, readAt: now,
-    source: 'outbound', deliveryStatus: 'sending', deliveryError: '', deletedByRecipient: true, deletedBySender: false,
-  };
-  state().messages[id] = message;
-  await store.save({ strict: true });
-  return message;
+  try {
+    const saved = await persistAttachments(id, attachments);
+    const message = {
+      id, from: senderBox.address, to: String(to).toLowerCase(), fromOwnerId: String(fromUser.id), toOwnerId: null,
+      subject: String(subject || 'Без темы').trim().slice(0, 120) || 'Без темы', text: String(text || '').slice(0, 20_000),
+      attachments: saved, storageBytes: contentBytes({ subject, text, attachments: saved }), createdAt: now, readAt: now,
+      source: 'outbound', deliveryStatus: 'sending', deliveryError: '', deletedByRecipient: true, deletedBySender: false,
+    };
+    state().messages[id] = message;
+    await store.save({ strict: true });
+    return message;
+  } catch (error) {
+    delete state().messages[id];
+    await removeMessageFiles({ id });
+    throw error;
+  }
+}
+
+export function recordExternalSent(message) {
+  return serializeMailMutation(() => recordExternalSentUnlocked(message));
 }
 
 export async function updateOutboundStatus(messageId, status, error = '') {

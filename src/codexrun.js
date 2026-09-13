@@ -89,7 +89,7 @@ export function runCodex(args, stdin, onDelta, cwd = SANDBOX_DIR, signal) {
       return resolve({ ok: false, error: 'spawn: ' + e.message });
     }
 
-    let buf = '', text = '', threadId = null, usage = null, errMsg = null, err = '', done = false;
+    let buf = '', text = '', threadId = null, usage = null, errMsg = null, err = '', done = false, turnCompleted = false;
     const timer = setTimeout(() => {
       if (done) return;
       done = true;
@@ -120,6 +120,7 @@ export function runCodex(args, stdin, onDelta, cwd = SANDBOX_DIR, signal) {
         errMsg = obj.item.message;
       } else if (obj.type === 'turn.completed') {
         usage = obj.usage;
+        turnCompleted = true;
       } else if (obj.type === 'turn.failed') {
         errMsg = obj.error?.message || 'turn failed';
       }
@@ -143,7 +144,7 @@ export function runCodex(args, stdin, onDelta, cwd = SANDBOX_DIR, signal) {
       if (done) return; done = true; clearTimeout(timer);
       signal?.removeEventListener('abort', abort);
       if (buf.trim()) handleLine(buf);
-      resolve({ ok: Boolean(text) && !errMsg, code, text, threadId, usage, errMsg, stderr: err });
+      resolve({ ok: code === 0 && turnCompleted && Boolean(text) && !errMsg, code, text, threadId, usage, errMsg, stderr: err });
     });
 
     if (stdin != null) { child.stdin.write(stdin); }
@@ -168,9 +169,16 @@ export async function runJob(job, onDelta, signal) {
     const res = await runCodex(resumeArgs(modelCli, threadId, opts), resumeStdin, onDelta, cwd, signal);
     if (res.ok) return res;
     if (signal?.aborted) return res;
-    // Сессия не нашлась/повреждена — начинаем новую с историей в тексте
+    // A network failure or timeout must not silently start the entire task
+    // again. Only an explicitly missing/invalid session needs a fresh run.
+    if (!resumeSessionLost(res)) return res;
   }
   return runCodex(freshArgs(modelCli, opts), freshStdin, onDelta, cwd, signal);
+}
+
+export function resumeSessionLost(result) {
+  const reason = String(result?.errMsg || result?.error || result?.stderr || '');
+  return /(?:thread|session|rollout)[^\n]{0,100}(?:not found|invalid|expired|missing)|no rollout found/iu.test(reason);
 }
 
 export function countTokens(usage = {}, options) {

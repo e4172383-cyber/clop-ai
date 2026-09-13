@@ -1,4 +1,6 @@
 import crypto from 'node:crypto';
+import dns from 'node:dns/promises';
+import net from 'node:net';
 import { PUBLIC_URL } from './config.js';
 import * as store from './store.js';
 import { proxyApiRequest } from './cloud.js';
@@ -11,8 +13,58 @@ export const BOT_TEMPLATES = Object.freeze([
 ]);
 
 const MAX_BOTS_PER_USER = 8;
-const secretSeed = process.env.CUSTOM_BOT_SECRET || process.env.CLOUD_INTERNAL_SECRET || process.env.INTERNAL_SECRET || 'clop-local-custom-bots';
+const configuredSecret = process.env.CUSTOM_BOT_SECRET || process.env.CLOUD_INTERNAL_SECRET || process.env.INTERNAL_SECRET || '';
+const secretSeed = configuredSecret || 'clop-local-custom-bots';
 const cipherKey = crypto.createHash('sha256').update(secretSeed).digest();
+if (!configuredSecret) console.warn('[custom-bots] отдельный секрет не задан; тестовый ключ разрешён только для локальной разработки.');
+
+export function isPrivateNetworkAddress(address) {
+  const value = String(address || '').trim().toLowerCase().split('%')[0];
+  const version = net.isIP(value);
+  if (version === 4) {
+    const octets = value.split('.').map(Number);
+    const [a, b, c] = octets;
+    return a === 0 || a === 10 || a === 127 || a >= 224
+      || (a === 100 && b >= 64 && b <= 127)
+      || (a === 169 && b === 254)
+      || (a === 172 && b >= 16 && b <= 31)
+      || (a === 192 && b === 0)
+      || (a === 192 && b === 168)
+      || (a === 198 && (b === 18 || b === 19))
+      || (a === 198 && b === 51 && c === 100)
+      || (a === 203 && b === 0 && c === 113)
+      || (a === 255);
+  }
+  if (version === 6) {
+    if (value.startsWith('::ffff:')) return isPrivateNetworkAddress(value.slice(7));
+    return value === '::' || value === '::1'
+      || /^f[cd]/.test(value)
+      || /^fe[89ab]/.test(value)
+      || value.startsWith('ff')
+      || value.startsWith('2001:db8:');
+  }
+  return true;
+}
+
+export async function validateOwnApiBaseUrl(value, lookup = dns.lookup) {
+  let url;
+  try { url = new URL(String(value || '').trim()); } catch { throw new Error('Некорректный адрес своего API.'); }
+  if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) {
+    throw new Error('Для своего API нужен публичный HTTPS-адрес без логина, параметров и фрагмента.');
+  }
+  const host = url.hostname.toLowerCase();
+  if (!host || host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host.endsWith('.internal')) {
+    throw new Error('Локальные и внутренние адреса нельзя подключать как внешний API.');
+  }
+  const literalVersion = net.isIP(host.replace(/^\[|\]$/g, ''));
+  const addresses = literalVersion
+    ? [{ address: host.replace(/^\[|\]$/g, '') }]
+    : await lookup(host, { all: true, verbatim: true });
+  if (!addresses.length || addresses.some((entry) => isPrivateNetworkAddress(entry.address))) {
+    throw new Error('Адрес своего API ведёт во внутреннюю или служебную сеть.');
+  }
+  return url.href.replace(/\/+$/, '');
+}
 
 function encrypt(value) {
   const iv = crypto.randomBytes(12);
@@ -82,6 +134,7 @@ export function listCustomBots(ownerId) {
 }
 
 export async function createCustomBot({ ownerId, token, template, title, model, apiMode, apiKey, ownBaseUrl, systemPrompt, welcomeText, pricesText, businessMode }) {
+  if (!configuredSecret && process.env.NODE_ENV === 'production') throw new Error('На сервере не настроен секрет для безопасного хранения токенов ботов.');
   const ownerBots = listCustomBots(ownerId);
   if (ownerBots.length >= MAX_BOTS_PER_USER) throw new Error(`Можно создать не больше ${MAX_BOTS_PER_USER} ботов.`);
   const cleanToken = String(token || '').trim();
@@ -94,8 +147,7 @@ export async function createCustomBot({ ownerId, token, template, title, model, 
   const id = 'b' + Date.now().toString(36) + crypto.randomBytes(4).toString('hex');
   const hookSecret = crypto.randomBytes(24).toString('base64url');
   const mode = apiMode === 'own' ? 'own' : apiMode === 'payg' ? 'payg' : 'subscription';
-  const baseUrl = mode === 'own' ? String(ownBaseUrl || '').replace(/\/+$/, '') : '';
-  if (mode === 'own' && !/^https:\/\//i.test(baseUrl)) throw new Error('Для своего API укажите адрес, начинающийся с https://');
+  const baseUrl = mode === 'own' ? await validateOwnApiBaseUrl(ownBaseUrl) : '';
   if (!apiKey) throw new Error('Ключ API не создан или не указан.');
 
   const bot = {
@@ -200,9 +252,10 @@ export async function handleCustomBotWebhook(id, secret, headerSecret, update) {
   let result;
   try {
     if (bot.apiMode === 'own') {
+      const safeBaseUrl = await validateOwnApiBaseUrl(bot.ownBaseUrl);
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 55_000);
-      const response = await fetch(`${bot.ownBaseUrl}/v1/chat/completions`, {
+      const response = await fetch(`${safeBaseUrl}/v1/chat/completions`, {
         method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${decrypt(bot.apiKey)}` }, body: JSON.stringify(payload), signal: controller.signal,
       }).finally(() => clearTimeout(timeout));
       const body = await response.json().catch(() => null);
