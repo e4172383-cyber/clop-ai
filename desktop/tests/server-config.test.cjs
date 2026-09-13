@@ -25,8 +25,9 @@ test('server resolution falls back to the bundled address when config is unavail
 });
 
 test('updates accept only the configured server or the official GitHub release', () => {
-  assert.equal(trustedUpdateUrl('https://github.com/e4172383-cyber/clop-ai/releases/download/v2.4.1/Clop-Code-Setup-2.4.1.exe'), true);
-  assert.equal(trustedUpdateUrl('https://clop.example.com/downloads/Clop-Code-Setup-2.4.1.exe', { serverBase: 'https://clop.example.com' }), true);
-  assert.equal(trustedUpdateUrl('https://attacker.example/Clop-Code-Setup-2.4.1.exe'), false);
-  assert.equal(trustedUpdateUrl('https://github.com/other/project/releases/download/v1/Clop-Code-Setup-2.4.1.exe'), false);
+  assert.equal(trustedUpdateUrl('https://github.com/e4172383-cyber/clop-ai/releases/download/v2.4.1/Clop-Code-Setup-2.4.1.exe', { platform: 'win32' }), true);
+  assert.equal(trustedUpdateUrl('https://clop.example.com/downloads/Clop-Code-Setup-2.4.1.exe', { platform: 'win32', serverBase: 'https://clop.example.com' }), true);
+  assert.equal(trustedUpdateUrl('https://github.com/e4172383-cyber/clop-ai/releases/download/v2.4.1/Clop-Code-2.4.1-linux-x64.tar.xz', { platform: 'linux' }), true);
+  assert.equal(trustedUpdateUrl('https://attacker.example/Clop-Code-Setup-2.4.1.exe', { platform: 'win32' }), false);
+  assert.equal(trustedUpdateUrl('https://github.com/other/project/releases/download/v1/Clop-Code-Setup-2.4.1.exe', { platform: 'win32' }), false);
 });
